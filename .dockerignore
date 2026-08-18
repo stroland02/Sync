@@ -1,0 +1,43 @@
+# What must never reach the build context.
+#
+# Without this the daemon receives the whole working tree on every build -- `.git`, both
+# `node_modules` trees, every worktree's `.venv`, and `.cache/corpus`, which is several
+# repositories cloned for the test suite. That is slow on every rebuild and it puts things in an
+# image that have no business being there.
+#
+# Two of these matter for more than speed. `.env` and friends are how a local credential ends up
+# baked into a distributable image, and `tools/` holds machine-specific shims resolved against
+# this host's paths, which would be wrong inside a Linux container and wrong silently.
+
+.git
+.github
+.gitignore
+
+# Rebuilt inside the image by their own toolchains, and platform-specific if copied.
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+web/dist
+
+# Machine-local: shims resolved against this host, and a corpus of cloned repositories.
+tools/
+.cache/
+
+# Never bake a credential into an image.
+.env
+.env.*
+*.pem
+*.key
+
+# Not part of the product.
+docs/
+.claude/
+.superpowers/
+
+# Markdown is deliberately NOT excluded wholesale. A `**/*.md` rule here cost a build: both
+# manifests declare a `readme`, and the build backend fails when the file it names is absent, so
+# excluding `src/README.md` broke `sync-core` with nothing but "os error 2" to say why. These
+# files are bytes; the directories above are what actually take space.

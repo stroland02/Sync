@@ -51,6 +51,9 @@ vi.mock(import("@/api/queries"), async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   clearErrors()
+  // The pin persists, which is the point of it — and a test that pins the sidebar would otherwise
+  // hand the next one a reader who has already chosen. Caught by exactly that, once.
+  window.localStorage.clear()
 })
 
 function renderAt(path: string) {
@@ -208,7 +211,93 @@ describe("a failure displaces the chassis rather than floating over it", () => {
   })
 })
 
-describe("the sidebar minimises without moving a row", () => {
+describe("the sidebar reveals itself on hover and returns to a rail", () => {
+  /**
+   * The owner asked for this by name: *"the sidebar only expands when you're hovering over it and
+   * then automatically minimizes once you drag off."* It reconciles the two things otherwise in
+   * conflict — a rail that does not consume width, and full labels when they are wanted.
+   *
+   * **jsdom has no layout**, so no width here is read as a pixel. What is asserted is the state
+   * each element declares, which is the thing the derivation in `sidebar-collapse.ts` computes and
+   * the thing a wrong answer would show up in. The widths themselves are measured in Chrome and
+   * recorded in `DESIGN.md`.
+   */
+  function panel(): HTMLElement {
+    return destinations().closest("[data-state]") as HTMLElement
+  }
+
+  /** The box the content column actually gives up, which a hover must never move. */
+  function reserve(): HTMLElement {
+    return document.querySelector("[data-sidebar-reserve]") as HTMLElement
+  }
+
+  it("starts as a rail for a reader who has not pinned it", () => {
+    renderAt("/")
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+  })
+
+  it("expands while the pointer is inside it and returns to a rail when it leaves", () => {
+    renderAt("/")
+
+    fireEvent.pointerEnter(reserve())
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+
+    fireEvent.pointerLeave(reserve())
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+  })
+
+  it("holds open while focus is inside it, so a hover does not trap a keyboard reader", () => {
+    // Hover alone would put every label behind a pointer. A reader tabbing into the sidebar has to
+    // see what they are tabbing through, and has to keep seeing it after any pointer has left.
+    renderAt("/")
+
+    const detectors = within(destinations()).getByRole("link", { name: /detectors/i })
+    fireEvent.focusIn(detectors)
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+
+    fireEvent.pointerLeave(reserve())
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+
+    fireEvent.focusOut(detectors)
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+  })
+
+  it("keeps focus inside when it moves between two rows", () => {
+    // `focusout` fires before `focusin` when focus travels within the sidebar. Collapsing on it
+    // unconditionally would flicker the panel shut and open again on every arrow key.
+    renderAt("/")
+
+    const detectors = within(destinations()).getByRole("link", { name: /detectors/i })
+    const settings = within(destinations()).getByRole("link", { name: /settings/i })
+
+    fireEvent.focusIn(detectors)
+    fireEvent.focusOut(detectors, { relatedTarget: settings })
+
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+  })
+
+  it("takes the width it draws, so revealing pushes the page instead of covering it", () => {
+    // The inverse of what this file asserted until the owner saw it running. The reveal WAS an
+    // overlay, on the argument that reflowing the column under a reader is worse than covering it.
+    // The screenshot that settled it showed the page heading rendering as "W", the leading column of
+    // every table gone, and the repository names cut off mid-word — so the sidebar pushes the page,
+    // and the reserved box tracks the panel rather than disagreeing with it.
+    renderAt("/")
+
+    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+
+    fireEvent.pointerEnter(reserve())
+
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("expanded")
+  })
+
+
+
+})
+
+describe("the sidebar changes density without moving a row", () => {
   /**
    * The constraint, carried from `M7-W160`'s commit body and the reason its predecessor was
    * deleted: **minimising changes density, not navigation.** Every destination reachable expanded
@@ -222,6 +311,8 @@ describe("the sidebar minimises without moving a row", () => {
    * heading's text goes `sr-only` rather than the heading row being removed.
    *
    * This is `M7-W160`'s own guard shape, which was proved red twice before it was trusted.
+   * `M14-W376` drives it from the hover reveal as well as the pin, because the reveal is now the
+   * transition a reader meets constantly and the pin is the one they meet once.
    */
   function skeleton(): string[] {
     return [...destinations().querySelectorAll("*")].map(
@@ -229,47 +320,44 @@ describe("the sidebar minimises without moving a row", () => {
     )
   }
 
-  function toggle(): HTMLElement {
-    return screen.getByRole("button", { name: /minimise the sidebar|expand the sidebar/i })
+  function reserve(): HTMLElement {
+    return document.querySelector("[data-sidebar-reserve]") as HTMLElement
   }
 
-  it("keeps the same elements in the same order at both widths", () => {
+  it("keeps the same elements in the same order across a hover", () => {
     renderAt("/")
 
-    const expanded = skeleton()
-    fireEvent.click(toggle())
-    const minimised = skeleton()
+    const rail = skeleton()
+    fireEvent.pointerEnter(reserve())
+    const revealed = skeleton()
 
-    // Identical, element for element. A heading row that vanished when minimised would shorten this
-    // list and move every icon beneath it upward — which is the defect, not a detail of it.
-    expect(minimised).toEqual(expanded)
+    // Identical, element for element. A heading row that vanished at the rail width would shorten
+    // this list and move every icon beneath it upward — which is the defect, not a detail of it.
+    expect(rail.length).toBeGreaterThan(0)
+    expect(revealed).toEqual(rail)
   })
 
-  it("keeps every destination reachable at the minimised width", () => {
-    renderAt("/")
 
-    fireEvent.click(toggle())
+  // Four pin tests stood here and went with the control they exercised: the owner removed the
+  // button because hovering is the mechanism, and two ways to open one panel is what made this
+  // sidebar hard to reason about. Nothing they guaranteed is lost -- row stability across the
+  // reveal is asserted directly above against a pointer, which is now the only thing that opens it.
+  it("keeps every destination reachable at the rail width", () => {
+    // No hover, no pin, no click of any kind: this is the state the console loads in now.
+    renderAt("/")
 
     const reachable = [...destinations().querySelectorAll("a[href]")].map((el) =>
       el.getAttribute("href")
     )
-    for (const route of ROUTES.filter((r) => !r.path.includes(":"))) {
+    const parameterless = ROUTES.filter((r) => !r.path.includes(":"))
+    expect(parameterless.length).toBeGreaterThan(0)
+    expect(DESTINATIONS.length).toBeGreaterThan(0)
+    for (const route of parameterless) {
       expect(reachable).toContain(route.path)
     }
     for (const entry of DESTINATIONS) {
       expect(reachable).toContain(entry.path)
     }
-  })
-
-  it("says which state it is in, and offers the other one", () => {
-    renderAt("/")
-
-    // An explicit control with `aria-expanded`, not a hover and not a viewport read. `M7-W171`
-    // deleted a `collapsed` state initialised from `window.innerWidth` once at mount with no resize
-    // listener, so an operator's choice did not survive a resize. Nothing here infers one.
-    expect(toggle().getAttribute("aria-expanded")).toBe("true")
-    fireEvent.click(toggle())
-    expect(toggle().getAttribute("aria-expanded")).toBe("false")
   })
 })
 
@@ -358,33 +446,39 @@ describe("the sidebar carries the destinations", () => {
     expect(order[0]).toEqual(REGIONS.flatMap((region) => routesOf(region).map((r) => r.path)))
   })
 
-  it("groups them under the graph levels the specification names", () => {
-    // The grouping is the specification's vocabulary rendered, not a second hierarchy: an area is a
-    // run of consecutive levels, and the sidebar prints the level names it holds. Read off the
-    // group labels rather than by text, because a level name and a destination's label are the same
-    // word on five of the nine routes.
-    // Every level, from one screen. The rail-era version rendered one area at a time and compared
-    // against that area's run; with one list the whole ladder is on screen, so the assertion is
-    // against the specification's nine in the order the areas declare them.
+  it("prints no level heading, because eleven of them is what forced the scrollbar", () => {
+    // Reversed after the owner opened the reference images and said the console "doesn't look much
+    // different". The reference rail carries NO section heading at all; ours carried thirteen for
+    // eleven rows, and several duplicated the row beneath them outright -- a "BINDING SURFACE"
+    // heading over a "Binding surface" row. That is what made the sidebar taller than the viewport
+    // and forced the scroll the owner asked twice to remove.
+    //
+    // The specification's vocabulary does not depend on this: `route.level` still carries it, and
+    // `tests/test_console_hierarchy.py` still holds it against the spec block. What is dropped is a
+    // second rendering of a word already on the row.
     renderAt("/")
 
-    const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')].map(
-      (el) => el.textContent
-    )
-    // Every level, grouped by region in registry order.
-    // Deduped WITHIN a region, not across them. A level can legitimately appear in both: a vendor's
-    // detail is reachable fleet-wide while the vendors list is scoped to a repository, so
-    // "API Services" heads a group in each region. Deduping globally would assert the sidebar drops
-    // the second one, which would make a whole region's screen unreachable.
-    const expected: string[] = []
-    for (const region of REGIONS) {
-      const inRegion: string[] = []
-      for (const route of routesOf(region)) {
-        if (!inRegion.includes(route.level)) inRegion.push(route.level)
-      }
-      expected.push(...inRegion)
+    const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')]
+    expect(labels.length).toBe(0)
+  })
+
+  it("keeps the two region headings, which are the one grouping a row does not repeat", () => {
+    renderAt("/")
+
+    const text = destinations().textContent ?? ""
+    for (const label of ["Across all repositories", "Within a repository"]) {
+      expect(text).toContain(label)
     }
-    expect(labels).toEqual(expected)
+  })
+
+  it("carries no pin control, because hovering is what opens it now", () => {
+    // The owner: "go with the hover method and remove the button at the top of the sidebar as it's
+    // no longer needed because we'll just be hovering". Two mechanisms for one behaviour is the
+    // thing that made this sidebar confusing to reason about, and the pointer is the one that was
+    // asked for.
+    renderAt("/")
+
+    expect(screen.queryByRole("button", { name: /pin|minimise the sidebar|expand the sidebar/i })).toBeNull()
   })
 
   it("marks the row for the current route, and marks only it", () => {
@@ -538,6 +632,23 @@ describe("the console says whose data this is", () => {
     const note = screen.getByText(/one deployment/i).textContent ?? ""
     expect(note).toMatch(/filtered/i)
     expect(note).toMatch(/not another customer/i)
+  })
+
+  it("keeps both qualifications out of the sidebar, so no reveal gates them", () => {
+    /**
+     * `.claude/rules/console-surface.md` forbids collapsing a protected sentence behind a
+     * disclosure. These two used to sit in the sidebar footer, and that was defensible while the
+     * sidebar loaded expanded — the file said so in as many words. **Hover-expand destroys that
+     * justification**: an unpinned rail would put both sentences behind a pointer move, which is a
+     * disclosure whatever it is called. They moved into the content column instead, where nothing
+     * gates them, and this is the assertion that stops them drifting back.
+     */
+    renderAt("/")
+
+    for (const sentence of [/one deployment/i, /Nine graph levels/i]) {
+      const node = screen.getByText(sentence)
+      expect(destinations().contains(node)).toBe(false)
+    }
   })
 })
 

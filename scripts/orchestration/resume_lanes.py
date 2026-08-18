@@ -42,7 +42,9 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # A worker that has emitted nothing for this long is treated as stopped rather than thinking. Ten
 # minutes is above the longest observed quiet stretch inside a real task here (a full `pytest -n auto`
@@ -128,8 +130,12 @@ def live_terminals(cli: str) -> dict[str, int]:
     """Every connected terminal handle, with the epoch-millis of its last output."""
     payload = call(cli, "terminal", "list", "--json")
     terminals = (payload.get("result") or {}).get("terminals") or []
+    # `lastOutputAt` is **null** for a terminal Orca hosts but does not manage -- the `agy` lanes are
+    # plain shells running an agent CLI, so nothing tracks their output. `or 0` would coerce that
+    # absence into the epoch, which is the absence-versus-zero collapse this product refuses
+    # everywhere else. It is preserved as `None` and the caller decides.
     return {
-        t["handle"]: t.get("lastOutputAt") or 0
+        t["handle"]: t.get("lastOutputAt")
         for t in terminals
         if t.get("connected") and not t.get("orphaned")
     }
@@ -142,18 +148,43 @@ def live_terminals(cli: str) -> dict[str, int]:
 BUDGET_NOTICE_WITHIN_LAST = 6
 
 
-def reset_seconds(notice: str) -> int | None:
+def reset_seconds(notice: str, now: int | None = None) -> int | None:
     """How long the agent said its outage would last, in seconds, or `None` if it did not say.
 
-    Reads the `Resets in 2h3m21s` / `resets 10:20am` shapes the agent CLIs print. Only the
-    duration form is parseable into a deadline; a wall-clock time would need the machine's timezone
-    to mean anything, and guessing that is how a hold ends an hour early.
+    Two shapes, because the two agent CLIs here print different ones. Gemini gives a duration --
+    `Resets in 1h53m10s`. Claude Code gives a wall clock **with its zone**: `resets 8:20pm
+    (America/New_York)`.
+
+    **The zone being in the notice is what makes the second form safe.** This used to refuse it on
+    the grounds that a wall-clock time needs the machine's timezone and guessing is how a hold ends
+    an hour early. That reasoning was right about a bare `10:20am` and wrong about a stamped one --
+    and the cost was not theoretical: a notice it could not parse produced no deadline, `hold_expired`
+    could never fire, and the lane was held forever. On 2026-08-18 that lane was the one running
+    `B7`. A bare wall clock and an unknown zone are still refused.
     """
     match = re.search(r"resets?\s+in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?", notice, re.I)
-    if not match or not any(match.groups()):
+    if match and any(match.groups()):
+        hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+        return hours * 3600 + minutes * 60 + seconds
+
+    stamped = re.search(
+        r"resets?\s+(\d{1,2}):(\d{2})\s*([ap])m\s*\(([A-Za-z_]+/[A-Za-z_+\-]+)\)", notice, re.I
+    )
+    if not stamped:
         return None
-    hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
-    return hours * 3600 + minutes * 60 + seconds
+    hour, minute, half, zone_name = stamped.groups()
+    try:
+        zone = ZoneInfo(zone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        # An unknown zone is an absence, not a reason to substitute the machine's own.
+        return None
+    hour = int(hour) % 12 + (12 if half.lower() == "p" else 0)
+    moment = datetime.fromtimestamp(now if now is not None else time.time(), zone)
+    deadline = moment.replace(hour=hour, minute=int(minute), second=0, microsecond=0)
+    if deadline <= moment:
+        # Already past today, so the agent means tomorrow's occurrence rather than a negative hold.
+        deadline += timedelta(days=1)
+    return int((deadline - moment).total_seconds())
 
 
 HOLD_CLOCK = Path(__file__).resolve().parent / "hold_clock.json"
@@ -213,8 +244,15 @@ def budget_held(cli: str, handle: str, silent: bool = False) -> str | None:
     tail = " ".join(recent).lower()
     if not any(marker in tail for marker in BUDGET_EXHAUSTED):
         return None
+    # Only a line that ALSO carries a budget marker may supply the reset time. Measured 2026-08-18:
+    # the coordinator queued work into two held terminals with the word "resets" in it -- "start here
+    # the moment your quota resets" -- and the scan, reading newest-first, returned that sentence as
+    # the notice. `reset_seconds` then found no duration, so the hold had no deadline and could never
+    # expire. **A tail contains whatever anybody typed into it**, so a marker-free line matching one
+    # keyword is not evidence of anything.
     for line in reversed(recent):
-        if "resets" in line.lower():
+        lowered = line.lower()
+        if "resets" in lowered and any(marker in lowered for marker in BUDGET_EXHAUSTED):
             # ASCII-folded before it is ever printed. A terminal tail carries box-drawing and
             # spinner glyphs, and stdout on this machine is cp1252, so returning the raw line
             # crashes the sweep on the one path that exists for an outage -- the failure would
@@ -299,6 +337,8 @@ def verdict(
         handle = assignee or fallback_handle
         # No terminal to check is not evidence of health: without one the record is all there is.
         if handle and handle in terminals:
+            if terminals[handle] is None:
+                return False, "silence cannot be measured (Orca reports no output time); read it"
             quiet_ms = int(time.time() * 1000) - terminals[handle]
             if quiet_ms <= silence_ms:
                 return False, f"working ({quiet_ms // 1000}s since last output, despite the record)"
@@ -309,6 +349,10 @@ def verdict(
     if assignee not in terminals:
         return True, "assigned terminal is gone"
 
+    if terminals[assignee] is None:
+        # Unmeasurable is not stopped. Coercing it to 0 printed "silent for 29783562 minutes" and
+        # would have re-dispatched a working lane.
+        return False, "silence cannot be measured (Orca reports no output time); read it"
     quiet_ms = int(time.time() * 1000) - terminals[assignee]
     if quiet_ms > silence_ms:
         return True, f"silent for {quiet_ms // 60000} minutes"

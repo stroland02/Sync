@@ -6,14 +6,25 @@ import hashlib
 import json
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import resources
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
-from sync.core import CallSite, Finding, FindingStatus, MigrationOutcome, RepoContext, VendorChange
+from sync.core import (
+    CallSite,
+    Finding,
+    FindingStatus,
+    MigrationOutcome,
+    RepoContext,
+    RepoSettings,
+    VendorChange,
+    ALLOWED_MERGE_POLICIES,
+    ALLOWED_MERGE_METHODS,
+    REFUSED_MERGE_POLICIES,
+)
 from sync.core.models import (
     SEVERITY_ORDER,
     UNATTRIBUTED,
@@ -1157,6 +1168,39 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: row["n"] for row in rows}
 
+    def open_findings_repository_summaries(self) -> list[dict]:
+        """Every open finding and its attached vendors, grouped by repository across the fleet.
+
+        Answers in a single query what the fleet screen previously issued N+1 scoped queries for
+        (B148): for each repository known to the index, returns its total open findings count and
+        the list of distinct vendor IDs attached to those open findings.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT call_site.repo_id AS repo_id,
+                   call_site.vendor_id AS vendor_id,
+                   count(finding.id) AS n
+              FROM call_site
+              LEFT JOIN finding ON finding.call_site_id = call_site.id AND finding.status = 'open'
+             WHERE call_site.retracted_at IS NULL
+             GROUP BY call_site.repo_id, call_site.vendor_id
+             ORDER BY call_site.repo_id, call_site.vendor_id
+            """
+        ).fetchall()
+
+        by_repo: dict[str, dict] = {}
+        for row in rows:
+            repo_id = row["repo_id"]
+            if repo_id not in by_repo:
+                by_repo[repo_id] = {"repo_id": repo_id, "open_finding_count": 0, "vendors": []}
+            n = row["n"]
+            if n > 0:
+                by_repo[repo_id]["open_finding_count"] += n
+                if row["vendor_id"] not in by_repo[repo_id]["vendors"]:
+                    by_repo[repo_id]["vendors"].append(row["vendor_id"])
+
+        return sorted(by_repo.values(), key=lambda r: r["repo_id"])
+
     def open_findings_severity_counts(
         self, *, repo_id: str | None = None, vendor_id: str | None = None
     ) -> dict[str, int]:
@@ -1357,18 +1401,44 @@ class GraphStore:
             values,
         )
 
-    def migration_outcomes(self) -> list[MigrationOutcome]:
+    def migration_outcomes(self, *, repo_id: str | None = None) -> list[MigrationOutcome]:
         """Every production attempt, in corpus order.
 
         Filters `is_rehearsal` out rather than handing the dimension to every caller: a rehearsal
         row belongs in the table -- it still cost a repair attempt worth recording -- but nowhere
         a corpus-wide rate (`merge_rate`, `counts.pull_requests_opened`, ...) is computed. See the
         table's grain comment.
+
+        `repo_id` narrows to one repository's findings (B149).
         """
-        rows = self._connect().execute(
-            "SELECT * FROM migration_outcome WHERE NOT is_rehearsal ORDER BY finding_id, attempt_index"
-        ).fetchall()
+        if repo_id is None:
+            rows = self._connect().execute(
+                "SELECT * FROM migration_outcome WHERE NOT is_rehearsal ORDER BY finding_id, attempt_index"
+            ).fetchall()
+        else:
+            rows = self._connect().execute(
+                """
+                SELECT migration_outcome.*
+                  FROM migration_outcome
+                  JOIN finding ON finding.id = migration_outcome.finding_id
+                  JOIN call_site ON call_site.id = finding.call_site_id
+                 WHERE NOT migration_outcome.is_rehearsal AND call_site.repo_id = %s
+                 ORDER BY migration_outcome.finding_id, migration_outcome.attempt_index
+                """,
+                [repo_id],
+            ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
+
+    def finding_repo_ids(self) -> dict[str, str]:
+        """Map every finding_id to its call_site.repo_id (B149)."""
+        rows = self._connect().execute(
+            """
+            SELECT finding.id AS finding_id, call_site.repo_id AS repo_id
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+            """
+        ).fetchall()
+        return {row["finding_id"]: row["repo_id"] for row in rows}
 
     def migration_outcome_rollup_by_kind(self) -> list[dict]:
         """One row per (`change_kind`, `tier`) actually attempted -- a real SQL `GROUP BY` over
@@ -2067,14 +2137,29 @@ class GraphStore:
         """
         self._connect().execute(
             """
-            INSERT INTO repo_context (repo_id, body, source)
-            VALUES (%s, %s, %s)
+            INSERT INTO repo_context (repo_id, body, source, telemetry_attached_at)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (repo_id) DO UPDATE SET
                 body = EXCLUDED.body,
                 source = EXCLUDED.source,
+                updated_at = now(),
+                telemetry_attached_at = COALESCE(EXCLUDED.telemetry_attached_at, repo_context.telemetry_attached_at)
+            """,
+            [context.repo_id, context.body, context.source, context.telemetry_attached_at],
+        )
+
+    def mark_telemetry_attached(self, repo_id: str, attached_at: datetime | None = None) -> None:
+        """Record that telemetry has been attached for a repository (B157)."""
+        ts = attached_at or datetime.now(timezone.utc)
+        self._connect().execute(
+            """
+            INSERT INTO repo_context (repo_id, body, source, telemetry_attached_at)
+            VALUES (%s, '', 'telemetry', %s)
+            ON CONFLICT (repo_id) DO UPDATE SET
+                telemetry_attached_at = EXCLUDED.telemetry_attached_at,
                 updated_at = now()
             """,
-            [context.repo_id, context.body, context.source],
+            [repo_id, ts],
         )
 
     def repo_context(self, repo_id: str) -> RepoContext | None:
@@ -2090,6 +2175,64 @@ class GraphStore:
             [repo_id],
         ).fetchone()
         return RepoContext(**row) if row is not None else None
+
+    def repo_settings(self, repo_id: str) -> RepoSettings:
+        """One repository's automation and merge settings, or default settings if none recorded.
+
+        Default settings:
+        `merge_policy`: 'when_checks_pass'
+        `merge_method`: 'squash'
+        `base_branch`: 'main'
+        """
+        row = self._connect().execute(
+            "SELECT * FROM repo_settings WHERE repo_id = %s",
+            [repo_id],
+        ).fetchone()
+        if row is None:
+            return RepoSettings(repo_id=repo_id)
+        d = dict(row)
+        if isinstance(d.get("merge_policy_refusals"), str):
+            d["merge_policy_refusals"] = json.loads(d["merge_policy_refusals"])
+        return RepoSettings(**d)
+
+    def upsert_repo_settings(self, settings: RepoSettings) -> None:
+        """Persist automation and merge settings for one repository.
+
+        Enforces system invariants: immediate merge without verification is refused.
+        """
+        if settings.merge_policy not in ALLOWED_MERGE_POLICIES:
+            refusal = settings.merge_policy_refusals.get(
+                settings.merge_policy,
+                "Refused: violates invariant 'nothing reaches a pull request unverified'",
+            )
+            raise ValueError(
+                f"Invalid or refused merge_policy '{settings.merge_policy}': {refusal}. "
+                f"Permitted policies: {ALLOWED_MERGE_POLICIES}"
+            )
+        if settings.merge_method not in ALLOWED_MERGE_METHODS:
+            raise ValueError(
+                f"Invalid merge_method '{settings.merge_method}'. Permitted methods: {ALLOWED_MERGE_METHODS}"
+            )
+        refusals_json = json.dumps(settings.merge_policy_refusals)
+        self._connect().execute(
+            """
+            INSERT INTO repo_settings (repo_id, merge_policy, merge_method, base_branch, merge_policy_refusals, updated_at)
+            VALUES (%s, %s, %s, %s, %s, now())
+            ON CONFLICT (repo_id) DO UPDATE SET
+               merge_policy = EXCLUDED.merge_policy,
+               merge_method = EXCLUDED.merge_method,
+               base_branch = EXCLUDED.base_branch,
+               merge_policy_refusals = EXCLUDED.merge_policy_refusals,
+               updated_at = now()
+            """,
+            [
+                settings.repo_id,
+                settings.merge_policy,
+                settings.merge_method,
+                settings.base_branch,
+                refusals_json,
+            ],
+        )
 
     def record_intake_attempt(self, attempt: IntakeAttempt) -> str:
         """Persist one intake attempt record.

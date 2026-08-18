@@ -20,6 +20,20 @@
  *
  * The two bracket entries take the control radius rather than the marker circle every node wears,
  * because they are not nodes and a reader should not have to read the glyph to know it.
+ *
+ * ## Each node is a card, and the two brackets are not
+ *
+ * A node is one call into the remediation graph, and the page-IA plan's section 1 asks for those to
+ * render as cards naming the node rather than as a wall of text. The name, the standing and the
+ * checkpoint stamp head the card; what the node is for and what it produced sit inside it. The
+ * arrival and outcome entries stay unboxed, because they are the narrative's brackets rather than
+ * calls, and boxing them would say the run made ten calls when it made eight.
+ *
+ * The evidence inside is still rendered as itself by `evidence.tsx` — a typed field per key, a
+ * compiler verdict in words, and block output through `code-block.tsx`, which lifts each line's
+ * `file:line` anchor out beside its message. Nothing here renders a payload as raw JSON except an
+ * evidence key the console has never heard of, which is deliberately left looking unstyled rather
+ * than made invisible.
  */
 
 import { motion } from "framer-motion"
@@ -39,6 +53,7 @@ import { formatTimestamp } from "@/lib/format"
 import { formatAge, secondsSince, useNow } from "@/lib/elapsed"
 import { STANDING_LABEL, STANDING_SENTENCE } from "@/features/workflows/node-standing"
 import { CHANGE_WASH_DURATION, EASE_STANDARD, useReducedMotion } from "@/lib/motion"
+import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 /**
  * What each node does, for a reader who has not read `sync.remediate.nodes`.
@@ -320,8 +335,8 @@ function StepBody({
   const mechanics = mechanicsFor(node.name)
 
   return (
-    <>
-      <div className="flex flex-wrap items-baseline gap-x-row gap-y-field">
+    <Card className="min-w-0">
+      <CardHeader className="flex flex-row flex-wrap items-baseline gap-x-row gap-y-field">
         <h3 className={`font-mono text-body ${nameClass}`}>{node.name}</h3>
         <p className="text-meta text-muted-foreground">{STANDING_LABEL[node.standing]}</p>
         {node.first_seen_at && (
@@ -337,24 +352,24 @@ function StepBody({
             {formatTimestamp(node.first_seen_at)}
           </time>
         )}
-      </div>
-      <p className={`mt-field max-w-prose text-body ${purposeClass}`}>
-        {purposeFor(node.name)}
-      </p>
-      {mechanics !== undefined && (
-        <details className="mt-field max-w-prose text-meta text-muted-foreground">
-          <summary className="cursor-pointer font-mono font-medium text-muted-foreground hover:text-foreground">
-            How this node works
-          </summary>
-          <p className="mt-field font-sans text-meta text-foreground">{mechanics}</p>
-        </details>
-      )}
-      {node.standing === "due_again" && (
-        <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
-      )}
-      {evidenceSince != null && <EvidenceAge since={evidenceSince} />}
-      <EvidenceDisclosure node={node} defaultOpen={defaultOpen} />
-    </>
+      </CardHeader>
+      <CardContent className="min-w-0">
+        <p className={`max-w-prose text-body ${purposeClass}`}>{purposeFor(node.name)}</p>
+        {mechanics !== undefined && (
+          <details className="mt-field max-w-prose text-meta text-muted-foreground">
+            <summary className="cursor-pointer font-mono font-medium text-muted-foreground hover:text-foreground">
+              How this node works
+            </summary>
+            <p className="mt-field font-sans text-meta text-foreground">{mechanics}</p>
+          </details>
+        )}
+        {node.standing === "due_again" && (
+          <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
+        )}
+        {evidenceSince != null && <EvidenceAge since={evidenceSince} />}
+        <EvidenceDisclosure node={node} defaultOpen={defaultOpen} />
+      </CardContent>
+    </Card>
   )
 }
 

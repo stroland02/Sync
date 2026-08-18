@@ -1,0 +1,26 @@
+{
+  "name": "@superloglabs/sync",
+  "version": "0.1.0",
+  "description": "Watches the third-party APIs a codebase calls and opens verified pull requests when one breaks. One prerequisite: Docker.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "sync-up": "bin/sync-up.mjs"
+  },
+  "files": [
+    "bin/",
+    "docker-compose.demo.yml",
+    "Dockerfile",
+    "docker/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stroland02/Sync.git"
+  },
+  "private": true
+}

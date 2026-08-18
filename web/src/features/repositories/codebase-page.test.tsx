@@ -46,3 +46,44 @@ describe("CodebasePage's breadcrumb", () => {
     expect(trail.querySelector('[aria-current="page"]')?.textContent).toBe("org/payments")
   })
 })
+
+describe("CodebasePage's outbound links", () => {
+  /**
+   * `/repositories/:repoId/vendors` is routed and built, and nothing in the application linked to
+   * it: the sidebar renders it as unlinkable text until an address binds `repoId`, which means it
+   * was reachable only by typing the URL. This repository's own screen is where a link to it can
+   * exist, because this is where `repoId` is already bound.
+   */
+  it("links to this repository's own vendors list", () => {
+    renderCodebase("/repositories/org%2Fpayments")
+
+    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"))
+    expect(hrefs.length).toBeGreaterThan(0)
+    expect(hrefs).toContain("/repositories/org%2Fpayments/vendors")
+  })
+})
+
+describe("CodebasePage's scope", () => {
+  /**
+   * Four cards on this console have no importer. Two of them name this screen as their
+   * destination — `RunsCard` and `CorpusSummaryCard` — and neither payload can be narrowed to a
+   * repository: `RunRow` carries no `repo_id` and `/api/corpus` accepts no repository parameter
+   * (`B149`). Mounting either would put every repository's runs under one repository's name,
+   * which is the attribution `M14-W265` removed from the repository cards.
+   *
+   * The two loading strings are asserted rather than the panels' captions because a payload never
+   * arrives under jsdom: mounting either card makes its own `what` visible immediately, so this
+   * guard goes red on the mount rather than on the fetch.
+   */
+  it("renders no fleet-wide runs or repair record under one repository's name", () => {
+    renderCodebase("/repositories/org%2Fpayments")
+
+    // Non-vacuous: the screen rendered, and it states the scope every figure on it was computed in.
+    expect(document.body.textContent).toContain("This repository alone.")
+
+    expect(document.body.textContent).not.toContain("the fleet's runs")
+    expect(document.body.textContent).not.toContain("One row per checkpoint thread")
+    expect(document.body.textContent).not.toContain("the repair record")
+    expect(document.body.textContent).not.toContain("Every repair attempt the graph has recorded")
+  })
+})

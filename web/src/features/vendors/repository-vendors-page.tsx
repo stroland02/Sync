@@ -1,8 +1,9 @@
 /**
- * The vendors attached to one repository.
+ * The vendors attached to one repository — integration grid and table view.
  *
  * The owner's instruction was a vendors page listing *"all the vendors part of that codebase"*, at
- * an equal stage with API services. This is the list; `vendor-page.tsx` is the detail a row opens.
+ * an equal stage with API services, modeled after the Supabase integrations screen with cards,
+ * badges, tier filters, and detailed metrics.
  *
  * **What this screen deliberately does not show.** The owner also asked for each vendor's *"api
  * formats rules calls limits structures and data traces"*. Rate limits, auth rules and call
@@ -18,11 +19,13 @@
  * scope matches the address, and say so plainly when it does not.
  */
 
-import { useParams } from "react-router"
-import { Link } from "react-router"
+import { useState } from "react"
+import { useParams, Link } from "react-router"
 
-import { useOverview } from "@/api/queries"
+import { useAdapters, useOverview } from "@/api/queries"
+import type { AdapterRow } from "@/api/types"
 import { Badge } from "@/vendor/supabase/ui/badge"
+import { Button } from "@/vendor/supabase/ui/button"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import {
   Table,
@@ -34,6 +37,7 @@ import {
 } from "@/components/data-table"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { PageHeader } from "@/layouts/page-header"
+import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 
 const DEFAULT_QUESTION =
   "Which API vendors does this repository call, and how much is open against each?"
@@ -42,9 +46,16 @@ export interface RepositoryVendorsPageProps {
   readonly question?: string
 }
 
+type ViewMode = "table" | "cards"
+type TierFilter = "all" | AdapterRow["kind"]
+
 export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: RepositoryVendorsPageProps) {
   const { repoId } = useParams<{ repoId: string }>()
   const overview = useOverview(repoId)
+  const adaptersQuery = useAdapters()
+
+  const [viewMode, setViewMode] = useState<ViewMode>("table")
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all")
 
   const trail = (
     <Breadcrumbs
@@ -85,9 +96,18 @@ export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: Repositor
   // than shown with a caveat.
   const scopeMatches = overview.data?.repo_id === repoId
   const vendors = scopeMatches ? (overview.data?.vendors ?? []) : []
+  const adaptersMap = new Map(
+    (adaptersQuery.data?.adapters ?? []).map((adapter) => [adapter.vendor_id, adapter])
+  )
+
+  const filteredVendors = vendors.filter((v) => {
+    if (tierFilter === "all") return true
+    const adapter = adaptersMap.get(v.vendor_id)
+    return adapter?.kind === tierFilter
+  })
 
   return (
-    <section className="flex flex-col gap-section">
+    <section className="flex flex-col gap-section min-w-0">
       {header}
 
       {!scopeMatches ? (
@@ -106,42 +126,122 @@ export function RepositoryVendorsPage({ question = DEFAULT_QUESTION }: Repositor
           detail="A vendor appears here once INDEX finds a call site binding this repository to it."
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Vendor</TableHead>
-              <TableHead>Open findings</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {vendors.map((vendor) => (
-              <TableRow key={vendor.vendor_id}>
-                <TableCell>
-                  <Link
-                    to={`/vendors/${encodeURIComponent(vendor.vendor_id)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
-                    className="font-mono underline underline-offset-2"
+        <div className="flex flex-col gap-section">
+          {/* Controls Bar: Filter tabs & View toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-field pb-field border-b border-line">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              <Button
+                size="sm"
+                variant={tierFilter === "all" ? "secondary" : "ghost"}
+                onClick={() => setTierFilter("all")}
+                className="text-meta"
+              >
+                All ({vendors.length})
+              </Button>
+              {ADAPTER_TIERS.map((tier) => {
+                const count = vendors.filter((v) => adaptersMap.get(v.vendor_id)?.kind === tier).length
+                if (count === 0 && tierFilter !== tier) return null
+                return (
+                  <Button
+                    key={tier}
+                    size="sm"
+                    variant={tierFilter === tier ? "secondary" : "ghost"}
+                    onClick={() => setTierFilter(tier)}
+                    className="text-meta capitalize"
                   >
-                    {vendor.vendor_id}
+                    {tier} ({count})
+                  </Button>
+                )
+              })}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                onClick={() => setViewMode("table")}
+                className="text-meta"
+              >
+                Table
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "cards" ? "secondary" : "ghost"}
+                onClick={() => setViewMode("cards")}
+                className="text-meta"
+              >
+                Cards
+              </Button>
+            </div>
+          </div>
+
+          {filteredVendors.length === 0 ? (
+            <EmptyState
+              headline="No vendors match the selected filter."
+              detail={`No attached vendor has an adapter matching tier "${tierFilter}".`}
+            />
+          ) : viewMode === "cards" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-section">
+              {filteredVendors.map((vendor) => {
+                const adapter = adaptersMap.get(vendor.vendor_id) ?? null
+                return (
+                  <Link
+                    key={vendor.vendor_id}
+                    to={`/vendors/${encodeURIComponent(vendor.vendor_id)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
+                    className="block group transition-transform hover:-translate-y-0.5 focus:outline-none"
+                  >
+                    <VendorCard
+                      vendorId={vendor.vendor_id}
+                      adapter={adapter}
+                      openFindingCount={vendor.open_finding_count}
+                    />
                   </Link>
-                </TableCell>
-                <TableCell>
-                  {/* A confirmed zero is an answer about this vendor and renders as words, never as
-                      the absence marker. The two mean different things and the console's whole
-                      position rests on not collapsing them. */}
-                  <Badge>
-                    {vendor.open_finding_count === 0
-                      ? "No open findings"
-                      : `${vendor.open_finding_count} open findings`}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                )
+              })}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Adapter Tier</TableHead>
+                  <TableHead>Open findings</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredVendors.map((vendor) => {
+                  const adapter = adaptersMap.get(vendor.vendor_id)
+                  return (
+                    <TableRow key={vendor.vendor_id}>
+                      <TableCell>
+                        <Link
+                          to={`/vendors/${encodeURIComponent(vendor.vendor_id)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
+                          className="font-mono underline underline-offset-2"
+                        >
+                          {vendor.vendor_id}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge>{adapter ? adapter.kind : "none"}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge>
+                          {vendor.open_finding_count === 0
+                            ? "No open findings"
+                            : `${vendor.open_finding_count} open findings`}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       )}
 
       <p className="text-meta text-muted-foreground max-w-5xl leading-relaxed">
-        This list is what INDEX bound in this repository. A vendor's published rate limits, auth
+        This list is what INDEX bound in this repository. A vendor&apos;s published rate limits, auth
         rules and call structures are not shown, because no stage captures them yet — that is work
         not done rather than a vendor with none.
       </p>

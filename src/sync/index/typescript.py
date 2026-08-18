@@ -46,6 +46,7 @@ from tree_sitter import Language, Node, Parser
 from sync.core import CallSite, Patch, RepoRef, VendorAdapter, VerifyResult
 
 _TS_LANGUAGE = Language(tsts.language_typescript())
+_TSX_LANGUAGE = Language(tsts.language_tsx())
 _FUNCTION_TYPES = {
     "function_declaration",
     "function_expression",
@@ -91,7 +92,9 @@ _PATTERN_TYPES = {
 }
 
 
-def _parser() -> Parser:
+def _parser(file_path: Path | None = None) -> Parser:
+    if file_path is not None and file_path.suffix.lower() in (".tsx", ".jsx"):
+        return Parser(_TSX_LANGUAGE)
     return Parser(_TS_LANGUAGE)
 
 
@@ -395,16 +398,35 @@ class TypeScriptAdapter:
         run down at adapter selection rather than declining. `PythonAdapter` had the same hole in
         its `requirements.txt` branch and no longer does; nothing checked this file at the time.
         """
-        manifest = Path(repo.local_path) / "package.json"
-        if not manifest.exists():
-            return {}, None
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8-sig"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            return {}, f"package.json could not be read: {exc}"
-        if not isinstance(data, dict):
-            return {}, "package.json could not be read: it does not hold an object"
-        return {**data.get("dependencies", {}), **data.get("devDependencies", {})}, None
+        root = Path(repo.local_path)
+        manifest = root / "package.json"
+        declared: dict[str, object] = {}
+        if manifest.exists():
+            try:
+                data = json.loads(manifest.read_text(encoding="utf-8-sig"))
+                if not isinstance(data, dict):
+                    return {}, "package.json could not be read: it does not hold an object"
+                declared.update(data.get("dependencies", {}) or {})
+                declared.update(data.get("devDependencies", {}) or {})
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                return {}, f"package.json could not be read: {exc}"
+
+        if self._package is None or self._package not in declared:
+            skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", ".turbo", ".output"}
+            for p in root.rglob("package.json"):
+                if p == manifest:
+                    continue
+                if any(part in skip_dirs for part in p.relative_to(root).parts[:-1]):
+                    continue
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8-sig"))
+                    if isinstance(data, dict):
+                        declared.update(data.get("dependencies", {}) or {})
+                        declared.update(data.get("devDependencies", {}) or {})
+                except Exception:
+                    pass
+
+        return declared, None
 
     def _declared_dependencies(self, repo: RepoRef) -> dict[str, object]:
         return self._read_manifest(repo)[0]
@@ -446,11 +468,20 @@ class TypeScriptAdapter:
 
     def _source_files(self, repo: RepoRef) -> list[Path]:
         root = Path(repo.local_path)
-        return [
-            p
-            for p in root.rglob("*.ts")
-            if "node_modules" not in p.parts and not p.name.endswith(".d.ts")
-        ]
+        valid_extensions = {".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"}
+        skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", ".turbo", ".output"}
+        sources: list[Path] = []
+        for p in root.rglob("*"):
+            if not p.is_file():
+                continue
+            rel_parts = p.relative_to(root).parts
+            if any(part in skip_dirs for part in rel_parts[:-1]):
+                continue
+            if p.name.endswith(".d.ts"):
+                continue
+            if p.suffix.lower() in valid_extensions:
+                sources.append(p)
+        return sorted(sources)
 
     def _readable_sources(self, repo: RepoRef) -> Iterator[tuple[Path, bytes]]:
         """Every source file that is UTF-8, with its bytes, naming the ones that are not.
@@ -550,9 +581,8 @@ class TypeScriptAdapter:
         names: set[str] = set()
         if self._package is None:
             return names
-        parser = _parser()
-
         for file_path, source in self._readable_sources(repo):
+            parser = _parser(file_path)
             tree = parser.parse(source)
             imported: set[str] = set()
 
@@ -778,9 +808,8 @@ class TypeScriptAdapter:
             return
         sdk_version = self._sdk_version(repo)
         root_path = Path(repo.local_path)
-        parser = _parser()
-
         for file_path, source in self._readable_sources(repo):
+            parser = _parser(file_path)
             tree = parser.parse(source)
             relative = file_path.relative_to(root_path).as_posix()
 

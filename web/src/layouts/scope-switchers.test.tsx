@@ -154,6 +154,15 @@ describe("where a switcher sends you", () => {
     )
   })
 
+  it("scopes the Overview in place, because the Overview IS the selected codebase", () => {
+    // The owner ruled the Overview is the codebase, not a directory of codebases. A switcher that
+    // navigated away from it would mean the one screen the ruling is about could never be scoped by
+    // the control that exists to scope things — and the codebase fact band would only ever fill
+    // from a hand-typed address.
+    expect(repositoryHref("other", "/", "")).toBe("/?repo_id=other")
+    expect(repositoryHref("other", "/", "?repo_id=seed-console")).toBe("/?repo_id=other")
+  })
+
   it("opens the repository's own screen from anywhere else", () => {
     expect(repositoryHref("other", "/findings/9f176dea", "")).toBe("/repositories/other")
   })

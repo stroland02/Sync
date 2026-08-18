@@ -5,6 +5,10 @@
  * caption states the boundary in the reader's own words rather than assuming they have read
  * the module doc, and the omitted-count sentence is the one place absence is stated rather
  * than left as a shorter list than the node count would suggest.
+ *
+ * The panel is titled "Checkpoint timeline" rather than "Activity" because the screen now has an
+ * `Activity` tab, and a panel sharing its container's name tells a reader nothing about which of
+ * the two they are looking at. The title moved; not one sentence under it did.
  */
 
 import { activityEntries, omittedCount } from "@/features/workflows/activity"
@@ -19,7 +23,7 @@ export function ActivityTimeline({ state }: { state: WorkflowState }) {
 
   return (
     <MetricPanel
-      label="Activity"
+      label="Checkpoint timeline"
       caption="Assembled at read time from the checkpointer. Nothing writes a timeline row."
     >
       {entries.length === 0 ? (

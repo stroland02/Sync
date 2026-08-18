@@ -604,6 +604,18 @@ def _absence_glyph_violations(root: Path) -> list[str]:
     for path in _iter_source_files(root):
         if path.name in _ABSENT_OWNERS:
             continue
+        # A test may name the constant. The defect this guard exists to stop is a *component*
+        # rendering a hard-coded glyph instead of going through `<Formatted>` — a second appearance
+        # a reader could see. A test importing `ABSENT` to assert the one appearance is checking
+        # that rule rather than breaking it, and importing it is strictly better than a test
+        # hard-coding the glyph, which is what forbidding the import pushes people toward.
+        #
+        # This is deliberately NOT the shape of exemption `M14-W363` removed from the honesty-sentence
+        # guard. There, excluding tests let a sentence deleted from the product pass because it
+        # survived in a test file — the exclusion hid a real defect. Here the guard still reads every
+        # non-test source file, and no test can put a second glyph in front of a reader.
+        if ".test." in path.name:
+            continue
         text = _read_stripped(path)
         for match in _ABSENT_CONSTANT.finditer(text):
             violations.append(f"{path}:{_line_at(text, match.start())}")

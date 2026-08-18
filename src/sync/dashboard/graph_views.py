@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES
 from sync.core.models import SEVERITY_ORDER
 from sync.graph.store import DEFAULT_FINDING_ORDER, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
@@ -369,63 +370,39 @@ def observed_telemetry(
         [_observed_error_window_row(w) for w in windows], windows_total, error_windows_offset
     )
 
+    ctx = store.repo_context(repo_id)
+    telemetry_attached_at = (
+        ctx.telemetry_attached_at.isoformat()
+        if ctx is not None and ctx.telemetry_attached_at is not None
+        else None
+    )
+
     return {
         "repo_id": repo_id,
+        "telemetry_attached_at": telemetry_attached_at,
         "calls": calls_page,
         "shapes": shapes_page,
         "error_windows": windows_page,
     }
 
 
-def vendor_findings(
+def findings_page(
     store: GraphStore,
-    vendor_id: str,
     *,
     repo_id: str | None = None,
+    vendor_id: str | None = None,
     severity: str | None = None,
     path: str | None = None,
     order: str | None = None,
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> dict:
-    """Open findings against one vendor, as the binding rows the API Services screen renders --
-    one page, with the provenance envelope every console page carries.
+    """Open findings across vendors for one codebase or across the fleet.
 
-    This is what `/api/vendors/{vendor_id}` reads instead of the frozen
-    `GraphSurface.whats_at_risk`, for two reasons that are one reason: `sync.mcp.tools` is frozen,
-    and `whats_at_risk` cannot answer this question for a repository -- its rows carry no
-    `repo_id`, and adding the filter would mean changing a file that does not change. Repository
-    scope is what every level below Codebase inherits (B92), and API Services is the first level
-    under it, so an unscoped page here is a fleet-wide answer rendered under a repository's name.
-
-    The same replacement `overview_summary` already made for `/api/overview`, and it carries the
-    same second benefit: `whats_at_risk` walks every open finding doing one `get_call_site` round
-    trip per row before slicing the result in Python, so no `limit` handed to it bounds the scan
-    underneath. This is a real SQL `LIMIT` over a join, and `total` is its own aggregate rather
-    than the length of a list the page was carved out of.
-
-    `repo_id` is echoed back rather than left to the caller's memory. A payload that names the
-    scope it was computed in cannot be rendered under the wrong heading silently, which is the
-    failure mode this whole scoping exists to close.
-
-    Three fields the envelope carries and what each means here:
-
-    - `binding_source` is the rung the *whole page* rests on, null when its rows disagree -- read
-      under the same filters as the rows, so it never describes a set the reader cannot see. The
-      per-row `binding_source` is the rung of that row's own claim and is the one to weigh a
-      finding by.
-    - `feed_fetched_at` is always `None`, for the reason `overview_summary` records: this
-      deployment constructs the frozen surface with no feed timestamp, so the field this route
-      has always reported was already always null.
-    - `context_savings` is the page window's length times `_TOKENS_PER_AVOIDED_READ`, the same
-      arithmetic `whats_at_risk`'s own envelope does over the same constant, read from
-      `sync.mcp.tools` rather than restated so the two cannot drift.
+    Provides the primary findings view for the Codebase Overview screen (all findings for ONE
+    selected codebase, across vendors) as well as the fleet findings view.
     """
     offset = max(offset, 0)
-    # `None` is a caller that named no ordering and an unrecognised string is a caller that named
-    # one this does not have; both resolve to the default here, once, and the resolved value is
-    # what the envelope reports. That is the whole mechanism: the ordering on screen is the
-    # ordering the rows are in, because it is read off the same variable the query used.
     applied_order = order if order in FINDING_ORDERS else DEFAULT_FINDING_ORDER
     filters = dict(repo_id=repo_id, vendor_id=vendor_id, severity=severity, path_prefix=path)
     rows = store.open_findings_at_risk(
@@ -454,18 +431,40 @@ def vendor_findings(
             offset,
         ),
         "repo_id": repo_id,
+        "vendor_id": vendor_id,
         "order": applied_order,
-        # The rank travels with the page rather than being restated in TypeScript. It is a declared
-        # judgement -- `SEVERITY_ORDER` says so -- and B100 requires an invented ranking be put
-        # where a reader can see it. Sending it means the sentence on screen is derived from the
-        # ordering that ran, so there is no version of this where the screen names an order the rows
-        # are not in. Five short strings, and it removes a whole drift class.
         "severity_order": list(SEVERITY_ORDER),
         "indexed_at": indexed_at.isoformat() if indexed_at else None,
         "feed_fetched_at": None,
         "binding_source": summary["binding_rung"],
         "context_savings": len(rows) * _TOKENS_PER_AVOIDED_READ,
     }
+
+
+def vendor_findings(
+    store: GraphStore,
+    vendor_id: str,
+    *,
+    repo_id: str | None = None,
+    severity: str | None = None,
+    path: str | None = None,
+    order: str | None = None,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> dict:
+    """Open findings against one vendor, as the binding rows the API Services screen renders --
+    one page, with the provenance envelope every console page carries.
+    """
+    return findings_page(
+        store,
+        repo_id=repo_id,
+        vendor_id=vendor_id,
+        severity=severity,
+        path=path,
+        order=order,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def severity_rollup(
@@ -570,7 +569,7 @@ def overview_summary(
     vendor_counts = store.open_findings_vendor_counts(repo_id=repo_id)
     summary = store.open_findings_summary(repo_id=repo_id)
     indexed_at = summary["indexed_at"]
-    return {
+    payload = {
         "repo_id": repo_id,
         "vendors": [
             {"vendor_id": vendor_id, "open_finding_count": count}
@@ -585,6 +584,9 @@ def overview_summary(
         "context_savings": total * _TOKENS_PER_AVOIDED_READ,
         "context_savings_bound_reached": bound_reached,
     }
+    if repo_id is None:
+        payload["repositories"] = store.open_findings_repository_summaries()
+    return payload
 
 
 def repo_context(store: GraphStore, repo_id: str) -> dict:
@@ -608,6 +610,26 @@ def repo_context(store: GraphStore, repo_id: str) -> dict:
         "body": found.body if found is not None else "",
         "source": found.source if found is not None else None,
         "updated_at": found.updated_at.isoformat() if found is not None and found.updated_at else None,
+        "telemetry_attached_at": (
+            found.telemetry_attached_at.isoformat()
+            if found is not None and found.telemetry_attached_at is not None
+            else None
+        ),
+    }
+
+
+def repo_settings(store: GraphStore, repo_id: str) -> dict:
+    """One repository's automation and merge settings, as the row the console renders."""
+    settings = store.repo_settings(repo_id)
+    return {
+        "repo_id": repo_id,
+        "merge_policy": settings.merge_policy,
+        "merge_method": settings.merge_method,
+        "base_branch": settings.base_branch,
+        "allowed_merge_policies": list(ALLOWED_MERGE_POLICIES),
+        "allowed_merge_methods": list(ALLOWED_MERGE_METHODS),
+        "merge_policy_refusals": settings.merge_policy_refusals,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
     }
 
 

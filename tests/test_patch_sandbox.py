@@ -93,7 +93,18 @@ _TEST_IMAGE = "python:3.12-slim"
 
 # `docker exec` timeouts for the small, fast operations these tests issue --
 # not `sandbox._DOCKER_TIMEOUT_SECONDS`, which is sized for a real install.
-_EXEC_TIMEOUT_SECONDS = 15
+#
+# **Raised from 15s on evidence, 2026-08-18.** A full `-n auto` run produced
+# `subprocess.TimeoutExpired` on `docker exec ... python3 -c` after exactly 15 seconds, inside
+# `_host_addresses` -- an error rather than an assertion, so it read as a broken test rather than
+# a busy daemon. These calls are "small and fast" against an idle daemon and not against this one:
+# a bare `docker version` was measured at 432-2552ms during a full run, against roughly 100-200ms
+# idle, and every call here also starts a Python interpreter inside the container.
+#
+# The number is deliberately far above the observed cost rather than just above it, because the
+# thing being bounded is a hang and the cost of waiting longer on a healthy run is zero -- nothing
+# here reaches the bound unless something is genuinely stuck.
+_EXEC_TIMEOUT_SECONDS = 60
 
 
 def _run_docker(*args: str, timeout: float = _EXEC_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
@@ -220,6 +231,11 @@ def _start_attacker_listener() -> tuple[
         "first_byte_at": None,
         "accept_error": None,
         "listener_started_at": time.monotonic(),
+        # Set when the drain thread leaves its loop, which happens on EOF or a socket error and
+        # therefore only once no further byte can ever be counted. Carried in this dict rather
+        # than added to the return tuple so the four call sites keep one shape.
+        "ended": threading.Event(),
+        "ended_at": None,
     }
     stop = threading.Event()
     armed = threading.Event()
@@ -254,6 +270,8 @@ def _start_attacker_listener() -> tuple[
             if received["first_byte_at"] is None:
                 received["first_byte_at"] = time.monotonic()
             received["bytes"] += len(chunk)
+        received["ended_at"] = time.monotonic()
+        received["ended"].set()
         conn.close()
 
     thread = threading.Thread(target=_drain, daemon=True)
@@ -515,90 +533,6 @@ def test_a_container_that_really_cannot_reach_still_fails_the_control():
     assert time.monotonic() - started < 20, "the control has to give up on its own budget"
 
 
-def _quiesced_byte_count(received: dict, *, quiet_for: float = 1.5, timeout: float = 30.0) -> int:
-    """The listener's byte count once it has stopped moving, or an error saying it never did.
-
-    **The teardown assertion had a race and it accused the wrong thing.** `received["bytes"]` is
-    incremented by the drain thread, not by the test, and that thread reads from a socket buffer
-    the kernel filled independently. Sampling the counter the instant `docker rm -f` returns
-    therefore samples *how far the drain thread has got*, not how much was sent -- so under load,
-    where that thread is starved by twelve xdist workers and five other sessions, bytes that were
-    sent well **before** teardown get counted **after** it. The test then failed with "the
-    structural fix did not close the window", which would be a false statement about the boundary:
-    the window was closed, and the counter was merely behind.
-
-    Waiting for a fixed point measures the property the test actually claims. Once the container is
-    destroyed its process cannot send again, so the count must converge; anything still arriving
-    after it has been quiet for `quiet_for` is genuinely new. A count that never settles inside
-    `timeout` is the real leak this test exists to catch, and it is raised as exactly that rather
-    than being allowed to look like drain lag.
-    """
-    deadline = time.monotonic() + timeout
-    last = received["bytes"]
-    quiet_since = time.monotonic()
-    while time.monotonic() < deadline:
-        time.sleep(0.1)
-        current = received["bytes"]
-        if current != last:
-            last = current
-            quiet_since = time.monotonic()
-        elif time.monotonic() - quiet_since >= quiet_for:
-            return current
-    raise AssertionError(
-        f"the listener never stopped receiving after teardown: still at {received['bytes']} "
-        f"bytes and rising after {timeout}s. A destroyed container has no process left to send, "
-        "so a count that keeps climbing is the leak this test exists to catch."
-    )
-
-
-def test_a_counter_the_drain_thread_is_still_catching_up_on_is_waited_out():
-    """The race the teardown assertion had, pinned without Docker.
-
-    A counter that is still climbing when it is first read, and then stops. That is drain lag --
-    bytes sent before teardown and counted after it -- and it must be waited out rather than
-    reported as data arriving after the container died.
-    """
-    received = {"bytes": 0}
-
-    def climb():
-        for _ in range(10):
-            received["bytes"] += 1024
-            time.sleep(0.05)
-
-    thread = threading.Thread(target=climb, daemon=True)
-    thread.start()
-
-    settled = _quiesced_byte_count(received, quiet_for=0.5, timeout=15)
-
-    assert settled == 10 * 1024, "the count has to settle on everything the drain thread had"
-    time.sleep(0.5)
-    assert received["bytes"] == settled, "and stay there once it has"
-
-
-def test_a_counter_that_never_settles_is_reported_as_the_leak_it_is():
-    """The guard, so waiting for quiet cannot become waiting forever.
-
-    If bytes really do keep arriving after teardown, the structural fix did not hold, and that has
-    to fail rather than be absorbed by a longer wait.
-    """
-    received = {"bytes": 0}
-    stop = threading.Event()
-
-    def never_stops():
-        while not stop.is_set():
-            received["bytes"] += 1024
-            time.sleep(0.02)
-
-    thread = threading.Thread(target=never_stops, daemon=True)
-    thread.start()
-    try:
-        with pytest.raises(AssertionError) as raised:
-            _quiesced_byte_count(received, quiet_for=0.5, timeout=3)
-        assert "never stopped receiving" in str(raised.value)
-    finally:
-        stop.set()
-
-
 def test_patch_agent_execution_context_reaches_arbitrary_host_today(tmp_path):
     """RED for B97: today's execution context has no network boundary.
 
@@ -788,17 +722,31 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
 
         # install_container's `docker rm -f` has now completed (ephemeral_container's
         # own `finally`), which is the cutoff this test declares done.
-        # Not `received["bytes"]` directly: that samples how far the drain thread has got, and
-        # under load it is still counting bytes the container sent before it was destroyed.
-        # See `_quiesced_byte_count` -- this is the fixed point, and it is what the claim needs.
-        at_teardown = _quiesced_byte_count(received)
-        time.sleep(2)  # several times the earlier test's window, on the same gap
-        after_wait = received["bytes"]
+        # **Asserted on EOF rather than on the counter going quiet, and that is the third fix to
+        # this one assertion.** `CI-W360` moved a deadline off the wrong anchor and `CI-W367`
+        # stopped it sampling a counter mid-flight, and it still failed about one run in three,
+        # because "the count has not moved for 1.5s" is a proxy for "the drain thread has
+        # finished" and a starved thread satisfies the proxy while still holding buffered bytes.
+        # Every version of that assertion was measuring the scheduler.
+        #
+        # The stream ending is a fact rather than an inference. A destroyed container has no
+        # process left to hold a socket open, so the connection reaches EOF, the drain loop exits,
+        # and from that moment no further byte is possible -- the count is final by construction
+        # instead of by a wait long enough to look final. If the boundary had *not* held, the
+        # socket would stay open and this times out, which is the failure this test exists to
+        # produce.
+        assert received["ended"].wait(timeout=60), (
+            "the listener's connection never reached EOF after the install container was "
+            f"destroyed: still open with {received['bytes']} bytes counted. A destroyed container "
+            "has no process left to keep a socket alive, so this means the structural fix did not "
+            "close the window."
+        )
 
-        assert after_wait == at_teardown, (
-            "expected zero bytes after the install container's teardown completed; "
-            f"received {after_wait - at_teardown} more, meaning the structural fix "
-            "did not close the window"
+        at_teardown = received["bytes"]
+        time.sleep(2)
+        assert received["bytes"] == at_teardown, (
+            "bytes were counted after the stream had already ended, which should be impossible "
+            "and means this test's own bookkeeping is wrong rather than the boundary"
         )
     finally:
         stop.set()
