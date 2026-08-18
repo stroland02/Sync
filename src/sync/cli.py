@@ -1095,12 +1095,27 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             # `replace_call_sites` converges this repository on the revision just indexed and stops
             # asserting the positions it no longer has. A loop of upserts cannot, and left a ghost
             # per call site that moved.
+            # Opened before the pass rather than written after it, so a run that dies leaves a
+            # row saying it started and never finished. `index_run`'s grain comment carries why
+            # that matters: `call_site.indexed_at` says rows exist just as loudly after a pass
+            # that stopped halfway, and a count read from those rows would render as a completed
+            # index of a smaller codebase.
+            index_started_at = datetime.now(timezone.utc)
+            store.start_index_run(repo.repo_id, started_at=index_started_at)
+
             literal_sites, literal_unread = _literal_call_sites(repo)
             call_sites = list(adapter.index(repo)) + literal_sites
             for site, site_id in zip(
                 call_sites, store.replace_call_sites(repo.repo_id, call_sites)
             ):
                 site.id = site_id
+
+            store.finish_index_run(
+                repo.repo_id,
+                started_at=index_started_at,
+                finished_at=datetime.now(timezone.utc),
+                call_sites=len(call_sites),
+            )
 
             # After `index`, because that is when the adapter learns: `_readable_sources` records
             # as the walk reaches each file, so asking before it reports nothing.

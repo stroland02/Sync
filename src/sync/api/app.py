@@ -31,11 +31,13 @@ route needs.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+import json
+
+from typing import Any, Callable, Iterator, Optional
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES, REFUSED_MERGE_POLICIES
@@ -44,6 +46,10 @@ from sync.core.models import CONTEXT_BODY_MAX
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
+
+# The patch a run produced, keyed the same way its workflow is. A diff is Sync's own artifact
+# and is served; customer source is not, and stays blocked on the threat-model ruling.
+PatchReader = Callable[[str], Optional[dict[str, Any]]]
 
 # The fleet roll-ups read the checkpointer and the graph store directly, outside `GraphSurface`
 # -- same reasoning as `WorkflowReader`: a run, a repair record and a repo_id roll-up are not
@@ -80,6 +86,10 @@ ObservedReader = Callable[..., dict[str, Any]]
 VendorOperationsReader = Callable[..., dict[str, Any]]
 # Dashboard 1's dated aggregate. Keyword-only scope, like every other narrowing reader.
 FindingsOverTimeReader = Callable[..., dict[str, Any]]
+# Decision 76's bus, as an iterator of events for one repository. An iterator rather than a
+# callback so the route owns the lifetime: when the client goes, the generator is closed and
+# the listening connection with it.
+EventsReader = Callable[[str], Iterator[dict[str, Any]]]
 DetectorReader = Callable[[], dict[str, Any]]
 
 # The adapter inventory backs `sync.dashboard.adapters.adapter_inventory`. It takes no
@@ -191,6 +201,8 @@ def create_app(
     observed_reader: ObservedReader,
     vendor_operations_reader: VendorOperationsReader,
     findings_over_time_reader: FindingsOverTimeReader,
+    events_reader: EventsReader,
+    patch_reader: PatchReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -332,6 +344,41 @@ def create_app(
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
 
+    async def repository_events(request: Request) -> StreamingResponse:
+        """Decision 76's stream, scoped by the path decision 49 puts it in.
+
+        **Held open with no lifetime cap, by owner selection.** The cost was stated when the
+        choice was offered: a handful of forgotten tabs each hold a listening Postgres connection,
+        and enough of them exhaust the pool the read API shares. What is *not* a cap and is done
+        anyway is cleanup -- the generator is closed when the client disconnects, so a closed tab
+        releases its connection immediately rather than at some later timeout.
+
+        **The heartbeat is a named event rather than an SSE comment**, also owner-selected. It
+        carries no domain fact and is named so nobody mistakes it for one: what it asserts is that
+        the stream is alive. Without it a proxy closing an idle connection is indistinguishable
+        from an index that simply had nothing to say, and decision 76 requires the console to
+        render a drop -- which it can only do if a drop is distinguishable from silence.
+
+        `X-Accel-Buffering` is set because a buffering proxy defeats the whole transport: events
+        arrive in a batch when the connection closes, which is the opposite of a stream.
+        """
+        repo_id = request.path_params["repo_id"]
+
+        def frames() -> Iterator[str]:
+            for event in events_reader(repo_id):
+                # Two newlines end an SSE frame; one separates its fields. Written as
+                # escapes rather than a multi-line literal so the framing cannot be
+                # reformatted away by an editor that trims trailing whitespace.
+                frame = "event: " + event["kind"] + "\n"
+                frame += "data: " + json.dumps(event) + "\n\n"
+                yield frame
+
+        return StreamingResponse(
+            frames(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
     async def findings_over_time(request: Request) -> JSONResponse:
         # `repo_id` narrows and is optional: absent means every repository the index has
         # seen, which is a wider true answer rather than a missing one.
@@ -347,6 +394,23 @@ def create_app(
         payload = vendor_operations_reader(
             vendor_id, repo_id=request.query_params.get("repo_id")
         )
+        return JSONResponse(payload)
+
+    async def finding_patch(request: Request) -> JSONResponse:
+        """The diff a run wrote, and the branch it went to, in one answer.
+
+        **Owner ruling: the two travel together.** A diff served alone is the shape a reader
+        mistakes for a change that has already landed in their repository, and the branch is
+        the only thing on the payload that says otherwise.
+
+        A finding with no run at all is a 404. A finding whose run produced no patch is a
+        200 carrying the reason -- deciding against a patch is an answer, not a missing page,
+        and the reason is exactly what a reviewer opened this to read.
+        """
+        finding_id = request.path_params["finding_id"]
+        payload = patch_reader(finding_id)
+        if payload is None:
+            return _not_found("patch", finding_id)
         return JSONResponse(payload)
 
     async def workflow(request: Request) -> JSONResponse:
@@ -550,12 +614,15 @@ def create_app(
         # segment registered after a path parameter is swallowed by it.
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
+        Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),
         Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/events", repository_events, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/events", repository_events, methods=["GET"]),
         Route("/api/change-units", change_units, methods=["GET"]),
         Route(
             "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",

@@ -1745,3 +1745,54 @@ def test_routes_import_guard_rejects_feature_import(tmp_path: Path):
     violations = _scan_routes_imports(tmp_path)
     assert violations
 
+# -- decision 55: the ring is visible to a mouse and a keyboard alike --------------------------
+
+_FOCUS_VISIBLE = "focus-visible:"
+
+
+def _keyboard_only_ring_violations(root: Path) -> list[str]:
+    """Sites spelling the focus ring as keyboard-only.
+
+    Scanned across `components/ui/` deliberately, even though `_VENDORED_PREFIXES` excludes it
+    from the guards above. That exclusion exists so nobody is asked to restyle a catalog as it
+    is copied in; it is not a statement that the catalog may disagree with a decision, and
+    most of what a reader sees is those components.
+
+    `vendor/supabase/` stays out under the carve-out in `interface-originality.md`.
+    """
+    violations = []
+    for path in _iter_source_files(root):
+        if path.relative_to(root).as_posix().startswith("vendor/supabase/"):
+            continue
+        text = _read_stripped(path)
+        index = text.find(_FOCUS_VISIBLE)
+        while index != -1:
+            violations.append(f"{path}:{_line_at(text, index)}")
+            index = text.find(_FOCUS_VISIBLE, index + 1)
+    return violations
+
+
+def test_the_focus_ring_is_not_keyboard_only():
+    """Owner decision 55: ring always visible, tab order only.
+
+    `focus-visible:` is the Radix and shadcn default and it is the opposite of what was
+    decided -- it shows the ring to a keyboard and hides it from a mouse. The decision was
+    recorded with the note that Radix defaults that way precisely because a ring left after a
+    click reads as noise, and that reversing it is cheap if it turns out loud in use. Cheap
+    means one substitution over one directory, which is why this is a guard and not a habit.
+    """
+    _require_web_src()
+    violations = _keyboard_only_ring_violations(_WEB_SRC)
+    assert not violations, (
+        "decision 55 chose a focus ring visible to a mouse and a keyboard alike, and "
+        "`focus-visible:` shows it to one of them -- spell it `focus:`:\n  "
+        + "\n  ".join(violations)
+    )
+
+
+def test_the_keyboard_only_ring_guard_can_fail(tmp_path: Path) -> None:
+    (tmp_path / "control.tsx").write_text(
+        '<button className="focus-visible:ring-ring" />\n', encoding="utf-8"
+    )
+
+    assert _keyboard_only_ring_violations(tmp_path)

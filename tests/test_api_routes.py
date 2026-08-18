@@ -96,6 +96,18 @@ def _web_source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _web_sources(pattern: str) -> list[str]:
+    """Every file under `web/` matching a glob, as text.
+
+    Empty is a legitimate answer and deliberately not a skip: a pattern that matches nothing means
+    the console has no module of that shape yet, which is different from the console being absent.
+    """
+    root = Path(__file__).resolve().parent.parent / "web"
+    if not root.is_dir():
+        pytest.skip("web/ is absent; this checkout carries no console")
+    return [path.read_text(encoding="utf-8") for path in sorted(root.glob(pattern))]
+
+
 def _fake_runs_reader(
     *, repo_id: str | None = None, limit: int = 50, offset: int = 0
 ) -> dict[str, Any]:
@@ -202,6 +214,12 @@ def _fake_findings_over_time_reader(*, repo_id=None) -> dict[str, Any]:
         "total": 0,
         "still_open": 0,
     }
+
+
+def _fake_events_reader(repo_id: str):
+    """A finite stand-in for the bus, so a test never waits on a real index run."""
+    yield {"kind": "call_site.indexed", "repo_id": repo_id, "path": "src/a.ts"}
+    yield {"kind": "heartbeat", "repo_id": repo_id}
 
 
 def _fake_observed_reader(
@@ -320,6 +338,7 @@ def _build_app(
     *,
     surface: GraphSurface,
     workflow_reader=lambda finding_id: None,
+    patch_reader=lambda finding_id: None,
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
     corpus_health_reader=_fake_corpus_health_reader,
@@ -330,6 +349,7 @@ def _build_app(
     graph_reader=_fake_graph_reader,
     change_volume_reader=_fake_change_volume_reader,
     observed_reader=_fake_observed_reader,
+    events_reader=_fake_events_reader,
     findings_over_time_reader=_fake_findings_over_time_reader,
     vendor_operations_reader=_fake_vendor_operations_reader,
     detector_reader=_fake_detector_reader,
@@ -356,6 +376,7 @@ def _build_app(
     return create_app(
         surface=surface,
         workflow_reader=workflow_reader,
+        patch_reader=patch_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
@@ -366,6 +387,7 @@ def _build_app(
         graph_reader=graph_reader,
         change_volume_reader=change_volume_reader,
         observed_reader=observed_reader,
+        events_reader=events_reader,
         findings_over_time_reader=findings_over_time_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
@@ -1568,6 +1590,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
+    def events_reader(repo_id: str):
+        return _fake_events_reader(repo_id)
+
     def findings_over_time_reader(*, repo_id=None):
         return _fake_findings_over_time_reader(repo_id=repo_id)
 
@@ -1577,6 +1602,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
+        patch_reader=lambda finding_id: None,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
@@ -1587,6 +1613,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         graph_reader=_fake_graph_reader,
         change_volume_reader=_fake_change_volume_reader,
         observed_reader=observed_reader,
+        events_reader=events_reader,
         findings_over_time_reader=findings_over_time_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
@@ -1802,6 +1829,9 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
 #   unpaginated deliberately.
 _NOT_COLLECTIONS = {
+    # One run's diff, not a page of them. The finding names the run, and a diff has no
+    # second half to fetch.
+    "/api/findings/{finding_id}/patch",
     "/api/overview",
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
@@ -1833,6 +1863,11 @@ _NOT_COLLECTIONS = {
     # not by how many findings exist. Paging a distribution truncates the picture while looking
     # complete, which is the reason `/api/overview` is unpaginated too.
     "/api/findings/over-time",
+    # A stream is not a page. It has no total to report and no offset to advance, and it ends when
+    # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
+    # mean here.
+    "/api/repositories/{repo_id:path}/events",
+    "/api/repositories/{repo_id}/events",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -2155,6 +2190,13 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
 
     source = _web_source("src/api/client.ts")
     fetched_literals = re.findall(r'[`"](/api[^`"]*)[`"]', source)
+    # A streaming route is never read by `fetch`. It is opened with `new EventSource(...)`, and
+    # that call does not live in `client.ts` because an EventSource is a subscription with a
+    # lifetime rather than a request -- it belongs to the hook that owns it. Without this the
+    # guard would report a genuinely consumed route as unconsumed forever, and the exemption
+    # covering for it would become permanent, which is the rot the exemption set warns about.
+    for module in _web_sources("src/features/**/use-*.ts"):
+        fetched_literals += re.findall(r'`(/api[^`]*)`', module)
     console_paths = {_normalized(literal) for literal in fetched_literals}
 
     stale_exemptions = _NOT_YET_FETCHED_BY_CONSOLE - app_paths
@@ -2629,3 +2671,55 @@ def test_findings_over_time_route_passes_the_repository_scope_through():
     TestClient(app).get("/api/findings/over-time?repo_id=org%2Fpayments")
 
     assert seen == [{"repo_id": "org/payments"}]
+
+
+def test_the_events_route_streams_server_sent_events():
+    """Decision 76: a real stream rather than polling. The content type is the contract -- an
+    EventSource will not attach to anything else."""
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    with TestClient(app) as client:
+        response = client.get("/api/repositories/r1/events")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+
+def test_each_event_is_framed_with_its_type_so_a_client_can_dispatch_on_it():
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    with TestClient(app) as client:
+        body = client.get("/api/repositories/r1/events").text
+
+    assert "event: call_site.indexed" in body
+    assert '"path":"src/a.ts"' in body.replace(" ", "")
+
+
+def test_the_heartbeat_is_a_named_event_so_silence_is_not_a_drop():
+    """Owner-selected over an SSE comment. It carries no domain fact, and it is named so nobody
+    mistakes it for one -- what it asserts is that the stream is alive, nothing more."""
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    with TestClient(app) as client:
+        body = client.get("/api/repositories/r1/events").text
+
+    assert "event: heartbeat" in body
+
+
+def test_the_events_route_is_scoped_by_the_path_and_not_a_query_string():
+    """Decision 49: scope lives in the route path. The reader is handed the repository the URL
+    names and cannot be handed another's stream."""
+    seen: list[str] = []
+
+    def reader(repo_id: str):
+        seen.append(repo_id)
+        return _fake_events_reader(repo_id)
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), events_reader=reader
+    )
+
+    with TestClient(app) as client:
+        client.get("/api/repositories/org%2Fpayments/events")
+
+    assert seen == ["org/payments"]

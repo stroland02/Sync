@@ -117,4 +117,11 @@ src/sync/graph/store.py:GraphStore.dismissal_reason_counts
 
 # Decision 76's event bus, added 2026-08-18. Built ahead of the `GET /api/events` route that
 # will subscribe to it; delete this line in the commit that wires that route.
-src/sync/graph/store.py:GraphStore.subscribe_events
+
+# Decision 41, added 2026-08-18. `start_index_run`, `finish_index_run` and `latest_index_run`
+# are wired -- the CLI's index pass opens and closes a row, and the scan test holds it. This
+# one read is not: it answers how many passes a repository has had, which the Overview needs
+# when it says how long ago the index last ran and what it found. Delete this line in the
+# commit that puts that on screen.
+src/sync/graph/store.py:GraphStore.index_run_count
+src/sync/graph/store.py:GraphStore.latest_index_run

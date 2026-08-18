@@ -360,6 +360,42 @@ export interface GenerationSummary {
   report_reason: string | null
 }
 
+/**
+ * The patch a run wrote, and the place it went.
+ *
+ * Owner decision 47: the two travel together. A diff on its own is the shape a reader
+ * mistakes for a change that has already landed in their repository, and `target` is the
+ * only thing on this payload that says otherwise.
+ *
+ * `diff` is null when the run produced no patch, and `absent_because` then carries which
+ * kind of nothing it is -- a run that decided against a patch, one that gave up, and one
+ * still working are three different facts and the console must not print one sentence for
+ * all three. Exactly one of `diff` and `absent_because` is non-null.
+ */
+export interface PatchTarget {
+  repo_id: string | null
+  /** Written by `push_branch`. Null means the patch was never pushed, which is a different
+   *  fact from a patch that does not exist -- and both can be true at once. */
+  branch: string | null
+  pr_url: string | null
+  pr_number: number | null
+}
+
+export interface PatchStat {
+  files_changed: number
+  lines_added: number
+  lines_removed: number
+}
+
+export interface PatchResponse {
+  diff: string | null
+  strategy: string | null
+  rationale: string | null
+  stat: PatchStat | null
+  target: PatchTarget
+  absent_because: string | null
+}
+
 export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null
