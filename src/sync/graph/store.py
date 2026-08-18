@@ -770,6 +770,43 @@ class GraphStore:
         ).fetchall()
         return [CallSite(**row) for row in rows]
 
+    def call_sites_for_repository(
+        self, repo_id: str, *, limit: int | None = None
+    ) -> list[CallSite]:
+        """Every place one repository currently calls any vendor, ordered by position.
+
+        The dependency graph the Overview draws needs the whole picture for one repository in one
+        read. Composing it from `call_sites_for_operation` would mean a query per vendor per
+        operation -- one round trip per node to draw a single picture -- and the console cannot
+        know the operation list before it has the graph that names it.
+
+        Retracted rows are excluded and there is no parameter to include them, for the same
+        reason `call_sites_for_operation` has none: an edge the last index pass stopped finding
+        is not a place this codebase calls the vendor, and drawing it would show exposure a
+        reader cannot act on. `call_sites_for_repository_count` is the matching denominator, so
+        a bounded read can say the picture is partial rather than quietly drawing a smaller
+        codebase than the one that exists.
+        """
+        parameters: list[object] = [repo_id]
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT %s"
+            parameters.append(limit)
+        rows = self._connect().execute(
+            "SELECT * FROM call_site WHERE repo_id = %s AND retracted_at IS NULL"
+            f" ORDER BY vendor_id, path, line{limit_clause}",
+            parameters,
+        ).fetchall()
+        return [CallSite(**row) for row in rows]
+
+    def call_sites_for_repository_count(self, repo_id: str) -> int:
+        """How many current call sites one repository holds, read without fetching their columns."""
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM call_site WHERE repo_id = %s AND retracted_at IS NULL",
+            [repo_id],
+        ).fetchone()
+        return int(row["n"])
+
     def call_sites_for_operation_count(
         self,
         vendor_id: str,

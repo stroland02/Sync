@@ -71,6 +71,7 @@ ChangeUnitsReader = Callable[..., dict[str, Any]]
 # question it was not built to answer.
 BindingReader = Callable[..., dict[str, Any]]
 CoverageReader = Callable[[str], dict[str, Any]]
+RepositoryGraphReader = Callable[[str], dict[str, Any] | None]
 ObservedReader = Callable[..., dict[str, Any]]
 DetectorReader = Callable[[], dict[str, Any]]
 
@@ -178,6 +179,7 @@ def create_app(
     abandonment_reader: AbandonmentReader,
     binding_reader: BindingReader,
     coverage_reader: CoverageReader,
+    graph_reader: RepositoryGraphReader,
     observed_reader: ObservedReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
@@ -373,6 +375,13 @@ def create_app(
             return _not_found("repository", repo_id)
         return JSONResponse(payload)
 
+    async def repository_graph(request: Request) -> JSONResponse:
+        repo_id = request.path_params["repo_id"]
+        payload = graph_reader(repo_id)
+        if payload is None:
+            return _not_found("repository", repo_id)
+        return JSONResponse(payload)
+
     async def repository_observed(request: Request) -> JSONResponse:
         repo_id = request.path_params["repo_id"]
         payload = observed_reader(
@@ -520,6 +529,8 @@ def create_app(
         ),
         Route("/api/repositories/{repo_id:path}/coverage", repository_coverage, methods=["GET"]),
         Route("/api/repositories/{repo_id}/coverage", repository_coverage, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/graph", repository_graph, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/graph", repository_graph, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/observed", repository_observed, methods=["GET"]),
         Route("/api/repositories/{repo_id}/observed", repository_observed, methods=["GET"]),
         Route("/api/detectors", detectors, methods=["GET"]),

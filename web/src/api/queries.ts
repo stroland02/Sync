@@ -23,6 +23,7 @@ import {
   fetchVendorChanges,
   fetchVendorFindings,
   fetchWorkflow,
+  fetchRepositoryGraph,
 } from "@/api/client"
 import type {
   BindingSurfaceParams,
@@ -251,6 +252,17 @@ export function useRepositoryCoverage(repoId: string) {
   return useQuery({
     queryKey: ["repositories", repoId, "coverage"],
     queryFn: ({ signal }) => fetchRepositoryCoverage(repoId, signal),
+  })
+}
+
+/**
+ * This repository's call sites and the vendors they reach. Not polled, for the same reason
+ * `useRepositoryCoverage` is not: the index moves when a pass runs, not on a timer.
+ */
+export function useRepositoryGraph(repoId: string) {
+  return useQuery({
+    queryKey: ["repositories", repoId, "graph"],
+    queryFn: ({ signal }) => fetchRepositoryGraph(repoId, signal),
   })
 }
 

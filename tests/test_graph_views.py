@@ -25,6 +25,7 @@ from sync.dashboard.graph_views import (
     observed_telemetry,
     overview_summary,
     repo_settings,
+    repository_graph,
     severity_rollup,
     vendor_change_volume,
     vendor_findings,
@@ -1449,3 +1450,84 @@ def test_vendor_change_volume_aggregates_timeline_and_kinds(store):
     assert empty_vol["vendor_id"] == "nonexistent"
     assert empty_vol["total_changes"] == 0
     assert empty_vol["timeline"] == []
+
+
+class TestRepositoryGraph:
+    """The dependency graph the Overview draws: this repository's call sites, out to its vendors.
+
+    Owner decision 2 puts this panel beside the fact tiles on the first screen, so it is not
+    optional. `DependencyCanvas` already draws it; what did not exist was one scoped read that
+    answers the whole graph, and fanning the console out per vendor and per operation would issue
+    a query per node to draw one picture.
+    """
+
+    def test_a_repository_with_no_call_sites_draws_no_edges_and_says_so(self, store):
+        assert repository_graph(store, "r1") == {
+            "repo_id": "r1",
+            "vendors": [],
+            "bindings": [],
+            "total_bindings": 0,
+            "truncated": False,
+        }
+
+    def test_every_binding_carries_the_rung_it_came_from(self, store):
+        store.replace_call_sites("r1", [_site()])
+
+        graph = repository_graph(store, "r1")
+
+        # `CLAUDE.md`: every binding carries its rung, and so does every artifact derived from it.
+        # A call site is what the static index found -- nothing here rests on a resolution or a
+        # correlation -- so the rung is `static` and is never blended upward by this view.
+        assert [b["rung"] for b in graph["bindings"]] == ["static"]
+
+    def test_a_binding_names_the_position_a_reader_would_open(self, store):
+        store.replace_call_sites("r1", [_site()])
+
+        binding = repository_graph(store, "r1")["bindings"][0]
+
+        assert binding["vendor_id"] == "stripe"
+        assert binding["operation_id"] == "PostCharges"
+        assert binding["path"] == "src/billing.ts"
+        assert binding["line"] == 42
+        assert binding["symbol"] == "stripe.charges.create"
+
+    def test_a_retracted_call_site_is_not_a_place_this_code_calls_the_vendor(self, store):
+        store.replace_call_sites("r1", [_site()])
+        store.replace_call_sites("r1", [])
+
+        # Retraction is the difference between exposure and history. A position the last index
+        # pass stopped finding is not somewhere this codebase calls the vendor now, and drawing
+        # it would show a reader an edge they cannot act on.
+        assert repository_graph(store, "r1")["bindings"] == []
+
+    def test_another_repository_s_call_sites_are_not_drawn_here(self, store):
+        store.replace_call_sites("r1", [_site()])
+        store.replace_call_sites("r2", [_site(repo_id="r2", path="other/pay.ts")])
+
+        paths = [b["path"] for b in repository_graph(store, "r1")["bindings"]]
+
+        assert paths == ["src/billing.ts"]
+
+    def test_a_vendor_reports_its_call_site_count_and_when_it_was_last_indexed(self, store):
+        store.replace_call_sites("r1", [_site(), _site(line=90, operation_id="GetCharges")])
+
+        vendors = repository_graph(store, "r1")["vendors"]
+
+        assert len(vendors) == 1
+        assert vendors[0]["vendor_id"] == "stripe"
+        assert vendors[0]["indexed_call_sites"] == 2
+        # Staleness, never a promise of currency -- `index_coverage` carries that argument and
+        # this view repeats its fact rather than deriving an age the response would date.
+        assert vendors[0]["last_indexed"] is not None
+
+    def test_the_row_bound_is_declared_rather_than_silently_cutting_the_picture(self, store):
+        store.replace_call_sites("r1", [_site(line=n) for n in range(1, 6)])
+
+        graph = repository_graph(store, "r1", limit=2)
+
+        # A graph quietly missing edges is a graph that lies about a codebase's exposure. The
+        # bound is reported with the total it was applied to, so the console can say the picture
+        # is partial instead of drawing a smaller codebase than the one that exists.
+        assert len(graph["bindings"]) == 2
+        assert graph["total_bindings"] == 5
+        assert graph["truncated"] is True
