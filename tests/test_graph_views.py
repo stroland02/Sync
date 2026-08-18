@@ -2049,3 +2049,79 @@ def test_false_positive_dismissals_are_countable_on_their_own(store):
     store.record_dismissal(b, reason="wont_fix", actor="ada")
 
     assert store.dismissal_reason_counts() == {"false_positive": 1, "wont_fix": 1}
+
+
+# --- Decision 76: the event bus, as a real bus rather than polling behind a facade ------------
+#
+# Owner-selected on 2026-08-18: real LISTEN/NOTIFY, one event per call site, and the event
+# CARRIES the node rather than signalling a re-read. The cost of both was stated when the choice
+# was offered and taken deliberately.
+
+
+def test_writing_a_call_site_publishes_an_event_carrying_the_node(store):
+    """Fat payload, owner-selected: the canvas draws from the stream without a refetch."""
+    with store.subscribe_events("r1") as events:
+        store.upsert_call_site(_site())
+
+        received = events.next(timeout=5.0)
+
+    assert received == {
+        "kind": "call_site.indexed",
+        "repo_id": "r1",
+        "path": "src/billing.ts",
+        "vendor_id": "stripe",
+        "operation_id": "PostCharges",
+        "binding_rung": "static",
+    }
+
+
+def test_an_event_names_the_static_rung_because_that_is_what_a_call_site_is(store):
+    """Every edge carries the rung it was established at, on the wire as well as on the screen."""
+    with store.subscribe_events("r1") as events:
+        store.upsert_call_site(_site())
+        assert events.next(timeout=5.0)["binding_rung"] == "static"
+
+
+def test_a_subscriber_hears_nothing_from_another_repository(store):
+    """Scope is the route's, and the bus honours it rather than shipping one repository's
+    activity to a client watching another."""
+    with store.subscribe_events("r1") as events:
+        store.upsert_call_site(_site(repo_id="r2", path="src/other.ts"))
+        store.upsert_call_site(_site(repo_id="r1", path="src/mine.ts"))
+
+        received = events.next(timeout=5.0)
+
+    assert received["repo_id"] == "r1"
+    assert received["path"] == "src/mine.ts"
+
+
+def test_an_event_is_published_per_call_site_rather_than_per_file(store):
+    """Owner-selected granularity. Two call sites in one file are two events, because the choice
+    was the finest grain and not a per-file coalesce."""
+    with store.subscribe_events("r1") as events:
+        store.upsert_call_site(_site(path="src/a.ts", line=1))
+        store.upsert_call_site(_site(path="src/a.ts", line=9))
+
+        first = events.next(timeout=5.0)
+        second = events.next(timeout=5.0)
+
+    assert first["path"] == "src/a.ts"
+    assert second["path"] == "src/a.ts"
+
+
+def test_a_payload_too_large_to_notify_degrades_to_a_signal_rather_than_failing(store):
+    """`NOTIFY` refuses a payload over 8000 bytes. A fat event that cannot fit falls back to a
+    thin one naming the file, so the console re-reads instead of the index run dying on a long
+    path -- the write must never fail because the notification did."""
+    # Deliberately past the 7900-byte guard: 2000 segments was not, which is worth knowing
+    # -- most real paths will never trip this, and the fallback exists for the ones that do.
+    long_path = "src/" + ("d/" * 4500) + "billing.ts"
+
+    with store.subscribe_events("r1") as events:
+        store.upsert_call_site(_site(path=long_path))
+
+        received = events.next(timeout=5.0)
+
+    assert received["kind"] == "call_site.indexed.unsent"
+    assert received["repo_id"] == "r1"
+    assert "path" not in received

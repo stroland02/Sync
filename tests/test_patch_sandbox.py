@@ -658,69 +658,39 @@ def test_disconnect_network_does_not_stop_an_already_open_socket():
 
 
 @pytest.mark.docker
-def test_never_networked_container_receives_nothing_after_install_container_is_torn_down():
+def test_networked_container_receives_nothing_after_it_is_torn_down():
     """GREEN for B97's structural fix, proven against real containers.
 
-    The risky (networked) phase and the safe (patch/verify) phase never share
-    a container's lifetime: the risky phase's container is destroyed outright
-    -- not disconnected -- once its output is copied out, and the safe phase's
-    container is created with `network="none"` from the start, so it never had
-    a route to lose. There is no cutover moment for the earlier test's gap to
-    live in.
+    Destroying a container -- not disconnecting it -- is what closes the already-open-socket
+    window this module's own docstring measures (0.92-1.5s of continued delivery after
+    `disconnect_network`, proven by `test_disconnect_network_does_not_stop_an_already_open_socket`
+    above). After the container's teardown completes -- the same `docker rm -f`
+    `ephemeral_container` already runs on `__exit__`, not a new mechanism invented for this test
+    -- nothing more sent by its (now-dead) exfiltration process ever reaches the listener. Not
+    "the socket errors eventually": the byte count is pinned immediately after teardown and
+    re-checked after a wait several times longer than the previous test's window, and it must not
+    have moved.
 
-    Two things are proven, not one:
-
-    1. The artifact the risky phase produced (`copy_between_containers`)
-       reaches the safe container, so the fix is not merely "no more leaks" by
-       way of "no more artifacts either."
-    2. After the risky-phase container's teardown completes -- the same
-       `docker rm -f` `ephemeral_container` already runs on `__exit__`, not a
-       new mechanism invented for this test -- nothing more sent by its
-       (now-dead) exfiltration process ever reaches the listener. Not "the
-       socket errors eventually": the byte count is pinned immediately after
-       teardown and re-checked after a wait several times longer than the
-       previous test's window, and it must not have moved.
+    **Formerly proved a second thing alongside this one**: that `copy_between_containers` carried
+    an artifact out of this container before it was destroyed, in service of a risky/safe
+    container *pair* this repository sketched as the design for hosting a live patch run.
+    `DockerSdkRunner` (B97 Decision 1) hosts that run a different way -- two containers alive
+    together on an isolated network with a forward proxy, never one destroyed to hand off to the
+    other -- so nothing calls `copy_between_containers` any more; `M14-W411` deleted it rather
+    than leave an unreached primitive beside its replacement. This test keeps the property that is
+    still load-bearing: `ephemeral_container`'s teardown, not `disconnect_network`, is what closes
+    an already-open socket, and `DockerSdkRunner`'s own `with` blocks rely on exactly that.
     """
     from sync.remediate import sandbox
 
     server, port, received, stop, armed = _start_attacker_listener()
     try:
-        with sandbox.ephemeral_container(image=_TEST_IMAGE) as install_container:
-            mkdir = _run_docker("exec", install_container.id, "mkdir", "-p", "/workspace/artifact")
-            assert mkdir.returncode == 0, mkdir.stderr
-            write = _run_docker(
-                "exec", install_container.id, "sh", "-c",
-                "echo installed-artifact > /workspace/artifact/payload.txt",
-            )
-            assert write.returncode == 0, write.stderr
+        with sandbox.ephemeral_container(image=_TEST_IMAGE) as networked_container:
+            addresses = _host_addresses(networked_container)
+            _exfiltrate_in_background(networked_container, port, addresses, armed)
+            _wait_for_first_bytes(received, networked_container)
 
-            addresses = _host_addresses(install_container)
-            _exfiltrate_in_background(install_container, port, addresses, armed)
-            _wait_for_first_bytes(received, install_container)
-
-            with sandbox.ephemeral_container(image=_TEST_IMAGE, network="none") as patch_container:
-                sandbox.copy_between_containers(install_container, patch_container, "/workspace/artifact")
-
-                # Every address that reached the listener from the networked container, refused
-                # from this one. A single name would leave the refusal ambiguous on a backend
-                # that does not publish it: unreachable because there is no route is the claim,
-                # and unreachable because the name does not resolve is not the same statement.
-                for address in addresses:
-                    never_reachable = sandbox.probe_connect(patch_container, address, port)
-                    assert not never_reachable.reachable, (
-                        "the patch container was created with no network and must never "
-                        f"reach the listener at {address}: {never_reachable.detail}"
-                    )
-
-                read_back = _run_docker(
-                    "exec", patch_container.id, "cat", "/workspace/artifact/payload.txt",
-                )
-                assert read_back.stdout.strip() == "installed-artifact"
-            # patch_container torn down here; the install container is still alive
-            # and still exfiltrating -- the property under test is about the
-            # install container's own teardown below, not this one's.
-
-        # install_container's `docker rm -f` has now completed (ephemeral_container's
+        # networked_container's `docker rm -f` has now completed (ephemeral_container's
         # own `finally`), which is the cutoff this test declares done.
         # **Asserted on EOF rather than on the counter going quiet, and that is the third fix to
         # this one assertion.** `CI-W360` moved a deadline off the wrong anchor and `CI-W367`
@@ -736,7 +706,7 @@ def test_never_networked_container_receives_nothing_after_install_container_is_t
         # socket would stay open and this times out, which is the failure this test exists to
         # produce.
         assert received["ended"].wait(timeout=60), (
-            "the listener's connection never reached EOF after the install container was "
+            "the listener's connection never reached EOF after the networked container was "
             f"destroyed: still open with {received['bytes']} bytes counted. A destroyed container "
             "has no process left to keep a socket alive, so this means the structural fix did not "
             "close the window."

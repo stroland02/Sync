@@ -882,3 +882,56 @@ exists*, applied and written down.
 **And it already reports its own gap honestly**: a configured vendor's *specifications* are
 discoverable while its *call sites* are not, so it binds nothing — and `signals/intake` reports that
 as missing configuration rather than hiding it behind a vendor that appears served.
+
+## Round twenty: decisions 90-91, the adaptability answer, and one new requirement
+
+**90. Findings are not ranked.** Kind and rung are the facts; time is the only ordering.
+**Rejected: ranking by call-site count**, which is a real measurement and was still declined — and
+**rejected: call sites weighted by rung**, which is a composite and refused by name. **The reader
+ranks.** A breaking change at 40 observed call sites and one at 2 static sites are both on screen
+with both numbers; the console does not decide which matters to this team.
+
+**91. The pull request body carries the finding, the verification, and a collapsed `<details>` block**
+holding every call site and why each changed. Summary and proof visible; the long tail one click
+down. **Rejected: the full list inline**, and **rejected: one paragraph and a link** — the PR is what
+most people will see of this product, and a reviewer who never opens the console should still be able
+to check the work.
+
+### "We need this to work with all languages and vendors — are there plans?" — yes, and they are further along than the question assumed
+
+**Six plugin protocols already exist in `core/protocols.py`**: `LanguageAdapter`, `VendorAdapter`,
+`RequestCorrelator`, `Detector`, `PatchRunner`, `Remediator`. The design spec calls the
+`sync.core`-imports-nothing rule *"what makes the system genuinely pluggable rather than merely
+pluggable-shaped"*, and `tests/test_import_boundary.py` enforces it.
+
+**Vendors have a four-tier classification and a route out of per-vendor code**
+(`specs/2026-07-27-sync-adapter-targets.md`, and the design spec's own table):
+
+| tier | source | examples | mechanism |
+|---|---|---|---|
+| 1 — OpenAPI in git | spec file | Stripe, Twilio, GitHub | `oasdiff` |
+| 2 — machine-readable, not OpenAPI | Discovery Document, `service-2.json` | Google, AWS | converter → tier 1 |
+| 3 — GraphQL | SDL via introspection | Linear, GitHub v4, Shopify | `graphql-inspector` |
+| 4 — prose only | changelog | Notion, the long tail | LLM extraction, **never authoritative** |
+
+**The key line is that tier 1 collapses to one `GitOpenApiAdapter` parameterised by coordinates —
+*"Stripe becomes a configuration row rather than a class, and Twilio and GitHub cost an afternoon
+each."*** That is the adaptable system, already designed. `M3` publishes `sync.core` as the open
+plugin SDK with adapter-authoring docs, and the open-core decision exists *because* coverage is the
+moat: **no single team can write dozens of adapters, so the protocol has to be the product.**
+
+**Languages are the same shape and already proven**: `LanguageAdapter` has TypeScript and Python
+implementations both wired at `cli.py:198`, plus `core/conformance.py` checking an adapter against
+every guarantee the protocol states but cannot enforce.
+
+**92. NEW REQUIREMENT, owner: bring your own model, open or closed.** Sync must let a customer attach
+their own model rather than only Anthropic's.
+
+**What this touches, stated so it is planned rather than bolted on.** `CLAUDE.md` currently fixes the
+model project-wide — `claude-opus-5`, adaptive thinking, `xhigh` effort — and records that the two
+SDK surfaces spell those differently and are not interchangeable. A BYO-model path needs a **seventh
+protocol**, beside the six that exist: the thing that runs an agent turn. `PatchRunner` is the
+closest existing seam. **The Settings group from decision 74 becomes its interface**, and the same
+rule applies as to the webhook — **the screen names the environment variable and never accepts the
+key.** Self-hosting (decision 89) makes this straightforward, because the credential never leaves the
+customer's infrastructure.

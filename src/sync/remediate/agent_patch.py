@@ -53,6 +53,7 @@ in `docs/superpowers/specs/2026-07-25-sync-latency-architecture.md`.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,7 @@ from sync.remediate.untrusted import (
     fenced_block,
 )
 from sync.runner import ClaudeSdkRunner
+from sync.runner.docker_sdk import SANDBOX_ENV, runner_from_environment
 from sync.signals.oasdiff import changed_field
 
 _SCOPE_RULES = """
@@ -332,7 +334,18 @@ class AgentRemediator:
         # The default is the production path, carrying the gate. A caller that names no runner
         # gets a hardened one; the seam serves tests and M9's outcome vocabulary rather than
         # being a switch somebody has to remember to set.
-        self._runner: PatchRunner = runner or ClaudeSdkRunner(patch_hooks)
+        #
+        # `SANDBOX_ENV` opts a deployment into `DockerSdkRunner` (B97 Decision 1) without
+        # changing this default for anyone who has not set it -- unset, behaviour is byte-for-
+        # byte what it was before that runner existed. Deliberately not the unconditional
+        # default: `runner_from_environment` refuses outright when the sandbox's own credential
+        # is not named, because which Anthropic credential a sandboxed run authenticates with is
+        # an owner decision (`docs/superpowers/specs/2026-07-25-sync-threat-model.md`'s Ruling
+        # 7) this constructor takes as given rather than invents, and defaulting to it would
+        # make every unconfigured deployment fail construction instead of running.
+        self._runner: PatchRunner = runner or (
+            runner_from_environment() if os.environ.get(SANDBOX_ENV) == "1" else ClaudeSdkRunner(patch_hooks)
+        )
 
     def can_handle(self, finding: Finding, change: VendorChange) -> bool:
         return finding.severity in ("breaking", "deprecation")

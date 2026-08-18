@@ -96,6 +96,43 @@ def test_it_handles_a_breaking_finding():
     assert AgentRemediator().can_handle(FINDING, CHANGE) is True
 
 
+def test_default_construction_stays_claude_sdk_runner_when_the_sandbox_flag_is_unset(monkeypatch):
+    """B97 Decision 1's env-gated selection changes nothing for a caller that never opts in --
+    every deployment today, until the sandbox's own credential question is answered."""
+    from sync.runner.docker_sdk import SANDBOX_ENV
+
+    monkeypatch.delenv(SANDBOX_ENV, raising=False)
+    assert isinstance(AgentRemediator()._runner, ClaudeSdkRunner)
+
+
+def test_sandbox_flag_without_a_credential_refuses_construction_outright(monkeypatch):
+    """Opting in without answering the credential question is a construction-time error, not a
+    silent fall-through to the unsandboxed runner -- an operator who set the flag believing it
+    took effect must not get `ClaudeSdkRunner` instead with no signal that it happened."""
+    from sync.runner.docker_sdk import SANDBOX_ENV, _CREDENTIAL_ENV
+
+    monkeypatch.setenv(SANDBOX_ENV, "1")
+    monkeypatch.delenv(_CREDENTIAL_ENV, raising=False)
+    with pytest.raises(RuntimeError, match=_CREDENTIAL_ENV):
+        AgentRemediator()
+
+
+def test_sandbox_flag_with_a_credential_selects_docker_sdk_runner(monkeypatch):
+    from sync.runner.docker_sdk import SANDBOX_ENV, _CREDENTIAL_ENV, _IMAGE_ENV, DockerSdkRunner
+
+    monkeypatch.setenv(SANDBOX_ENV, "1")
+    monkeypatch.setenv(_CREDENTIAL_ENV, "test-credential")
+    # Names the image explicitly so this test never calls `ensure_image_built` -- a cold miss
+    # there runs a real `docker build`, which does not belong in this file's gate.
+    monkeypatch.setenv(_IMAGE_ENV, "sync-patch-sandbox:test")
+
+    runner = AgentRemediator()._runner
+
+    assert isinstance(runner, DockerSdkRunner)
+    assert runner._credential == "test-credential"
+    assert runner._image == "sync-patch-sandbox:test"
+
+
 def test_the_prompt_names_the_exact_file_and_line():
     prompt = build_patch_prompt(FINDING, CHANGE, SITE)
     assert "src/billing.ts" in prompt

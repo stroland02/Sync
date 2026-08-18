@@ -13,7 +13,8 @@ Protocol with the host, deliberately a filesystem rather than stdin/stdout: `Cla
 and the SDK's own subprocess management already own stdio, so a second use of the same channel
 for job/result data would race it. `/workspace/.sync-job/job.json` in, `/workspace/.sync-job/
 result.json` out, both plain JSON, both host-readable via `docker cp` after this process exits --
-`sync.remediate.sandbox.copy_between_containers`'s own mechanism, not a new one.
+`sync.remediate.sandbox.copy_into_container`/`copy_out_of_container`'s own mechanism, not a new
+one.
 
 The credential is never here. `ANTHROPIC_BASE_URL` (set by the host as this container's own
 environment, not read from a file this driver opens) points the bundled `claude` CLI at the

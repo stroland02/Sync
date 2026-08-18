@@ -55,16 +55,17 @@ src/sync/obs/log.py:_BorrowedTextIOWrapper.close
 # `sync.remediate.sandbox` (B97) is the container-level network boundary proven against a real
 # Docker Desktop in `tests/test_patch_sandbox.py`. `ephemeral_container` came out of this list
 # when `sync.runner.docker_sdk.DockerSdkRunner` (below) started calling it directly -- the first
-# real caller. `disconnect_network`, `probe_connect` and `copy_between_containers` stay: none of
-# the three composes into `DockerSdkRunner`'s own shape (it uses `copy_into_container`/
-# `copy_out_of_container` instead, and destroys rather than disconnects). `build_container_env`
-# also stays -- `DockerSdkRunner` builds its containers' environments through `exec_in_container`'s
-# `env=` per-call rather than at `docker create` time, since it needs different variables on the
-# proxy container (`SYNC_PROXY_CREDENTIAL`) than on the sandboxed one (`ANTHROPIC_BASE_URL` only).
+# real caller. `disconnect_network` and `probe_connect` stay: neither composes into
+# `DockerSdkRunner`'s own shape (it uses `copy_into_container`/`copy_out_of_container` instead,
+# and destroys rather than disconnects). `build_container_env` also stays -- `DockerSdkRunner`
+# builds its containers' environments through `exec_in_container`'s `env=` per-call rather than at
+# `docker create` time, since it needs different variables on the proxy container
+# (`SYNC_PROXY_CREDENTIAL`) than on the sandboxed one (`ANTHROPIC_BASE_URL` only).
+# `copy_between_containers` is not here because it no longer exists -- `M14-W411` deleted it
+# rather than leave it beside the runner that made it unreached; see `sandbox.py`'s own docstring.
 src/sync/remediate/sandbox.py:build_container_env
 src/sync/remediate/sandbox.py:disconnect_network
 src/sync/remediate/sandbox.py:probe_connect
-src/sync/remediate/sandbox.py:copy_between_containers
 
 # `StaticRunner` (M8) provides offline, scriptable, keyless execution of the `PatchRunner` protocol
 # for tests and local simulation without model API calls. It is exported in `sync.runner` and
@@ -73,17 +74,6 @@ src/sync/runner/static.py:StaticRunner
 # `validate_outcome_call` (M9) provides server-side schema and rubric validation for outcome tool calls
 # emitted during agent remediation runs, exported in `sync.runner` for model driving harnesses.
 src/sync/runner/outcome_tools.py:validate_outcome_call
-
-# `ensure_image_built` (B97 Decision 2) is the idempotent inspect-or-build primitive for the
-# patch-sandbox image, proven by hand and by `tests/test_sandbox_image.py` -- finished and
-# tested, unreachable on purpose. Its own module docstring names both call sites this repository
-# does not yet have: "once when the remediation worker process starts, and once on a schedule."
-# Neither a worker process nor a scheduler exists in this tree yet (`BACKLOG.md`: "Nothing is
-# hosted"), and inventing either just to satisfy this lint would be exactly the abstraction-with-
-# no-caller debt CLAUDE.md's "wait for the caller" rule forbids. It is also the production image
-# the five `sandbox.py` entries above are waiting on -- their own caller still does not exist
-# either, so this landing alone does not retire them.
-src/sync/remediate/sandbox_image.py:ensure_image_built
 
 # `dispatch_webhook_event` (M10) verifies an incoming GitHub webhook's HMAC signature, decodes
 # the event, and resumes the durable run it names -- the wake path for "a pull request review
@@ -115,6 +105,7 @@ src/sync/remediate/forward_proxy_server.py:running_proxy
 # indexing across TypeScript/TSX/JS and Python for customer repositories. Finished and tested
 # in `tests/test_codebase_index.py`.
 src/sync/index/codebase.py:index_codebase
+
 
 # `DockerSdkRunner` (B97 Decision 1) is a complete `PatchRunner`: it drives the agent turn inside
 # two ephemeral containers -- a proxy holding the real Anthropic credential and a sandboxed
