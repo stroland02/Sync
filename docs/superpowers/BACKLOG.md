@@ -4772,3 +4772,26 @@ shipped without it — messaging v1, verify v2, conversations v1 and lookups v2,
 2010 core API) is not yet bindable. **Evidence that closes it:** a chain derivation that
 understands the `.json` suffix and the `{AccountSid}` mount, baking v2010 without a collision and
 binding `client.messages.create` in a fixture repository.
+
+### B194 — runs get a heartbeat, so EXPIRED becomes a recorded fact and liveness becomes honest
+
+**From the 2026-08-18 reference read** (`references/notes/nango-integration-architecture.md`,
+section 2). Sync cannot tell a run parked on the customer's CI from one that died — the console's
+protected staleness sentence exists because the checkpointer holds no heartbeat. The standard
+mechanism: the remediation runner refreshes a `last_heartbeat_at` while it works, distinct
+timeouts for created-to-started, started-to-completed and heartbeat, and a sweep that transitions
+a run that missed its heartbeats to a recorded `expired` state. `CLAUDE.md`'s own dot rule says a
+status dot requires a stored transition inside one closed lifecycle — this is that transition.
+**Evidence that closes it:** a run killed mid-node showing `expired` in the console with the sweep
+that recorded it, and a run parked at `await_ci` still honestly `in flight` because CI waits do
+not miss heartbeats.
+
+### B195 — adapters declare their staging needs as a typed schema, and one renderer draws the form
+
+**From the same read, section 1.** Twilio's product manifest, a generated vendor's optional
+overrides, a future adapter's region choice — each is per-vendor configuration the console can
+only offer today by hand-writing a panel. The catalog pattern: the adapter declares a typed field
+schema (title, description, pattern, example, enum, secret, order), one schema-driven renderer in
+the Adapters settings group draws every form, and a per-vendor credential-verification probe
+joins the Setup checklist. **Evidence that closes it:** the Twilio product list editable from
+Settings through the declared schema, with no Twilio-specific component in `web/src`.
