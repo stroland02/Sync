@@ -36,6 +36,8 @@ export interface SetupItem {
 
 export interface SetupResponse {
   repo_id: string | null
+  /** Who the forge credential speaks as — the only identity a local deployment holds. */
+  operator: { forge_login: string | null }
   items: SetupItem[]
 }
 

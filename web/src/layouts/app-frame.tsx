@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import {
+  CircleUserRound,
   FileWarning,
   FolderTree,
   GitPullRequest,
@@ -16,10 +17,12 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import { Link, NavLink, Outlet, useLocation } from "react-router"
 
 import { useRepositories } from "@/api/queries"
 import { ErrorSurface } from "@/components/error-surface"
+import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { ScopeTrail } from "@/layouts/scope-switchers"
 import {
@@ -186,23 +189,6 @@ function LevelGroup({
 }
 
 /**
- * A group heading that keeps its row when the sidebar is minimised.
- *
- * **This is what stops every icon beneath it moving.** A heading removed at the narrow width
- * shortens the column and drags each row below it upward, which is the defect `M7-W160` named and
- * the reason its predecessor was deleted. The row keeps its height and only the text stops being
- * visible — `sr-only` rather than `hidden`, so a screen reader still hears the grouping it needs
- * most when the labels are gone.
- */
-function GroupHeading({ label, minimised }: { label: string; minimised: boolean }) {
-  return (
-    <p className="furniture flex h-5 items-center px-row text-meta text-ink-muted">
-      <span className={minimised ? "sr-only" : undefined}>{label}</span>
-    </p>
-  )
-}
-
-/**
  * One sidebar, full height, holding every destination.
  *
  * **Two tiers became one, which is a return rather than a new idea.** `M7-W160` built exactly this
@@ -238,6 +224,17 @@ function AppSidebar({ pathname }: { pathname: string }) {
       ? { ...routeBound, repoId: soleRepoId }
       : routeBound
   const workspace = bound.repoId ?? null
+
+  // The chassis identity facts: which environment this console serves and who the forge
+  // credential speaks as. One setup probe, cached well past the navigation rate — the server
+  // side shells out to `gh`, and a sidebar that re-probed a credential on every route change
+  // would be paying a subprocess for a fact that changes at human speed.
+  const setupQuery = useQuery({
+    queryKey: ["setup", "chassis"],
+    queryFn: ({ signal }) => fetchSetup(null, signal),
+    staleTime: 5 * 60_000,
+  })
+  const forgeLogin = setupQuery.data?.operator.forge_login ?? null
   // The pin is a stored preference with no control any more: the owner removed the button because
   // hovering is the mechanism, and two ways to open one panel is what made this hard to reason
   // about. It is still read, so a reader who set it before this change is not overruled by it, and
@@ -344,6 +341,34 @@ function AppSidebar({ pathname }: { pathname: string }) {
                 </span>
               </div>
             )}
+            {/* The environment, top-left by the owner's direction: which deployment this is and
+                which forge credential it runs with. Both are facts the setup probe measured —
+                "local dev" is the only environment this console serves, and the git line says
+                who or says it cannot say, never a guess. */}
+            <div
+              className={
+                minimised ? "sr-only" : "flex min-w-0 flex-col gap-field border-b border-line py-field"
+              }
+            >
+              <span className="furniture text-meta text-ink-muted">Environment</span>
+              <Link
+                to="/settings?group=github-connection"
+                className="flex min-w-0 items-center gap-row text-meta text-ink hover:underline"
+                title="Connections — Settings"
+              >
+                <span className="shrink-0 text-ink-muted">local dev</span>
+                <span aria-hidden="true" className="text-ink-muted">
+                  ·
+                </span>
+                <span className="min-w-0 truncate">
+                  {setupQuery.isPending
+                    ? "git: asking…"
+                    : forgeLogin !== null
+                      ? `git: ${forgeLogin}`
+                      : "git: not connected"}
+                </span>
+              </Link>
+            </div>
           </SidebarHeader>
           {/* No scrollbar — owner review item 3, and the compaction above is what makes it honest
               rather than a concealment. The list measures under the viewport at the console's
@@ -364,35 +389,53 @@ function AppSidebar({ pathname }: { pathname: string }) {
             />
           ))}
 
-            {/* `DESTINATIONS` is a separate registry from `ROUTES` and its entries sit at no graph
-                level, so `LevelGroup` — which filters `ROUTES` by level — renders none of them. The
-                rail carried Settings in a hard-coded slot; deleting the rail without this group would
-                have removed the only way to reach it, while every routing test stayed green because
-                the route still exists. */}
-            <div className="flex flex-col">
-              <GroupHeading label="Deployment" minimised={minimised} />
-              <SidebarGroup className="px-row py-0">
-                <SidebarGroupContent>
-                  <SidebarMenu className="gap-0">
-                    {DESTINATIONS.map((entry) => (
-                      <SidebarMenuItem key={entry.path}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={pathname === entry.path}
-                          className="h-7 text-body"
-                        >
-                          <NavLink to={entry.path} title={SETTINGS_NOTE} aria-label={entry.label}>
-                            <Settings aria-hidden="true" className="size-4 text-graphics" />
-                            <span className={minimised ? "sr-only" : "text-body"}>{entry.label}</span>
-                          </NavLink>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </div>
           </SidebarContent>
+
+          {/* The pinned bottom utility bar the sidebar brief named and nothing had built: the
+              account bottom-left by the owner's direction, and Settings beside it — `DESTINATIONS`
+              sits at no graph level, so the level groups above never render it, and removing it
+              here would remove the only way to reach it while every routing test stayed green.
+              The account is the forge login, because that is the only identity a single-operator
+              local deployment honestly holds; a deployment without one says so rather than
+              inventing a name. */}
+          <div className="flex flex-col gap-0 border-t border-line px-row py-row">
+            <SidebarMenu className="gap-0">
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild className="h-7 text-body">
+                  <Link
+                    to="/settings?group=github-connection"
+                    title={
+                      forgeLogin !== null
+                        ? `Signed in to the forge as ${forgeLogin}`
+                        : "No forge account connected"
+                    }
+                    aria-label="Account"
+                  >
+                    <CircleUserRound aria-hidden="true" className="size-4 text-graphics" />
+                    <span className={minimised ? "sr-only" : "min-w-0 truncate font-mono text-meta"}>
+                      {setupQuery.isPending
+                        ? "asking…"
+                        : (forgeLogin ?? "no forge account")}
+                    </span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {DESTINATIONS.map((entry) => (
+                <SidebarMenuItem key={entry.path}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === entry.path}
+                    className="h-7 text-body"
+                  >
+                    <NavLink to={entry.path} title={SETTINGS_NOTE} aria-label={entry.label}>
+                      <Settings aria-hidden="true" className="size-4 text-graphics" />
+                      <span className={minimised ? "sr-only" : "text-body"}>{entry.label}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </div>
         </nav>
       </Sidebar>
     </div>

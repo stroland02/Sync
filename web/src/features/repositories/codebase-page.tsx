@@ -62,6 +62,7 @@ import { Link, useParams } from "react-router"
 import { InfoHint } from "@/components/info-hint"
 import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
+import { GettingStartedCard } from "@/features/repositories/getting-started-card"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { ObservedTelemetryCard } from "@/features/telemetry/observed-telemetry-card"
@@ -105,52 +106,15 @@ export interface CodebasePageProps {
   readonly question?: string
 }
 
-/**
- * Setup, on the dashboard rather than buried: which codebase this console is working with, and
- * the three acts that configure it. The install story is that Sync is set up beside one
- * codebase, so the workspace identity is a fact this card states — the buttons go to the
- * Settings groups that already own each act, because a second place to configure a thing is a
- * place for the two to disagree.
- */
-function SetupCard({ repoId }: { repoId: string }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-section rounded-surface border border-line bg-surface p-section">
-      <div className="flex min-w-0 flex-col gap-field">
-        <div className="flex items-center gap-row">
-          <span className="furniture text-meta text-ink-muted">Workspace</span>
-          <InfoHint label="About this workspace">
-            The codebase this console is working with. Sync is installed beside a codebase and
-            indexes it into the graph; every figure on every screen is scoped to the workspace
-            named here. Connecting Git lets remediation reach the forge — opening pull requests
-            under the merge policy in Settings.
-          </InfoHint>
-        </div>
-        <span className="truncate font-mono text-body text-ink" title={repoId}>
-          {repoId}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-row">
-        <Button asChild variant="outline" size="sm">
-          <Link to="/settings?group=setup">Setup checklist</Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/settings?group=github-connection">Connect to Git</Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/settings?group=pages">How these pages work</Link>
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 export function CodebasePage() {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
 
   return (
     <section className="flex flex-col gap-8">
-      <SetupCard repoId={repoId} />
+      {/* Getting started leads, by the owner's direction: the workspace identity and the full
+          loop's probed prerequisites are the first thing on the Overview. */}
+      <GettingStartedCard repoId={repoId} />
       <PageHeaderRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}
       <div className="grid gap-8 xl:grid-cols-2">

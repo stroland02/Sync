@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -52,7 +53,13 @@ def _item(item_id: str, label: str, state: str, detail: str, fix: str | None = N
     return {"id": item_id, "label": label, "state": state, "detail": detail, "fix": fix}
 
 
-def _forge_item() -> dict:
+_FORGE_LOGIN = re.compile(r"Logged in to \S+ account (\S+)")
+
+
+def _forge_item() -> tuple[dict, str | None]:
+    """The forge probe, and the account name it spoke as — one probe, two answers, because
+    running `gh auth status` twice to learn who is logged in would be the same fact asked
+    for twice."""
     gh = shutil.which("gh")
     if gh is None:
         return _item(
@@ -60,26 +67,31 @@ def _forge_item() -> dict:
             "The gh CLI is not on PATH. The loop reads vendor specifications, watches CI and "
             "opens pull requests through it.",
             "https://cli.github.com — install, then `gh auth login`",
-        )
+        ), None
     probe = _run([gh, "auth", "status"])
     if probe is None:
         return _item(
             "forge", "Forge access (gh CLI)", "unanswered",
             "gh is installed but the auth probe did not return, so this screen cannot say "
             "whether a credential stands behind it.",
-        )
+        ), None
     if probe.returncode != 0:
         return _item(
             "forge", "Forge access (gh CLI)", "missing",
             "gh is installed and not authenticated. Nothing can read CI or open a pull "
             "request until it is.",
             "gh auth login",
-        )
+        ), None
+    # gh prints the status report to stderr on some versions and stdout on others; the
+    # account line is wherever it is.
+    match = _FORGE_LOGIN.search((probe.stdout or "") + (probe.stderr or ""))
+    login = match.group(1) if match else None
     return _item(
         "forge", "Forge access (gh CLI)", "ready",
-        "gh is installed and authenticated; the loop can read specifications, watch CI and "
-        "open pull requests.",
-    )
+        "gh is installed and authenticated"
+        + (f" as {login}" if login else "")
+        + "; the loop can read specifications, watch CI and open pull requests.",
+    ), login
 
 
 def _agent_item() -> dict:
@@ -182,13 +194,20 @@ def _policy_item(store: GraphStore, repo_id: str | None) -> dict:
 
 
 def setup_checklist(store: GraphStore, *, repo_id: str | None, cache_dir: str = "vendor-cache") -> dict:
-    """Every prerequisite of the full loop, probed now, for one repository's point of view."""
+    """Every prerequisite of the full loop, probed now, for one repository's point of view.
+
+    `operator.forge_login` is who the forge credential speaks as — the only identity a
+    single-operator local deployment honestly holds, which is why there is no user table
+    behind it and never a name this payload invented.
+    """
+    forge, forge_login = _forge_item()
     return {
         "repo_id": repo_id,
+        "operator": {"forge_login": forge_login},
         "items": [
             _index_item(store, repo_id),
             _vendor_cache_item(Path(cache_dir)),
-            _forge_item(),
+            forge,
             _agent_item(),
             _remote_item(store, repo_id),
             _policy_item(store, repo_id),
