@@ -128,8 +128,12 @@ def live_terminals(cli: str) -> dict[str, int]:
     """Every connected terminal handle, with the epoch-millis of its last output."""
     payload = call(cli, "terminal", "list", "--json")
     terminals = (payload.get("result") or {}).get("terminals") or []
+    # `lastOutputAt` is **null** for a terminal Orca hosts but does not manage -- the `agy` lanes are
+    # plain shells running an agent CLI, so nothing tracks their output. `or 0` would coerce that
+    # absence into the epoch, which is the absence-versus-zero collapse this product refuses
+    # everywhere else. It is preserved as `None` and the caller decides.
     return {
-        t["handle"]: t.get("lastOutputAt") or 0
+        t["handle"]: t.get("lastOutputAt")
         for t in terminals
         if t.get("connected") and not t.get("orphaned")
     }
@@ -306,6 +310,8 @@ def verdict(
         handle = assignee or fallback_handle
         # No terminal to check is not evidence of health: without one the record is all there is.
         if handle and handle in terminals:
+            if terminals[handle] is None:
+                return False, "silence cannot be measured (Orca reports no output time); read it"
             quiet_ms = int(time.time() * 1000) - terminals[handle]
             if quiet_ms <= silence_ms:
                 return False, f"working ({quiet_ms // 1000}s since last output, despite the record)"
@@ -316,6 +322,10 @@ def verdict(
     if assignee not in terminals:
         return True, "assigned terminal is gone"
 
+    if terminals[assignee] is None:
+        # Unmeasurable is not stopped. Coercing it to 0 printed "silent for 29783562 minutes" and
+        # would have re-dispatched a working lane.
+        return False, "silence cannot be measured (Orca reports no output time); read it"
     quiet_ms = int(time.time() * 1000) - terminals[assignee]
     if quiet_ms > silence_ms:
         return True, f"silent for {quiet_ms // 60000} minutes"
