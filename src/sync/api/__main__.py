@@ -165,6 +165,9 @@ def app_factory() -> Starlette:
     def graph_reader(repo_id: str):
         return graph_views.repository_graph(store, repo_id, limit=GRAPH_BINDING_LIMIT)
 
+    def findings_over_time_reader(*, repo_id: str | None = None):
+        return graph_views.findings_by_kind_over_time(store, repo_id=repo_id)
+
     def vendor_operations_reader(vendor_id: str, *, repo_id: str | None = None):
         return graph_views.vendor_operation_exposure(store, vendor_id, repo_id=repo_id)
 
@@ -274,6 +277,7 @@ def app_factory() -> Starlette:
         change_volume_reader=change_volume_reader,
         observed_reader=observed_reader,
         vendor_operations_reader=vendor_operations_reader,
+        findings_over_time_reader=findings_over_time_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
         severity_reader=severity_reader,

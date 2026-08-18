@@ -1245,6 +1245,104 @@ class GraphStore:
         ).fetchall()
         return {row["rung"]: int(row["n"]) for row in rows}
 
+    def findings_recorded_by_day_and_severity(
+        self, *, repo_id: str | None = None
+    ) -> list[dict]:
+        """Every finding the graph holds, tallied by the day it was recorded and its severity.
+
+        **Not filtered to open.** A time series of only still-open findings rewrites its own
+        history as work gets done -- yesterday's bar shrinks every time somebody merges a patch --
+        so this counts what DETECT produced and `findings_still_open_count` reports separately how
+        much of it remains. Nor is a retracted call site excluded: the finding was genuinely
+        produced when it was produced, and dropping it would edit the past to match the present.
+
+        `created_at` is stable across re-runs because `upsert_finding` is `ON CONFLICT DO
+        NOTHING`, which is what makes a date on this table mean anything at all. It is the day
+        Sync first recorded the claim, never the day the vendor published the change behind it.
+
+        Grouped in SQL. The join to `call_site` exists only for the repository scope and is
+        omitted from neither branch, because a fleet-wide series under a repository's heading is
+        the false claim the scoping exists to remove.
+        """
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if repo_id is not None:
+            clauses.append("call_site.repo_id = %s")
+            parameters.append(repo_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        rows = self._connect().execute(
+            f"""
+            SELECT (finding.created_at AT TIME ZONE 'UTC')::date AS day,
+                   finding.severity                              AS severity,
+                   count(*)                                      AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             {where}
+             GROUP BY 1, 2
+             ORDER BY 1, 2
+            """,
+            parameters,
+        ).fetchall()
+        return [
+            {"day": row["day"].isoformat(), "severity": row["severity"], "n": int(row["n"])}
+            for row in rows
+        ]
+
+    def findings_rung_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
+        """Every finding the graph holds, tallied by the rung it rests on.
+
+        The counterpart to `open_findings_rung_counts` over the same unfiltered set the day-and-
+        severity tally uses, so the rung composition beside a time series describes the findings
+        that series drew and not a different population.
+
+        Only rungs that occur are returned; a rung absent here and a rung at nought are different
+        claims and this query cannot make the second.
+        """
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if repo_id is not None:
+            clauses.append("call_site.repo_id = %s")
+            parameters.append(repo_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        rows = self._connect().execute(
+            f"""
+            SELECT finding.binding_rung AS rung, count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             {where}
+             GROUP BY finding.binding_rung
+             ORDER BY finding.binding_rung
+            """,
+            parameters,
+        ).fetchall()
+        return {row["rung"]: int(row["n"]) for row in rows}
+
+    def findings_still_open_count(self, *, repo_id: str | None = None) -> int:
+        """How many of the findings the graph holds are still open.
+
+        Reported beside the series rather than folded into it: the series says what Sync produced,
+        this says how much of it is outstanding, and a reader needs both to avoid reading either
+        as the other.
+        """
+        clauses: list[str] = ["finding.status = 'open'"]
+        parameters: list[object] = []
+        if repo_id is not None:
+            clauses.append("call_site.repo_id = %s")
+            parameters.append(repo_id)
+
+        row = self._connect().execute(
+            f"""
+            SELECT count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {' AND '.join(clauses)}
+            """,
+            parameters,
+        ).fetchone()
+        return int(row["n"])
+
     def open_findings_vendor_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
         """Every open finding, tallied by vendor -- one `GROUP BY`, never a loop over findings.
 

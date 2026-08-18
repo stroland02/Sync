@@ -193,6 +193,17 @@ def _fake_vendor_operations_reader(vendor_id: str, *, repo_id=None) -> dict[str,
     }
 
 
+def _fake_findings_over_time_reader(*, repo_id=None) -> dict[str, Any]:
+    return {
+        "repo_id": repo_id,
+        "severities": ["breaking", "warning", "deprecation", "addition", "info"],
+        "days": [],
+        "by_rung": {},
+        "total": 0,
+        "still_open": 0,
+    }
+
+
 def _fake_observed_reader(
     repo_id: str,
     *,
@@ -319,6 +330,7 @@ def _build_app(
     graph_reader=_fake_graph_reader,
     change_volume_reader=_fake_change_volume_reader,
     observed_reader=_fake_observed_reader,
+    findings_over_time_reader=_fake_findings_over_time_reader,
     vendor_operations_reader=_fake_vendor_operations_reader,
     detector_reader=_fake_detector_reader,
     adapters_reader=_fake_adapters_reader,
@@ -354,6 +366,7 @@ def _build_app(
         graph_reader=graph_reader,
         change_volume_reader=change_volume_reader,
         observed_reader=observed_reader,
+        findings_over_time_reader=findings_over_time_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
@@ -1555,6 +1568,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
+    def findings_over_time_reader(*, repo_id=None):
+        return _fake_findings_over_time_reader(repo_id=repo_id)
+
     def vendor_operations_reader(vendor_id: str, *, repo_id=None):
         return _fake_vendor_operations_reader(vendor_id, repo_id=repo_id)
 
@@ -1571,6 +1587,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         graph_reader=_fake_graph_reader,
         change_volume_reader=_fake_change_volume_reader,
         observed_reader=observed_reader,
+        findings_over_time_reader=findings_over_time_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=_fake_adapters_reader,
@@ -1811,6 +1828,11 @@ _NOT_COLLECTIONS = {
     # One aggregate over every change a vendor has, which is the point of it: paging
     # this is what the console was already doing wrong client-side.
     "/api/vendors/{vendor_id}/change-volume",
+    # Dashboard 1. `days` is one entry per day a finding was recorded and `counts` one per
+    # severity that occurred -- bounded by the calendar and by a five-member closed vocabulary,
+    # not by how many findings exist. Paging a distribution truncates the picture while looking
+    # complete, which is the reason `/api/overview` is unpaginated too.
+    "/api/findings/over-time",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -2119,10 +2141,6 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/repos/{param}/findings",
     "/api/repositories/{param}/settings",
     "/api/repos/{param}/settings",
-    # M14-W396: endpoint only. Its consumer is the vendor change chart in
-    # `web/src/features/vendors/`, which recomputes this aggregate over one page and
-    # belongs to another lane; the swap is handed over rather than reached across.
-    "/api/vendors/{param}/change-volume",
 }
 
 
@@ -2572,3 +2590,42 @@ def test_change_volume_route_passes_the_vendor_through():
     TestClient(app).get("/api/vendors/openai/change-volume")
 
     assert seen == ["openai"]
+
+
+def test_findings_over_time_route_answers_the_dated_aggregate():
+    """Dashboard 1. The payload names the closed severity vocabulary so a reader can tell a kind
+    at nought from a kind that does not exist."""
+    payload = {
+        "repo_id": None,
+        "severities": ["breaking", "warning", "deprecation", "addition", "info"],
+        "days": [{"day": "2026-08-16", "counts": {"breaking": 2}}],
+        "by_rung": {"static": 2},
+        "total": 2,
+        "still_open": 1,
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        findings_over_time_reader=lambda **_: payload,
+    )
+
+    response = TestClient(app).get("/api/findings/over-time")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_findings_over_time_route_passes_the_repository_scope_through():
+    seen: list[dict[str, Any]] = []
+
+    def reader(*, repo_id=None):
+        seen.append({"repo_id": repo_id})
+        return _fake_findings_over_time_reader(repo_id=repo_id)
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        findings_over_time_reader=reader,
+    )
+
+    TestClient(app).get("/api/findings/over-time?repo_id=org%2Fpayments")
+
+    assert seen == [{"repo_id": "org/payments"}]

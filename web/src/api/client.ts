@@ -27,6 +27,7 @@ import type {
   RepositoriesResponse,
   RunsPage,
   AbandonmentResponse,
+  FindingsOverTimeResponse,
   VendorChangeRow,
   VendorChangeVolumeResponse,
   VendorOperationsResponse,
@@ -193,6 +194,17 @@ export function fetchVendorChanges(
     params,
   )
   return getJson<Page<VendorChangeRow>>(path, signal)
+}
+
+export function fetchFindingsOverTime(
+  repoId: string | null,
+  signal?: AbortSignal,
+): Promise<FindingsOverTimeResponse> {
+  const path = "/api/findings/over-time"
+  return getJson<FindingsOverTimeResponse>(
+    repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`,
+    signal,
+  )
 }
 
 export function fetchAbandonment(signal?: AbortSignal): Promise<AbandonmentResponse> {

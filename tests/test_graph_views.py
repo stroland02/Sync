@@ -20,6 +20,7 @@ from sync.core.models import SEVERITY_ORDER
 from sync.dashboard.graph_views import (
     binding_surface,
     detector_accountability,
+    findings_by_kind_over_time,
     findings_page,
     index_coverage,
     observed_telemetry,
@@ -1713,3 +1714,112 @@ class TestOverviewBindingsByRung:
 
         assert payload["total_findings_bound_reached"] is True
         assert payload["bindings_by_rung"]["static"] == 5
+
+
+# --- Dashboard 1: findings by kind over time -------------------------------------------------
+#
+# The product's own output, dated. The trap this set exists to hold is that `created_at` is when
+# Sync first RECORDED a finding, not when the vendor published the change behind it, and a reader
+# looking at a bar chart of dates will assume the second.
+
+
+def _record_finding_on(store, finding_id: str, day: str) -> None:
+    """Backdate a finding. `created_at` defaults to `now()` and the writer takes no override, so
+    dated history cannot be built any other way."""
+    store._connect().execute(
+        "UPDATE finding SET created_at = %s::timestamptz WHERE id = %s", (day, finding_id)
+    )
+
+
+def test_findings_by_kind_over_time_buckets_by_the_day_a_finding_was_recorded(store):
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    a = store.insert_finding(_finding(sites[0], claim="c1", severity="breaking"))
+    b = store.insert_finding(_finding(sites[0], claim="c2", severity="warning"))
+    _record_finding_on(store, a, "2026-08-16T04:00:00+00:00")
+    _record_finding_on(store, b, "2026-08-17T04:00:00+00:00")
+
+    result = findings_by_kind_over_time(store)
+
+    assert result["days"] == [
+        {"day": "2026-08-16", "counts": {"breaking": 1}},
+        {"day": "2026-08-17", "counts": {"warning": 1}},
+    ]
+
+
+def test_findings_by_kind_over_time_echoes_the_closed_vocabulary(store):
+    """The severities are a closed set, so a reader can tell a kind at nought from a kind that
+    does not exist. The view names all five rather than only those that occurred."""
+    result = findings_by_kind_over_time(store)
+
+    assert result["severities"] == list(SEVERITY_ORDER)
+
+
+def test_findings_by_kind_over_time_omits_a_severity_no_finding_carried_that_day(store):
+    """A day's dict holds only what happened. Filling every day with five zeroes would make the
+    payload assert four measurements nobody took."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    a = store.insert_finding(_finding(sites[0], claim="c1", severity="breaking"))
+    _record_finding_on(store, a, "2026-08-16T04:00:00+00:00")
+
+    result = findings_by_kind_over_time(store)
+
+    assert result["days"][0]["counts"] == {"breaking": 1}
+
+
+def test_findings_by_kind_over_time_counts_a_finding_that_has_since_closed(store):
+    """A time series of only still-open findings would rewrite its own history as work gets done:
+    yesterday's bar would shrink every time somebody merged a patch. This counts what Sync
+    produced, and reports separately how much of it is still open."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    a = store.insert_finding(_finding(sites[0], claim="c1", severity="breaking", status="patched"))
+    _record_finding_on(store, a, "2026-08-16T04:00:00+00:00")
+
+    result = findings_by_kind_over_time(store)
+
+    assert result["total"] == 1
+    assert result["still_open"] == 0
+
+
+def test_findings_by_kind_over_time_carries_the_rungs_its_findings_rest_on(store):
+    """Every derived figure carries its rung. A bar chart cannot show one per bar without becoming
+    unreadable, so the window's rung composition travels beside it."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    a = store.insert_finding(_finding(sites[0], claim="c1", binding_rung="static"))
+    b = store.insert_finding(_finding(sites[0], claim="c2", binding_rung="observed"))
+    _record_finding_on(store, a, "2026-08-16T04:00:00+00:00")
+    _record_finding_on(store, b, "2026-08-16T05:00:00+00:00")
+
+    result = findings_by_kind_over_time(store)
+
+    assert result["by_rung"] == {"static": 1, "observed": 1}
+
+
+def test_findings_by_kind_over_time_narrows_to_one_repository(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+    r1 = store.replace_call_sites("r1", [_site(repo_id="r1", path="src/a.ts", line=1)])
+    r2 = store.replace_call_sites("r2", [_site(repo_id="r2", path="src/b.ts", line=2)])
+    a = store.insert_finding(_finding(r1[0], claim="c1", severity="breaking"))
+    b = store.insert_finding(_finding(r2[0], claim="c2", severity="warning"))
+    _record_finding_on(store, a, "2026-08-16T04:00:00+00:00")
+    _record_finding_on(store, b, "2026-08-16T04:00:00+00:00")
+
+    result = findings_by_kind_over_time(store, repo_id="r1")
+
+    assert result["days"] == [{"day": "2026-08-16", "counts": {"breaking": 1}}]
+    assert result["repo_id"] == "r1"
+
+
+def test_findings_by_kind_over_time_on_an_empty_graph_reports_no_days(store):
+    """No day is an empty list rather than a run of zeroes. Nothing records a DETECT run, so a
+    day with no row is a day nothing was recorded -- which may be no changes or may be no run,
+    and inventing a zero would claim the first."""
+    result = findings_by_kind_over_time(store)
+
+    assert result["days"] == []
+    assert result["total"] == 0
+    assert result["by_rung"] == {}
