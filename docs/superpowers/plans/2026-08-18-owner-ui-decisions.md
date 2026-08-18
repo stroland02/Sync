@@ -608,3 +608,37 @@ renders as itself — `locate`, `patch`, `verify`, `push` — with its duration 
 **Expanded-by-default is the honest choice and the expensive one.** Nothing about the run is behind a
 click, which is the position this screen exists to take — but it also means a long run is a long
 page, and a card with nothing to show must say so rather than rendering an empty expansion.
+
+## Round fourteen: decisions 68-71
+
+**68. The breadcrumb shows the full path and every segment is a link**, the last one plain text.
+`checkout › API Services › stripe › PostCharges › Solution workflow`. **Rejected: collapsing the
+middle**, and **rejected: a back link only.**
+
+**69. A destructive action opens a dialog naming the consequence** — what is removed, with counts,
+and what survives. **Rejected: type-the-name**, and **rejected: do-it-with-undo**, which would have
+required a soft-delete column built for a control rather than for a fact.
+
+**Those counts must be real, and this is the whole reason the dialog is the right one.** `Removes
+1,204 call sites, 31 findings, 18 runs / Keeps 2 open pull requests` is a claim, and a dialog that
+guesses is worse than one that does not offer the number. **A count the query cannot establish says
+so; it never renders `0`.** A dialog that says *removes 0 findings* about a workspace whose findings
+were never counted is the absence-into-zero failure at the one moment it is irreversible.
+
+**70. A global search field lives in the rail**, searching call sites, findings, vendors, operations
+and files across the workspace, with results grouped by type and counted.
+
+**This does not merge with decision 43's command palette, and neither replaces the other.** The
+palette navigates to *named things* and holds no actions. Rail search looks *inside* the workspace's
+content. Building one and calling it the other would leave a reader unable to find a file path by
+its middle segment, which is exactly what rail search is for. **Two components, one index, and the
+counts beside each group are the valuable part — they say what you would get before you click.**
+
+**71. A long identifier truncates from the start and keeps the filename and line.**
+`…/internal/charge-handler.ts:41`.
+
+**The failure mode this creates has to be handled rather than accepted.** Two different files with
+the same basename truncate to the same string. So the **full path goes in the `title` attribute and
+the accessible name** — as decisions 60 and 65 already require for hovered precision — and the source
+drawer shows it whole. **Where two visible rows would truncate identically, the column widens rather
+than lying**; identical-looking rows that are different records is a worse table than a wide one.
