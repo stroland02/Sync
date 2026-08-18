@@ -996,6 +996,44 @@ class GraphStore:
             for row in rows
         }
 
+    def call_sites_by_operation(
+        self, vendor_id: str, *, repo_id: str | None = None
+    ) -> list[dict]:
+        """Per operation of one vendor, how many current call sites name it and how many
+        repositories hold them.
+
+        Grouped in SQL rather than folded in Python for the same reason `vendor_intake_rollup`
+        is: the caller is a screen rendering one line per operation, and a fold here would be
+        the same GROUP BY written twice.
+
+        `retracted_at IS NULL` is the whole difference between exposure and history. A call the
+        last index pass stopped finding is not a place this codebase calls the vendor any more,
+        and counting it would report exposure a reader cannot act on.
+
+        Ordered by count descending then by id, so the order is total. Ordering on the count
+        alone leaves ties to the planner, and a screen whose rows reshuffle between reads for no
+        reason a reader can see reads as a bug in the data.
+        """
+        clauses = ["vendor_id = %s", "retracted_at IS NULL"]
+        parameters: list[object] = [vendor_id]
+        if repo_id is not None:
+            clauses.append("repo_id = %s")
+            parameters.append(repo_id)
+
+        rows = self._connect().execute(
+            f"""
+            SELECT operation_id,
+                   count(*)                  AS call_site_count,
+                   count(DISTINCT repo_id)   AS repository_count
+              FROM call_site
+             WHERE {" AND ".join(clauses)}
+             GROUP BY operation_id
+             ORDER BY count(*) DESC, operation_id
+            """,
+            parameters,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def vendor_changes_for_operation(
         self, vendor_id: str, operation_id: str, *, limit: int | None = None, offset: int = 0
     ) -> list[VendorChange]:

@@ -155,6 +155,9 @@ def app_factory() -> Starlette:
     def coverage_reader(repo_id: str):
         return graph_views.index_coverage(store, repo_id)
 
+    def vendor_operations_reader(vendor_id: str, *, repo_id: str | None = None):
+        return graph_views.vendor_operation_exposure(store, vendor_id, repo_id=repo_id)
+
     def observed_reader(
         repo_id: str,
         *,
@@ -258,6 +261,7 @@ def app_factory() -> Starlette:
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
         observed_reader=observed_reader,
+        vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
         severity_reader=severity_reader,

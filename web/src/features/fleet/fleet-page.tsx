@@ -20,50 +20,39 @@
  * action belongs on the change-unit row it acts on, beside that row's own standing and checkpoint
  * age, where it also reads as the log of what happened to that change.
  *
- * **The repository list is rows, not cards.** Five cards spent a tile each on one repository's name
- * while answering one question; rows answer it in a line and let a reader compare down a column.
- * `codebases-panel.tsx` keeps the scoped-answer discipline unchanged — `/api/overview` echoes the
- * scope it was computed for, one query per repository, and `openFindings` stays null rather than
- * zero until that repository's own answer arrives.
+ * **The codebase list is not here.** Ruled twice by the owner: this screen shows findings for the
+ * one workspace already chosen, and a directory of every codebase answers a different question —
+ * which workspace am I in — that the scope switcher already answers. The listing moved whole to
+ * Settings' Codebases group rather than being deleted, because it fixed a real defect worth
+ * keeping: the panel it replaced printed one fleet-wide `total_findings` under every card, a false
+ * claim about every repository but the one that figure happened to match.
  *
  * **What stays, and why it is not clutter.** The four counts, the standing limits, the
  * composite-health refusal and the three footnotes are the qualifications that make every figure on
  * this screen readable. `CLAUDE.md` protects four distinctions and the console architecture plan's
  * *Establish 2* reproduces twenty-four sentences that may be restyled and re-placed but never
- * shortened; the absence footnote in particular points at "the repository list below", which is why
- * that list stays on this screen rather than moving into the sidebar.
+ * shortened. The absence footnote pointed at "the repository list below"; the list moved, so the
+ * pointer moved with it and now names the codebase list in Settings. Re-placing a referent is
+ * permitted where shortening the sentence is not — and leaving it pointing at a list this screen no
+ * longer holds would be a true sentence with a dead pointer, which is the quiet half of the defect.
  */
 
-import { useState } from "react"
-
-import { Button } from "@/components/ui/button"
 import { FactTile } from "@/components/fact-tile"
 import { CodebaseFactsBand } from "@/features/fleet/codebase-facts"
-import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
 import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { ControlBar } from "@/layouts/control-bar"
 import { PageHeader } from "@/layouts/page-header"
-import { chipSurface } from "@/lib/selectable-surface"
 
 const DEFAULT_QUESTION =
   "All code repositories monitored by Sync, their attached API vendors, and active migrations."
-
-const FILTERS: [CodebaseFilter, string][] = [
-  ["ALL", "All repositories"],
-  ["NEEDS_REVIEW", "With active remediations"],
-  ["CLEAN", "Clean repositories"],
-]
 
 export interface FleetPageProps {
   readonly question?: string
 }
 
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
-  const [filter, setFilter] = useState<CodebaseFilter>("ALL")
-
   return (
     <section className="flex flex-col gap-section">
       {/* "Overview", once. This destination was titled "Repositories", labelled "Codebases" in the
@@ -88,36 +77,8 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           and `.claude/rules/console-hierarchy.md` makes the ordering the whole rule. */}
       <CodebaseFactsBand />
 
-      {/* Filter Tabs & Scope Description */}
-      <ControlBar>
-        <div className="flex flex-wrap items-center gap-row">
-          {FILTERS.map(([value, label]) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant="outline"
-              aria-pressed={filter === value}
-              className={chipSurface(filter === value)}
-              onClick={() => setFilter(value)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-        <span className="text-meta text-muted-foreground">
-          Repositories monitored across the organization
-        </span>
-      </ControlBar>
-
       {/* 4-card metric strip */}
       <FleetFacts />
-
-      {/* The repository list is the screen. This level's one question is which repository to open,
-          and everything that answered a different question has moved to where that question is
-          asked: the fleet-wide change-unit table to the Codebase screen, where it is scoped to one
-          repository and therefore actionable, and the vendor distribution with it. */}
-      <CodebasesPanel filter={filter} />
 
       {/* Value before configuration, and the order on this screen is the argument. The repository
           list and its counts come first: real findings, read from source, before anything was
@@ -157,7 +118,7 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           A checkpoint age is staleness, not liveness — it says how old the evidence is not whether the run is still going. A change unit collapses findings sharing a vendor change against one repository set; the call-site grain is intact underneath and reachable from every row.
         </p>
         <p>
-          A repository the index never indexed has no row — absence is not zero: a repository configured but never indexed has no row in the repository list below, and the same absence as a repository nobody ever configured.
+          A repository the index never indexed has no row — absence is not zero: a repository configured but never indexed has no row in the codebase list in Settings, and the same absence as a repository nobody ever configured.
         </p>
         <p>
           A finding retried three times writes three attempts here and counts once toward the corpus grain.

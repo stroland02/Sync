@@ -49,6 +49,7 @@ import type { ReactNode } from "react"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
+import { workspacePath } from "@/features/findings/workspace-path"
 import { WORKFLOW_POLL_MS, useWorkflow } from "@/api/queries"
 import type { WorkflowState } from "@/api/types"
 import { type Fact, FactList } from "@/components/fact-list"
@@ -80,9 +81,9 @@ export interface PullRequestPageProps {
 
 export function PullRequestPage({ question = DEFAULT_QUESTION }: PullRequestPageProps) {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
-  const { findingId } = useParams<{ findingId: string }>()
+  const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <PullRequest findingId={findingId} question={question} />
+  return <PullRequest repoId={repoId} findingId={findingId} question={question} />
 }
 
 /**
@@ -120,6 +121,7 @@ function railFacts(
   data: WorkflowState | undefined,
   facts: BundleFacts,
   failure: ReactNode | null,
+  repoId: string | undefined,
   findingId: string,
 ): Fact[] {
   function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
@@ -133,7 +135,7 @@ function railFacts(
       label: "Finding",
       value: (
         <Link
-          to={`/findings/${encodeURIComponent(findingId)}`}
+          to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}`}
           className="underline underline-offset-2"
         >
           <code className="font-mono text-meta break-all select-all">{findingId}</code>
@@ -191,7 +193,7 @@ function railFacts(
               This is the most recent of {state.generation_count} runs the checkpointer holds for
               this finding. An earlier generation may have reached a pull request even where this one
               has not;{" "}
-              <Link to="/" className="underline underline-offset-2">
+              <Link to={workspacePath(repoId)} className="underline underline-offset-2">
                 the codebase overview
               </Link>{" "}
               lists every one.
@@ -203,7 +205,15 @@ function railFacts(
   ]
 }
 
-function PullRequest({ findingId, question }: { findingId: string; question: string }) {
+function PullRequest({
+  repoId,
+  findingId,
+  question,
+}: {
+  repoId: string | undefined
+  findingId: string
+  question: string
+}) {
   const query = useWorkflow(findingId)
   const data = query.data
   const facts = bundleFacts(data?.nodes ?? [])
@@ -250,12 +260,12 @@ function PullRequest({ findingId, question }: { findingId: string; question: str
       }
       rail={
         <div className="flex min-w-0 flex-col gap-section">
-          <FactList facts={railFacts(data, facts, failure, findingId)} />
+          <FactList facts={railFacts(data, facts, failure, repoId, findingId)} />
 
           <p className="text-body text-muted-foreground">
             Read from the checkpointer, the same source as{" "}
             <Link
-              to={`/findings/${encodeURIComponent(findingId)}/workflow`}
+              to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow`}
               className="underline underline-offset-2"
             >
               the solution workflow

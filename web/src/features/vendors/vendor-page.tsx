@@ -8,14 +8,15 @@
  * the conflict is resolved that way and recorded rather than left for the next reader to
  * rediscover.
  *
- * Top to bottom: the findings control bar and the open findings, then what the vendor published
- * beside where it was read from.
+ * Top to bottom: the operations this codebase calls, then the findings open against them, then
+ * what the vendor published beside where it was read from.
  */
 
 import { useParams, useSearchParams } from "react-router"
 
 import { FactList } from "@/components/fact-list"
 import { VendorChangesCard } from "@/features/vendors/vendor-changes-table"
+import { VendorExposureCard } from "@/features/vendors/vendor-exposure-card"
 import {
   VendorFindingsCard,
   VendorFindingsControls,
@@ -102,6 +103,7 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
       </DetailGrid>
 
       <div className="flex flex-col gap-8" data-testid="vendor-exposure">
+        <VendorExposureCard vendorId={vendorId} repoId={repoId} />
         <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
         <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
       </div>
