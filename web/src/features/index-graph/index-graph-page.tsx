@@ -16,9 +16,12 @@
  * call sites were all retracted still holds observed traffic and unattributed findings, so
  * "nothing here" would drop what the graph is holding.
  *
- * **Not registered in `routes.ts`.** `docs/superpowers/plans/2026-08-18-workspace-is-the-only-
- * scope.md` gives that file to Lane B exclusively -- this component is built and ready, and the
- * route entry (path, region, level, question) is Lane B's to add.
+ * **Registered at `/repositories/:repoId/graph`** (`lib/routes.ts`), level `Codebase`, `nav:
+ * true` -- a rail destination, since it needs nothing beyond the selected workspace's own
+ * `repoId` to build its address, the same test `routes.test.tsx` holds every such route to.
+ * `overview-graph-panel.tsx` also links here directly, beside its own compact copy of this same
+ * canvas. Lane B, which had exclusive ownership of `routes.ts`, was retired before registering
+ * this; picked up once nothing else owned that file.
  */
 
 import { useParams } from "react-router"

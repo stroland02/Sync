@@ -105,23 +105,6 @@ src/sync/remediate/forward_proxy_server.py:running_proxy
 # in `tests/test_codebase_index.py`.
 src/sync/index/codebase.py:index_codebase
 
-
-# `DockerSdkRunner` (B97 Decision 1) is a complete `PatchRunner`: it drives the agent turn inside
-# two ephemeral containers -- a proxy holding the real Anthropic credential and a sandboxed
-# container that never does -- composing `ephemeral_container`, `isolated_network`,
-# `attach_network`, `copy_into_container`/`copy_out_of_container` and `exec_in_container` into
-# one orchestrated attempt. Tested against real Docker at the primitive level
-# (`tests/test_sandbox_attach_network.py`, `tests/test_sandbox_host_copy.py`) and at the
-# orchestration level against mocked `sandbox` calls (`tests/test_docker_sdk_runner.py`) --
-# proven to hold the one property that matters most: the sandboxed container's own `exec`
-# carries `ANTHROPIC_BASE_URL` and nothing else, never the credential. **Not wired into
-# `AgentRemediator` in this commit, deliberately.** `AgentRemediator.__init__`'s default stays
-# `ClaudeSdkRunner` -- the seam is a one-line change once this class is trusted, but trusting it
-# needs a real end-to-end run with a real model call, which is a spend decision this commit does
-# not make for the owner. `docs/superpowers/specs/2026-07-25-sync-threat-model.md`'s own ledger
-# records precisely what this closes (mitigations 1 and 3) and what it does not (mitigation 5:
-# read-only root, a per-container wall-clock kill -- `ephemeral_container` still grants neither).
-
 # Owner decision 45, added 2026-08-18. Dismissal was ruled explicitly NOT a rendering change,
 # so the schema, its closed vocabulary and the reads over it landed first and the write path
 # follows. These four are finished and tested against a real database and reached by nothing

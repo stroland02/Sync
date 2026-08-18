@@ -42,9 +42,10 @@ import type { ComponentType } from "react"
 import { matchPath } from "react-router"
 
 import { BindingSurfacePage } from "@/features/bindings/binding-surface-page"
-import { CodebasePage } from "@/features/repositories/codebase-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
+import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
+import { CodebasePage } from "@/features/repositories/codebase-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
 import { SettingsPage } from "@/features/settings/settings-page"
 import { SignalsPage } from "@/features/signals/signals-page"
@@ -116,6 +117,16 @@ export const ROUTES: readonly RouteEntry[] = [
     question: "What does Sync see in this workspace, and what does it not?",
     params: ["repoId"],
     element: CodebasePage,
+  },
+  {
+    path: "/repositories/:repoId/graph",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    label: "Dependency graph",
+    level: "Codebase",
+    question: "What does this workspace's whole indexed call graph look like, file by file?",
+    params: ["repoId"],
+    element: IndexGraphPage,
   },
   {
     path: "/repositories/:repoId/services",

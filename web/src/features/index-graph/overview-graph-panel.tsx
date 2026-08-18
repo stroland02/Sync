@@ -17,6 +17,8 @@
  * the one thing the picture is for, so the notice below is not decoration.
  */
 
+import { Link } from "react-router"
+
 import { useRepositoryGraph } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
@@ -51,12 +53,22 @@ export function OverviewGraphPanel({ repoId }: { repoId: string }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-row">
-      <div className="flex flex-col gap-field">
-        <h2 className="text-emphasis font-medium text-foreground">Your codebase, out to its vendors</h2>
-        <p className="text-meta text-muted-foreground">
-          Every place <span className="font-mono">{repoId}</span> calls an API the index found,
-          and the operation each call reaches.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-row">
+        <div className="flex flex-col gap-field">
+          <h2 className="text-emphasis font-medium text-foreground">Your codebase, out to its vendors</h2>
+          <p className="text-meta text-muted-foreground">
+            Every place <span className="font-mono">{repoId}</span> calls an API the index found,
+            and the operation each call reaches.
+          </p>
+        </div>
+        {payload.total_bindings > 0 && (
+          <Link
+            to={`/repositories/${encodeURIComponent(repoId)}/graph`}
+            className="shrink-0 text-meta text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            View full graph
+          </Link>
+        )}
       </div>
 
       {payload.total_bindings === 0 ? (
