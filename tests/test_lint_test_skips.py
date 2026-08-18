@@ -142,6 +142,13 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     messages, so it needs `node` — the same absent-toolchain shape as the fourteenth, and for the
     same reason: asserting that the two phrases merely *appear* in the file would pass on a source
     that never reaches the branch printing them.
+
+    The sixteenth is `tests/test_api_type_contract.py`, added by `CI-W391`, and it is the first
+    shape again rather than a new one: it compares the keys the API actually emits against the
+    keys `web/src/api/types.ts` declares, so a checkout carrying no console has no second side to
+    compare against and nothing to assert. **I added that skip and did not raise this count in the
+    same change** -- which is the exact omission this baseline exists to force into the open, and
+    it caught its author two work items later.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -149,7 +156,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 15, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 16, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 
