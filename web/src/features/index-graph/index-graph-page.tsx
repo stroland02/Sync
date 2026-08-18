@@ -15,32 +15,24 @@ import { useParams } from "react-router"
 import { useRepositoryGraph } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
-const DEFAULT_QUESTION = "What does this codebase actually call, and what has the index found there?"
 
 export interface IndexGraphPageProps {
   readonly question?: string
 }
 
-export function IndexGraphPage({ question = DEFAULT_QUESTION }: IndexGraphPageProps) {
+export function IndexGraphPage() {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
-  return <IndexGraphDetail repoId={repoId} question={question} />
+  return <IndexGraphDetail repoId={repoId} />
 }
 
-function IndexGraphDetail({ repoId, question }: { repoId: string; question: string }) {
+function IndexGraphDetail({ repoId }: { repoId: string }) {
   const query = useRepositoryGraph(repoId)
 
   return (
     <section className="flex flex-col gap-8">
-      <PageHeader
-        title={<span className="font-mono">{repoId}</span>}
-        question={question}
-        trail={<Breadcrumbs trail={[{ label: "Index" }]} />}
-      />
 
       {query.isPending && <LoadingState what={`the file tree for ${repoId}`} />}
       {query.isError && (

@@ -91,12 +91,8 @@ import {
   type SignalRole,
 } from "@/features/signals/roles"
 import { SubjectCatalogue } from "@/features/signals/subject-catalogue"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
-const DEFAULT_QUESTION =
-  "What vendor, signal source and human surface does this repository have attached, and what has each reported?"
 
 function names(roles: readonly SignalRole[]): string {
   return roles.map((entry) => entry.role).join(", ")
@@ -140,23 +136,15 @@ export interface SignalsPageProps {
   readonly question?: string
 }
 
-export function SignalsPage({ question = DEFAULT_QUESTION }: SignalsPageProps) {
+export function SignalsPage() {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
-  return <SignalsDetail repoId={repoId} question={question} />
+  return <SignalsDetail repoId={repoId} />
 }
 
-function SignalsDetail({ repoId, question }: { repoId: string; question: string }) {
+function SignalsDetail({ repoId }: { repoId: string }) {
   return (
     <section className="flex flex-col gap-8">
-      <PageHeader
-        title={<span className="font-mono">{repoId}</span>}
-        question={question}
-        // Fleet and the repository are the top bar's, derived from this same address. "Signals"
-        // stays: it is the level, the bar's trail stops at the vendor, and this page's title is
-        // the repository id rather than the level name. M7-W195.
-        trail={<Breadcrumbs trail={[{ label: "Signals" }]} />}
-      />
 
       {/* The two sentences beside one another rather than stacked: the first says what the screen
           draws, the second says which roles have anything behind it, and a reader checks the second

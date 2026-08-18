@@ -97,17 +97,13 @@ import {
 } from "@/features/bindings/binding-selection"
 import { joinOrAbsent } from "@/features/bindings/call-site-fields"
 import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { FooterBar } from "@/layouts/footer-bar"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-const DEFAULT_QUESTION =
-  "A vendor shipped a breaking change — what call sites does it hit?"
 
 const CALL_SITES_OFFSET_KEY = "call_sites_offset"
 const PATH_PREFIX_KEY = "path_prefix"
@@ -338,12 +334,10 @@ function BindingSurfaceDetail({
   vendorId,
   operationId,
   repoId,
-  question,
 }: {
   vendorId: string
   operationId: string
   repoId: string | null
-  question: string
 }) {
   const [callSitesOffset, setCallSitesOffset] = useOffsetParam(CALL_SITES_OFFSET_KEY)
   const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
@@ -398,18 +392,6 @@ function BindingSurfaceDetail({
         }
       >
         <div className="flex min-w-0 flex-col gap-section">
-          <PageHeader
-            // Fleet and the vendor are the top bar's, derived from this same address. The
-            // operation stays: it is deeper than the vendor, which is where that trail stops.
-            // M7-W195.
-            trail={<Breadcrumbs trail={[{ label: operationId }]} />}
-            title={
-              <span className="font-mono">
-                {vendorId} / {operationId}
-              </span>
-            }
-            question={question}
-          />
           <ScopeNote repoId={repoId} />
         </div>
       </DetailGrid>
@@ -655,7 +637,7 @@ export interface BindingSurfacePageProps {
   readonly question?: string
 }
 
-export function BindingSurfacePage({ question = DEFAULT_QUESTION }: BindingSurfacePageProps) {
+export function BindingSurfacePage() {
   const { vendorId, operationId } = useParams<{ vendorId: string; operationId: string }>()
   const [searchParams] = useSearchParams()
   if (vendorId === undefined || operationId === undefined) return <UnknownRoute />
@@ -665,7 +647,6 @@ export function BindingSurfacePage({ question = DEFAULT_QUESTION }: BindingSurfa
       vendorId={vendorId}
       operationId={operationId}
       repoId={repoId}
-      question={question}
     />
   )
 }

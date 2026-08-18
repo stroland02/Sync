@@ -65,25 +65,19 @@ import {
 } from "@/features/pullrequests/bundle-facts"
 import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { DetailTitleText, pullRequestTitle } from "@/lib/detail-title"
-import { formatFindingBadge } from "@/lib/format"
 
-const DEFAULT_QUESTION =
-  "Did Sync open a pull request for this finding, and what proof backs it?"
 
 export interface PullRequestPageProps {
   readonly question?: string
 }
 
-export function PullRequestPage({ question = DEFAULT_QUESTION }: PullRequestPageProps) {
+export function PullRequestPage() {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
   const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <PullRequest repoId={repoId} findingId={findingId} question={question} />
+  return <PullRequest repoId={repoId} findingId={findingId} />
 }
 
 /**
@@ -208,11 +202,9 @@ function railFacts(
 function PullRequest({
   repoId,
   findingId,
-  question,
 }: {
   repoId: string | undefined
   findingId: string
-  question: string
 }) {
   const query = useWorkflow(findingId)
   const data = query.data
@@ -226,38 +218,9 @@ function PullRequest({
     )
   ) : null
 
-  const trail = [
-    { label: "Repositories", to: "/" },
-    { label: formatFindingBadge(findingId), to: `/findings/${encodeURIComponent(findingId)}` },
-    { label: "Solution workflow", to: `/findings/${encodeURIComponent(findingId)}/workflow` },
-    { label: "Pull request" },
-  ]
-
-  const title =
-    data !== undefined ? (
-      <DetailTitleText
-        title={pullRequestTitle(
-          facts.prNumber,
-          facts.branch,
-          noPullRequestPhrase(data.outcome),
-          noBranchPhrase(data.outcome),
-        )}
-      />
-    ) : failure !== null ? (
-      failure
-    ) : (
-      <Skeleton width="w-72" />
-    )
 
   return (
     <DetailGrid
-      header={
-        <PageHeader
-          trail={<Breadcrumbs trail={trail} />}
-          title={title}
-          question={question}
-        />
-      }
       rail={
         <div className="flex min-w-0 flex-col gap-section">
           <FactList facts={railFacts(data, facts, failure, repoId, findingId)} />

@@ -72,15 +72,11 @@ import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-const DEFAULT_QUESTION =
-  "Is this repository actually covered, and what does Sync not see in it?"
 
 /** A section inside the telemetry panel. Furniture register, `h3` under the panel's own `h2`. */
 function TelemetrySection({ title, children }: { title: string; children: ReactNode }) {
@@ -282,13 +278,13 @@ export interface CodebasePageProps {
   readonly question?: string
 }
 
-export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps) {
+export function CodebasePage() {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
 
   return (
     <section className="flex flex-col gap-8">
-      <PageHeaderRegion repoId={repoId} question={question} />
+      <PageHeaderRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}
       <div className="grid gap-8 xl:grid-cols-2">
         <OpenFindingsCard repoId={repoId} />
@@ -301,18 +297,9 @@ export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps)
   )
 }
 
-function PageHeaderRegion({ repoId, question }: { repoId: string; question: string }) {
+function PageHeaderRegion({ repoId }: { repoId: string }) {
   return (
     <div className="flex flex-col gap-section">
-      <PageHeader
-        trail={
-          <Breadcrumbs
-            trail={[{ label: "Repositories", to: "/" }, { label: repoId }]}
-          />
-        }
-        title={<span className="font-mono">{repoId}</span>}
-        question={question}
-      />
       <ControlBar
         action={
           <Link

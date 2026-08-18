@@ -29,24 +29,11 @@ function renderVendor(path: string) {
   )
 }
 
-describe("VendorPage's breadcrumb", () => {
-  it("names what contains this vendor, ending on the vendor itself", () => {
-    renderVendor("/vendors/stripe")
-
-    const trail = screen.getByLabelText("Breadcrumb")
-    expect(trail.textContent).toContain("Repositories")
-    expect(trail.textContent).toContain("stripe")
-    // The current level is a destination, not a link: it carries aria-current instead of an href.
-    expect(trail.querySelector('[aria-current="page"]')?.textContent).toBe("stripe")
-  })
-
-  it("names the repository it was narrowed by when one is in scope", () => {
-    renderVendor("/vendors/stripe?repo_id=org%2Fpayments")
-
-    const trail = screen.getByLabelText("Breadcrumb")
-    expect(trail.textContent).toContain("org/payments")
-  })
-})
+// Three per-page breadcrumb tests stood here and in `codebase-page.test.tsx`, and went with the
+// page header that carried them (`M14-W391`, owner decision 7). The console drew two trails for one
+// question; the page's was the duplicate. What they guaranteed -- what contains what, ending on the
+// subject -- is now asserted in `layouts/scope-switchers.test.tsx` against the trail that survived,
+// which also carries the page's name and the page's only `h1`.
 
 /**
  * Decision 29 settles this page's order: exposure first, the vendor's history below it as the

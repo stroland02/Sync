@@ -22,18 +22,15 @@ import {
   VendorFindingsControls,
 } from "@/features/vendors/vendor-findings-table"
 import { VendorSourcesCard } from "@/features/vendors/vendor-sources-card"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
-const DEFAULT_QUESTION = "What is at risk from this vendor, and what did it change?"
 
 export interface VendorPageProps {
   readonly question?: string
 }
 
-export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
+export function VendorPage() {
   const { vendorId } = useParams<{ vendorId: string }>()
   const [searchParams] = useSearchParams()
   if (vendorId === undefined) return <UnknownRoute />
@@ -70,21 +67,6 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
         }
       >
         <div className="flex min-w-0 flex-col gap-section">
-          <PageHeader
-            trail={
-              <Breadcrumbs
-                trail={[
-                  { label: "Repositories", to: "/" },
-                  ...(repoId === null
-                    ? []
-                    : [{ label: repoId, to: `/repositories/${encodeURIComponent(repoId)}` }]),
-                  { label: vendorId },
-                ]}
-              />
-            }
-            title={<span className="font-mono">{vendorId}</span>}
-            question={question}
-          />
           {repoId === null ? (
             <p className="max-w-prose text-body text-muted-foreground">
               Every open finding and every published change for {vendorId}, across every
