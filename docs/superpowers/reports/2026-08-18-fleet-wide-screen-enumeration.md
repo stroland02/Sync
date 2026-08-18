@@ -189,3 +189,56 @@ longer "which scope should these have"; they are:
 runs and the repair record, option 2 for nothing. But the collapse makes this urgent rather than
 tidy — **it is the one decision that blocks the amendment**, because the amendment deletes the level
 those screens stand on.
+
+---
+
+# Correction, same day: Group D was wrong, and it was the blocking claim
+
+**The owner checked the schema rather than waiting for Lane E, and I was wrong.** This report said
+runs and the repair record *"cannot be scoped at any price, because the schema has no column to scope
+them by"* and called it *"not a missing filter, it is a missing fact"*. That is false.
+
+**The error, precisely.** I read `app.py:20` — *"`migration_outcome` stores no `repo_id` at all"* — as
+meaning *not derivable*. It means *no direct column*. Derivable-by-join is the ordinary answer in a
+relational schema, and I did not look for the join before concluding there was none.
+
+**The join, verified hop by hop in `src/sync/graph/schema.sql`:**
+
+| Hop | Column | Line |
+|---|---|---|
+| 1 | `migration_outcome.finding_id TEXT NOT NULL` | `:191` |
+| 2 | `finding.call_site_id TEXT NOT NULL REFERENCES call_site (id) ON DELETE CASCADE` | `:139` |
+| 3 | `call_site.repo_id TEXT NOT NULL` | `:28` |
+
+Every column is `NOT NULL`. **So runs and the repair record do not stand on a deleted level — they
+scope to the codebase through their finding, and Group D is a join rather than an amendment blocker.**
+
+## Two qualifications, because the join is not quite as total as it looks
+
+**Hop 1 is not constrained.** `migration_outcome.finding_id` is bare `TEXT NOT NULL` with **no
+`REFERENCES` clause** — checked, there is none at `:191` and none in the table's constraints, whose
+only key is `UNIQUE (finding_id, attempt_index, is_rehearsal)` at `:262`. Hop 2 *does* cascade. So a
+finding deleted when its call site is deleted takes nothing with it in `migration_outcome`: the
+attempt row survives, references a finding that is gone, and **drops out of any repository-scoped
+join silently.** A repository-scoped repair record can therefore under-count against the fleet-wide
+one, and nothing on screen would say so. That is a real instance of the absence-versus-zero problem
+one level below the console, and it should be rendered rather than smoothed — the scoped count is
+*"attempts whose finding still exists"*, which is not the same claim as *"attempts"*.
+
+**The grain trap, which `CLAUDE.md` names and which this join walks straight into.** One
+`migration_outcome` row is one **attempt** — not one run and not one finding. `UNIQUE (finding_id,
+attempt_index, is_rehearsal)` at `:262` is that grain stated in the schema. **Counting runs by
+counting rows is wrong, and wrong quietly.** So the console may render *attempts* scoped to a
+repository, because that is what the rows are; it may **not** derive a run count or a finding count
+from them. The correct aggregate is Lane E's to give, and Lane E is budget-held — so this is deferred
+rather than invented.
+
+## What this changes above
+
+- **Group D is no longer the blocking decision.** Option 1 ("add the column") is unnecessary for runs
+  and the repair record; the column is reachable. Option 3 stands for **adapters alone**, and stands
+  on its own argument at `app.py:76-78` rather than on this one.
+- **The amendment is unblocked.** Nothing in the ladder now depends on a schema change. Deleting the
+  `Fleet` node leaves no screen homeless.
+- **What is still owed:** the run-level aggregate over an attempt-grained table, from Lane E. Until
+  it exists the repository-scoped repair record renders attempts and says so.
