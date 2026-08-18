@@ -121,7 +121,7 @@ export function ObservedVolumeCard() {
                   <TableCell className="font-mono">{operation.calls.toLocaleString()}</TableCell>
                   <TableCell className="font-mono">{operation.errors.toLocaleString()}</TableCell>
                   <TableCell>
-                    <span className="flex flex-wrap gap-1">
+                    <span className="flex flex-wrap gap-field">
                       {operation.rungs.map((rung) => (
                         <Badge key={rung}>{rung}</Badge>
                       ))}

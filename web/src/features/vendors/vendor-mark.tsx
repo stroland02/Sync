@@ -89,7 +89,7 @@ export function VendorMark({ vendorId }: VendorMarkProps) {
   if (url === null || !served) {
     return (
       <span className={frame} data-testid="vendor-mark-monogram" aria-hidden="true">
-        <span className="font-mono text-[10px] leading-none text-ink-muted">
+        <span className="font-mono text-meta leading-none text-ink-muted">
           {monogramFor(vendorId)}
         </span>
       </span>

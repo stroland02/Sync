@@ -99,7 +99,7 @@ export function VendorChangesCard({
           detail="The API answered with an empty page. Either no feed has been ingested for this vendor, or it has published nothing Sync tracks."
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-section">
           <VendorChangeVolumeChart vendorId={vendorId} />
           <Table>
             <TableHeader>

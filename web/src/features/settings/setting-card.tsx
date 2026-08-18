@@ -30,11 +30,11 @@ export function SettingCard({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-section p-section">
         <div className="flex flex-col gap-field max-w-xl">
           <h3 className="text-emphasis font-medium text-ink">{title}</h3>
-          <div className="text-body text-ink-muted leading-relaxed space-y-2">{description}</div>
-          {refusalNotice && <div className="mt-2">{refusalNotice}</div>}
+          <div className="text-body text-ink-muted leading-relaxed space-y-row">{description}</div>
+          {refusalNotice && <div className="mt-row">{refusalNotice}</div>}
         </div>
         {control !== undefined && (
-          <div className="flex flex-col items-start lg:items-end gap-2 shrink-0 min-w-[240px]">
+          <div className="flex flex-col items-start lg:items-end gap-row shrink-0 min-w-[240px]">
             {control}
           </div>
         )}
