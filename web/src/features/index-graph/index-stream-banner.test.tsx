@@ -19,8 +19,19 @@ describe("IndexStreamBanner", () => {
   it("carries the live count so the aliveness is in the banner, not the graph", () => {
     render(<IndexStreamBanner indexedCount={214} status="live" onShow={vi.fn()} />)
 
-    expect(screen.getByText(/214 call sites indexed/)).toBeTruthy()
+    expect(screen.getByText(/214 call sites indexed since you opened this/)).toBeTruthy()
     expect(screen.getByRole("button", { name: "Show" })).toBeTruthy()
+  })
+
+  /**
+   * NOTIFY is not queued, so a reader opening this mid-index sees only what arrives after
+   * connecting. Saying "since you opened this" is the difference between a window and a claim
+   * about the whole run.
+   */
+  it("says what the count is over rather than implying it watched the whole run", () => {
+    render(<IndexStreamBanner indexedCount={214} status="live" />)
+
+    expect(screen.getByText(/since you opened this/)).toBeTruthy()
   })
 
   it("counts one call site in the singular", () => {

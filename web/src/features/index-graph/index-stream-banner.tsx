@@ -11,6 +11,12 @@
  * longer see it. Claiming otherwise would be the console asserting a liveness it does not observe,
  * which is the failure this product exists to replace.
  *
+ * **The count says *since you opened this*, and that wording is load-bearing.** A `NOTIFY`
+ * sent while nobody is listening is not queued, so a reader who opens this mid-index sees
+ * only what arrives after connecting. Labelling it as the run's total would be the screen
+ * claiming it watched something it did not. The settled graph below carries the whole answer;
+ * this number is honest about being a window onto it.
+ *
  * There is no reconnect claim here for the same reason: `EventSource` retries natively, and a
  * retry loop against a dead server would render "reconnecting" forever, which is a statement
  * about a server nobody has heard from.
@@ -51,7 +57,7 @@ export function IndexStreamBanner({ indexedCount, status, onShow }: IndexStreamB
     >
       <span className="text-ink">
         ↓ {indexedCount.toLocaleString()} call{" "}
-        {indexedCount === 1 ? "site" : "sites"} indexed
+        {indexedCount === 1 ? "site" : "sites"} indexed since you opened this
       </span>
       {onShow !== undefined && (
         <button
