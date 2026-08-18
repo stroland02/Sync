@@ -9,7 +9,8 @@
 import { describe, expect, it } from "vitest"
 
 import type { AbandonmentResponse } from "@/api/types"
-import { tierOutcomes } from "@/features/runs/tier-outcomes-option"
+import { CHART_TOKENS, expectQuietChart } from "@/components/charts/chart-test-support"
+import { buildTierOutcomesOption, tierOutcomes } from "@/features/runs/tier-outcomes-option"
 
 const group = (over: Partial<AbandonmentResponse["groups"][number]> = {}) => ({
   change_kind: "response-field-type-changed",
@@ -84,5 +85,23 @@ describe("tierOutcomes", () => {
 
     expect(result.tiers).toEqual([])
     expect(result.totalAttempts).toBe(0)
+  })
+})
+
+describe("buildTierOutcomesOption", () => {
+  /**
+   * Decision 58's legend clause is conditional, and this is the chart that earns one: settled and
+   * abandoned are two series, so without a legend a reader cannot tell which bar is which.
+   */
+  it("draws no gridlines but keeps a legend, because it has two series (decision 58)", () => {
+    const option = buildTierOutcomesOption(
+      tierOutcomes({
+        groups: [group({ tier: 0, attempt_count: 5, abandoned_attempt_count: 2 })],
+      }),
+      CHART_TOKENS,
+    ) as Record<string, any>
+
+    expect(option.series).toHaveLength(2)
+    expectQuietChart(option)
   })
 })

@@ -10,6 +10,9 @@
  * consecutive slots from the shared categorical series so the order is the vocabulary's, and the
  * hues carry identity rather than a gradient from bad to fine.
  *
+ * **The legend appears only when there is more than one band**, per decision 58 — with one
+ * severity it would name the obvious.
+ *
  * **Every band is legible without its colour.** The tooltip names the severity beside its count
  * and the legend prints the word, so a reader who cannot separate two hues still reads the chart.
  *
@@ -37,8 +40,12 @@ export function buildFindingsOverTimeOption(
   )
 
   return {
-    grid: { left: 8, right: 16, top: 32, bottom: 8, containLabel: true },
-    legend: { textStyle: { color: tokens.inkSecondary }, top: 0 },
+    grid: { left: 8, right: 16, top: present.length > 1 ? 32 : 8, bottom: 8, containLabel: true },
+    // Decision 58: no legend unless there is more than one series. With a single severity the
+    // legend names the obvious, and the space it takes is space the bars could have had.
+    ...(present.length > 1
+      ? { legend: { textStyle: { color: tokens.inkSecondary }, top: 0 } }
+      : {}),
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -63,7 +70,6 @@ export function buildFindingsOverTimeOption(
       minInterval: 1,
       axisLine: { lineStyle: { color: tokens.axis } },
       axisLabel: { color: tokens.inkMuted },
-      splitLine: { lineStyle: { color: tokens.grid } },
     },
     series: present.map((severity, index) => ({
       name: severity,

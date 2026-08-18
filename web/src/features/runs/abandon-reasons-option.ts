@@ -136,7 +136,6 @@ export function buildAbandonReasonsOption(
       minInterval: 1,
       axisLine: { lineStyle: { color: tokens.axis } },
       axisLabel: { color: tokens.inkMuted },
-      splitLine: { lineStyle: { color: tokens.grid } },
     },
     yAxis: {
       type: "category",
