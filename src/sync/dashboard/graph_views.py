@@ -808,7 +808,12 @@ def repository_graph(store: GraphStore, repo_id: str, *, limit: int | None = Non
             "path": site.path,
             "line": site.line,
             "symbol": site.symbol,
-            "rung": "static",
+            # `binding_rung`, not `rung`. Every other payload in this console names the field
+            # that way and `RepositoryGraphBinding` has always declared it so -- this key was the
+            # one outlier, which meant the console read `undefined` for the rung on every edge of
+            # the screen whose whole premise is that every edge carries one. TypeScript could not
+            # catch it: the type was right and the payload was wrong.
+            "binding_rung": "static",
         }
         for site in sites
     ]

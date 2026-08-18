@@ -1500,7 +1500,7 @@ class TestRepositoryGraph:
         # `CLAUDE.md`: every binding carries its rung, and so does every artifact derived from it.
         # A call site is what the static index found -- nothing here rests on a resolution or a
         # correlation -- so the rung is `static` and is never blended upward by this view.
-        assert [b["rung"] for b in graph["bindings"]] == ["static"]
+        assert [b["binding_rung"] for b in graph["bindings"]] == ["static"]
 
     def test_a_binding_names_the_position_a_reader_would_open(self, store):
         store.replace_call_sites("r1", [_site()])
@@ -1850,10 +1850,10 @@ def test_repository_graph_carries_observed_edges_at_their_own_rung(store):
 
     result = repository_graph(store, "r1")
 
-    assert {"vendor_id": "stripe", "operation_id": "PostCharges", "rung": "observed", "calls": 1} in (
+    assert {"vendor_id": "stripe", "operation_id": "PostCharges", "binding_rung": "observed", "calls": 1} in (
         result["observed_bindings"]
     )
-    assert all(binding["rung"] == "static" for binding in result["bindings"])
+    assert all(binding["binding_rung"] == "static" for binding in result["bindings"])
 
 
 def test_repository_graph_keeps_an_uncorrelated_span_off_path_rather_than_dropping_it(store):
@@ -1867,7 +1867,7 @@ def test_repository_graph_keeps_an_uncorrelated_span_off_path_rather_than_droppi
     result = repository_graph(store, "r1")
 
     assert result["off_path"]["unresolved"] == 1
-    assert all(edge["rung"] != "unresolved" for edge in result["observed_bindings"])
+    assert all(edge["binding_rung"] != "unresolved" for edge in result["observed_bindings"])
 
 
 def test_repository_graph_counts_unattributed_findings_off_path(store):
@@ -1935,3 +1935,33 @@ def test_repository_graph_still_reports_indexed_after_every_call_site_is_retract
 
     assert result["indexed_at"] is not None
     assert result["bindings"] == []
+
+
+def test_repository_graph_binding_keys_are_exactly_what_the_console_reads(store):
+    """The key set, pinned.
+
+    `bindings` emitted `rung` while `RepositoryGraphBinding` declared `binding_rung` and
+    `file-tree-canvas.tsx` read `binding_rung`, so the console saw `undefined` for the rung on
+    every edge of the screen whose whole premise is that every edge carries one. TypeScript could
+    not catch it -- the type was right and the payload was wrong -- and no test compared them.
+    This is that comparison.
+    """
+    store.upsert_call_site(_site())
+    store.record_observed_call(_observed_call(operation_id="PostCharges"))
+
+    result = repository_graph(store, "r1")
+
+    assert set(result["bindings"][0]) == {
+        "vendor_id",
+        "operation_id",
+        "path",
+        "line",
+        "symbol",
+        "binding_rung",
+    }
+    assert set(result["observed_bindings"][0]) == {
+        "vendor_id",
+        "operation_id",
+        "binding_rung",
+        "calls",
+    }

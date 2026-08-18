@@ -1262,7 +1262,7 @@ class GraphStore:
             """
             SELECT vendor_id,
                    operation_id,
-                   binding_rung        AS rung,
+                   binding_rung,
                    count(*)            AS calls
               FROM observed_call
              WHERE repo_id = %s AND operation_id <> ''
@@ -1275,7 +1275,7 @@ class GraphStore:
             {
                 "vendor_id": row["vendor_id"],
                 "operation_id": row["operation_id"],
-                "rung": row["rung"],
+                "binding_rung": row["binding_rung"],
                 "calls": int(row["calls"]),
             }
             for row in rows
