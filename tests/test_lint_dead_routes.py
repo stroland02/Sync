@@ -40,15 +40,6 @@ UNSCOPED_BY_DESIGN = {"/", "/settings"}
 # the fix rather than the paperwork.
 KNOWN_DEAD: frozenset[str] = frozenset({
     "features/fleet/runs-table.tsx",
-    "features/repositories/index-coverage-card.tsx",
-    "features/repositories/open-findings-card.tsx",
-    "features/signals/subject-catalogue.tsx",
-    "features/vendors/repository-services-page.tsx",
-    "features/vendors/repository-vendors-page.tsx",
-    "features/vendors/vendor-findings-table.tsx",
-    "features/workflows/run-fact-rail.tsx",
-    "features/workflows/settled-output.tsx",
-    "features/workflows/workflow-page.tsx",
 })
 
 
