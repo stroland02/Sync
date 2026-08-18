@@ -2,8 +2,8 @@
   "_why": "Which terminal each lane's Task belongs to, so a dispatch that never attached can still be placed. A dispatch records its assignee only once worker-start succeeds; the common stall is that it never did, because worker-start waits for a busy agent's TUI and gives up after a minute. Without this map the resume script knows a lane is stalled and has nowhere to put it. Written by the coordinator, read by resume_lanes.py. A handle that no longer exists is skipped rather than guessed at.",
   "task_e7b0e2302720": "term_96a3ec0e-4d49-4512-824f-55acc9637824",
   "_run": "run_bac65dd1e15c",
-  "task_3599a96308c4": "term_e81409be-ca81-4196-9632-8f3dc18d2219",
   "task_2c24b5e7bd4e": "term_edde13c4-7856-48b2-834d-62e251b686d7",
-  "task_41e2754c423f": "term_cc02f985-15ac-4d34-9ea6-f3282ff81e1b",
-  "task_b9f0cde9bf91": "term_52091b88-6fe2-456c-9d45-1bcf3bcfe851"
+  "task_876f3c8a3031": "term_cc02f985-15ac-4d34-9ea6-f3282ff81e1b",
+  "task_fc6db38b7d94": "term_52091b88-6fe2-456c-9d45-1bcf3bcfe851",
+  "_retired": "Lane B (task_3599a96308c4, term_e81409be) retired 2026-08-18 at 100% context; its files went to Lanes H and I in M0-W355. Removed from the map so the sweep stops reporting a lane that is deliberately finished -- a monitor with a permanent false alarm trains the reader to skim it."
 }
