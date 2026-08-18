@@ -31,11 +31,13 @@ route needs.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+import json
+
+from typing import Any, Callable, Iterator, Optional
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES, REFUSED_MERGE_POLICIES
@@ -80,6 +82,10 @@ ObservedReader = Callable[..., dict[str, Any]]
 VendorOperationsReader = Callable[..., dict[str, Any]]
 # Dashboard 1's dated aggregate. Keyword-only scope, like every other narrowing reader.
 FindingsOverTimeReader = Callable[..., dict[str, Any]]
+# Decision 76's bus, as an iterator of events for one repository. An iterator rather than a
+# callback so the route owns the lifetime: when the client goes, the generator is closed and
+# the listening connection with it.
+EventsReader = Callable[[str], Iterator[dict[str, Any]]]
 DetectorReader = Callable[[], dict[str, Any]]
 
 # The adapter inventory backs `sync.dashboard.adapters.adapter_inventory`. It takes no
@@ -191,6 +197,7 @@ def create_app(
     observed_reader: ObservedReader,
     vendor_operations_reader: VendorOperationsReader,
     findings_over_time_reader: FindingsOverTimeReader,
+    events_reader: EventsReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -331,6 +338,41 @@ def create_app(
         since = request.query_params.get("since")
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
+
+    async def repository_events(request: Request) -> StreamingResponse:
+        """Decision 76's stream, scoped by the path decision 49 puts it in.
+
+        **Held open with no lifetime cap, by owner selection.** The cost was stated when the
+        choice was offered: a handful of forgotten tabs each hold a listening Postgres connection,
+        and enough of them exhaust the pool the read API shares. What is *not* a cap and is done
+        anyway is cleanup -- the generator is closed when the client disconnects, so a closed tab
+        releases its connection immediately rather than at some later timeout.
+
+        **The heartbeat is a named event rather than an SSE comment**, also owner-selected. It
+        carries no domain fact and is named so nobody mistakes it for one: what it asserts is that
+        the stream is alive. Without it a proxy closing an idle connection is indistinguishable
+        from an index that simply had nothing to say, and decision 76 requires the console to
+        render a drop -- which it can only do if a drop is distinguishable from silence.
+
+        `X-Accel-Buffering` is set because a buffering proxy defeats the whole transport: events
+        arrive in a batch when the connection closes, which is the opposite of a stream.
+        """
+        repo_id = request.path_params["repo_id"]
+
+        def frames() -> Iterator[str]:
+            for event in events_reader(repo_id):
+                # Two newlines end an SSE frame; one separates its fields. Written as
+                # escapes rather than a multi-line literal so the framing cannot be
+                # reformatted away by an editor that trims trailing whitespace.
+                frame = "event: " + event["kind"] + "\n"
+                frame += "data: " + json.dumps(event) + "\n\n"
+                yield frame
+
+        return StreamingResponse(
+            frames(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
     async def findings_over_time(request: Request) -> JSONResponse:
         # `repo_id` narrows and is optional: absent means every repository the index has
@@ -556,6 +598,8 @@ def create_app(
         Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/events", repository_events, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/events", repository_events, methods=["GET"]),
         Route("/api/change-units", change_units, methods=["GET"]),
         Route(
             "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
