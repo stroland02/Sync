@@ -42,7 +42,9 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # A worker that has emitted nothing for this long is treated as stopped rather than thinking. Ten
 # minutes is above the longest observed quiet stretch inside a real task here (a full `pytest -n auto`
@@ -146,18 +148,43 @@ def live_terminals(cli: str) -> dict[str, int]:
 BUDGET_NOTICE_WITHIN_LAST = 6
 
 
-def reset_seconds(notice: str) -> int | None:
+def reset_seconds(notice: str, now: int | None = None) -> int | None:
     """How long the agent said its outage would last, in seconds, or `None` if it did not say.
 
-    Reads the `Resets in 2h3m21s` / `resets 10:20am` shapes the agent CLIs print. Only the
-    duration form is parseable into a deadline; a wall-clock time would need the machine's timezone
-    to mean anything, and guessing that is how a hold ends an hour early.
+    Two shapes, because the two agent CLIs here print different ones. Gemini gives a duration --
+    `Resets in 1h53m10s`. Claude Code gives a wall clock **with its zone**: `resets 8:20pm
+    (America/New_York)`.
+
+    **The zone being in the notice is what makes the second form safe.** This used to refuse it on
+    the grounds that a wall-clock time needs the machine's timezone and guessing is how a hold ends
+    an hour early. That reasoning was right about a bare `10:20am` and wrong about a stamped one --
+    and the cost was not theoretical: a notice it could not parse produced no deadline, `hold_expired`
+    could never fire, and the lane was held forever. On 2026-08-18 that lane was the one running
+    `B7`. A bare wall clock and an unknown zone are still refused.
     """
     match = re.search(r"resets?\s+in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?", notice, re.I)
-    if not match or not any(match.groups()):
+    if match and any(match.groups()):
+        hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+        return hours * 3600 + minutes * 60 + seconds
+
+    stamped = re.search(
+        r"resets?\s+(\d{1,2}):(\d{2})\s*([ap])m\s*\(([A-Za-z_]+/[A-Za-z_+\-]+)\)", notice, re.I
+    )
+    if not stamped:
         return None
-    hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
-    return hours * 3600 + minutes * 60 + seconds
+    hour, minute, half, zone_name = stamped.groups()
+    try:
+        zone = ZoneInfo(zone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        # An unknown zone is an absence, not a reason to substitute the machine's own.
+        return None
+    hour = int(hour) % 12 + (12 if half.lower() == "p" else 0)
+    moment = datetime.fromtimestamp(now if now is not None else time.time(), zone)
+    deadline = moment.replace(hour=hour, minute=int(minute), second=0, microsecond=0)
+    if deadline <= moment:
+        # Already past today, so the agent means tomorrow's occurrence rather than a negative hold.
+        deadline += timedelta(days=1)
+    return int((deadline - moment).total_seconds())
 
 
 HOLD_CLOCK = Path(__file__).resolve().parent / "hold_clock.json"
