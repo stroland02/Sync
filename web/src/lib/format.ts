@@ -23,27 +23,6 @@ export function formatTimestamp(iso: string | null | undefined): string | null {
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString()
 }
 
-/**
- * How long ago an ISO 8601 timestamp was, in the coarsest unit that stays readable.
- *
- * This is staleness, not liveness — it says how old the evidence is, not whether the thing
- * it describes is still going. The fleet screen's legend carries why that distinction
- * matters for a checkpoint specifically; this function only formats the duration.
- */
-export function formatElapsed(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return null
-
-  const seconds = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 1000))
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  return `${days}d ago`
-}
 
 /** What the rung claims, so an operator does not have to know the vocabulary. */
 export function describeRung(rung: BindingSource): string {
@@ -64,9 +43,26 @@ export function describeRung(rung: BindingSource): string {
 }
 
 /** "1-50 of 123", or "none" when there is nothing to place. */
-export function describeRange(offset: number, shown: number, total: number): string {
-  if (total === 0) return "none"
-  return `${offset + 1}–${offset + shown} of ${total}`
+export function describeRange(
+  offset: number,
+  shown: number,
+  total: number,
+  unfilteredTotal?: number,
+): string {
+  // Decision 60: never a bare row count while a filter is active. The owner did not take filter
+  // chips, so this string is the only thing standing between a narrowed table and being read as
+  // the whole set. The decision's example is single-page ("showing 4 of 31"); across pages that
+  // would be false, so the range stays and the filtered clause travels with it.
+  const hidden =
+    unfilteredTotal !== undefined && unfilteredTotal > total ? unfilteredTotal - total : 0
+
+  if (total === 0) {
+    return hidden > 0 ? `none of ${unfilteredTotal}, all ${hidden} filtered out` : "none"
+  }
+  const range = `${offset + 1}–${offset + shown} of ${total}`
+  // A filter that excluded nothing needs no warning, and "0 filtered out" is noise that makes the
+  // real case easier to miss.
+  return hidden > 0 ? `${range} matched, ${hidden} filtered out` : range
 }
 
 /**

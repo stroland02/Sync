@@ -80,11 +80,7 @@ export function CodebasesSettingsPanel({ repoId }: CodebasesSettingsPanelProps) 
           </>
         }
         refusalNotice={
-<<<<<<< HEAD
-          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-field">
-=======
           <div className="rounded-surface border border-line bg-surface-muted/40 p-row text-meta text-ink-muted space-y-field">
->>>>>>> origin/main
             <div className="flex items-center gap-row">
               <Badge>Source of Truth: Customer Git Repository</Badge>
             </div>

@@ -122,4 +122,65 @@ describe("VendorExposureCard", () => {
 
     expect(screen.getByText(/does not call/i)).toBeTruthy()
   })
+
+  /**
+   * Decision 61: the headers stay so the shape of the data is legible before there is data. A
+   * reader learns what a row would be from a screen that has none.
+   */
+  it("keeps its column headers when there is nothing to show", () => {
+    renderCard(payload({ operations: [] }))
+
+    expect(screen.getByText("Operation")).toBeTruthy()
+    expect(screen.getByText("Call sites")).toBeTruthy()
+    expect(screen.getByText("Rung")).toBeTruthy()
+  })
+
+  /** Decision 63: an existing sentence may be restyled, never shortened to fit its new home. */
+  it("keeps the whole retracted-call-site sentence, not a trimmed version of it", () => {
+    renderCard(payload({ operations: [] }))
+
+    expect(
+      screen.getByText(/used to call reads the same as one it never did/)
+    ).toBeTruthy()
+  })
+
+  /**
+   * Decision 40: a table states its record count, because the count is how a reader knows what
+   * they are looking at. This table is not paged -- the route is an aggregate bounded by the
+   * vendor's operation surface -- so the honest count says *all of them* rather than implying a
+   * page whose remainder the reader is missing.
+   *
+   * Matched on the container's text: the count is interpolated, so the sentence is split across
+   * nodes and an element-scoped matcher would miss it.
+   */
+  it("says how many operations it is showing, and that it is all of them", () => {
+    const { container } = renderCard(
+      payload({
+        operations: [
+          {
+            operation_id: "PostCharges",
+            call_site_count: 2,
+            repository_count: 1,
+            binding_rung: "static",
+            observed: null,
+          },
+          {
+            operation_id: "GetCharges",
+            call_site_count: 1,
+            repository_count: 1,
+            binding_rung: "static",
+            observed: null,
+          },
+        ],
+      })
+    )
+
+    expect(container.textContent).toMatch(/Showing all 2 operations/i)
+  })
+
+  it("counts one operation in the singular", () => {
+    const { container } = renderCard(payload())
+
+    expect(container.textContent).toMatch(/Showing all 1 operation /i)
+  })
 })

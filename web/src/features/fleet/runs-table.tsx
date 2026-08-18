@@ -19,13 +19,15 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableEmptyRow,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/data-table"
 import { FetchedAt } from "@/components/fetched-at"
 import { MetricPanel } from "@/components/metric-panel"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { RelativeTime } from "@/components/relative-time"
+import { ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
 import {
@@ -33,7 +35,7 @@ import {
   describeCardinality,
   isCompleteListing,
 } from "@/features/fleet/cardinality"
-import { formatElapsed, orAbsent } from "@/lib/format"
+import { orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /** "in flight" for a run with no disposition yet — never "running", which never arrives here. */
@@ -104,13 +106,12 @@ export function RunsCard() {
             </p>
           }
         >
-          {query.data.items.length === 0 ? (
-            <EmptyState
-              headline="No run has ever checkpointed."
-              detail="The API answered, and the checkpointer holds no thread. That is an answer, not a failure — nothing has attempted a repair on this database yet."
-            />
-          ) : (
-            <>
+          {/* Decision 61: the headers stay when there is nothing to list, so the shape of the
+              data is legible before there is data and a reader learns what a run IS from a
+              screen that has none. Only the disposition tally is row-dependent — it counts the
+              rows, so with none it would be counting nothing. */}
+          <>
+            {query.data.items.length > 0 && (
               <div className="flex flex-col gap-field">
                 <span className="furniture text-meta text-ink-muted">
                   By disposition, this page only
@@ -126,6 +127,7 @@ export function RunsCard() {
                   fleet — the fleet's true disposition mix is not in this payload.
                 </p>
               </div>
+            )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -137,6 +139,13 @@ export function RunsCard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {query.data.items.length === 0 && (
+                    <TableEmptyRow colSpan={5}>
+                      <span className="text-ink">No run has ever checkpointed.</span>{" "}
+                      The API answered, and the checkpointer holds no thread. That is an answer,
+                      not a failure — nothing has attempted a repair on this database yet.
+                    </TableEmptyRow>
+                  )}
                   {query.data.items.map((run) => (
                     <TableRow key={run.thread_id}>
                       <TableCell className="font-mono">
@@ -162,7 +171,7 @@ export function RunsCard() {
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-meta">
-                        <Formatted value={formatElapsed(run.last_checkpoint_at)} />
+                        <RelativeTime iso={run.last_checkpoint_at} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -186,8 +195,7 @@ export function RunsCard() {
                   left={<RunsCount data={query.data} />}
                 />
               )}
-            </>
-          )}
+          </>
 
           {/* The console's own fetch time, which is a different claim from the run liveness the
               paragraph below refuses to make: this says when we last asked, not whether anything

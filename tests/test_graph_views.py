@@ -1965,3 +1965,87 @@ def test_repository_graph_binding_keys_are_exactly_what_the_console_reads(store)
         "binding_rung",
         "calls",
     }
+
+
+# --- Decision 45: dismissal, and the grain it insists on --------------------------------------
+#
+# "One row is one dismissal of one finding by one person at one time, not a property of the
+# finding -- a finding dismissed and later un-dismissed has two rows and the current state is the
+# latest, because otherwise the console cannot show that somebody changed their mind."
+
+
+def test_a_dismissal_is_a_row_rather_than_a_column_on_the_finding(store):
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+
+    store.record_dismissal(finding_id, reason="false_positive", actor="ada")
+
+    assert store.dismissal_state(finding_id) == {
+        "dismissed": True,
+        "reason": "false_positive",
+        "actor": "ada",
+    }
+
+
+def test_un_dismissing_writes_a_second_row_and_the_latest_wins(store):
+    """The whole reason the grain is a row: a column would overwrite, and the console could not
+    show that somebody changed their mind."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+
+    store.record_dismissal(finding_id, reason="wont_fix", actor="ada")
+    store.record_dismissal(finding_id, reason=None, actor="bo")
+
+    assert store.dismissal_state(finding_id)["dismissed"] is False
+    assert store.dismissal_history_count(finding_id) == 2
+
+
+def test_a_finding_nobody_touched_is_not_dismissed_and_names_no_reason(store):
+    """Not dismissed is the absence of a dismissal, never a reason of its own."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+
+    assert store.dismissal_state(finding_id) == {
+        "dismissed": False,
+        "reason": None,
+        "actor": None,
+    }
+
+
+def test_a_dismissal_reason_outside_the_closed_vocabulary_is_refused(store):
+    """The same discipline as `abandon_reason`: a promise to learn from dismissals needs a schema
+    that can answer the question, and free text cannot be aggregated."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+
+    with pytest.raises(ValueError):
+        store.record_dismissal(finding_id, reason="seemed wrong to me", actor="ada")
+
+
+def test_dismissal_does_not_remove_the_finding(store):
+    """Dismissal is not deletion. The finding stays listed and is filtered out by default, which
+    the read surface can only do if the row is still there."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    finding_id = store.insert_finding(_finding(sites[0], claim="c1"))
+
+    store.record_dismissal(finding_id, reason="intentional", actor="ada")
+
+    assert any(f.id == finding_id for f in store.open_findings())
+
+
+def test_false_positive_dismissals_are_countable_on_their_own(store):
+    """`false positive` feeds detector accuracy and nothing else does, so it has to be separable
+    from the other three reasons rather than pooled with them."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    a = store.insert_finding(_finding(sites[0], claim="c1"))
+    b = store.insert_finding(_finding(sites[0], claim="c2"))
+    store.record_dismissal(a, reason="false_positive", actor="ada")
+    store.record_dismissal(b, reason="wont_fix", actor="ada")
+
+    assert store.dismissal_reason_counts() == {"false_positive": 1, "wont_fix": 1}

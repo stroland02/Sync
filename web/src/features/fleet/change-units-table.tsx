@@ -29,15 +29,17 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableEmptyRow,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/data-table"
 import { MetricPanel } from "@/components/metric-panel"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { RelativeTime } from "@/components/relative-time"
+import { ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
-import { describeRung, formatElapsed, orAbsent } from "@/lib/format"
+import { describeRung, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 export interface ChangeUnitStanding {
@@ -132,20 +134,21 @@ function StandingCell({ unit }: { unit: ChangeUnitRow }) {
 
 function CheckpointCell({ unit }: { unit: ChangeUnitRow }) {
   if (unit.last_checkpoint_at === null) return <Absent>no checkpoint recorded</Absent>
-  const age = formatElapsed(unit.last_checkpoint_at)
-  return <Formatted value={age} />
+  return <RelativeTime iso={unit.last_checkpoint_at} />
 }
 
 function ChangeUnitEmptyState({ repoId }: { repoId?: string }) {
   return (
-    <EmptyState
-      headline={
-        repoId === undefined
+    <>
+      <span className="text-ink">
+        {repoId === undefined
           ? "No open change units across the fleet."
-          : `No open change units for ${repoId}.`
-      }
-      detail="The API answered with an empty page. A change unit appears here the moment a vendor change produces an open finding; nothing on this screen implies the underlying vendor change list is empty too."
-    />
+          : `No open change units for ${repoId}.`}
+      </span>{" "}
+      The API answered with an empty page. A change unit appears here the moment a vendor change
+      produces an open finding; nothing on this screen implies the underlying vendor change list is
+      empty too.
+    </>
   )
 }
 
@@ -175,10 +178,9 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
         </p>
       }
     >
-      {page.items.length === 0 ? (
-        <ChangeUnitEmptyState repoId={repoId} />
-      ) : (
-        <>
+      {/* Decision 61: the headers stay when there is nothing to list. A reader learns what a
+          change unit IS from the columns, and that is most useful on the screen that has none. */}
+      <>
           <Table>
             <TableHeader>
               <TableRow>
@@ -194,6 +196,11 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {page.items.length === 0 && (
+                <TableEmptyRow colSpan={9}>
+                  <ChangeUnitEmptyState repoId={repoId} />
+                </TableEmptyRow>
+              )}
               {page.items.map((unit) => (
                 <TableRow key={unit.change_unit_id}>
                   <TableCell className="font-mono">
@@ -244,8 +251,7 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
             busy={query.isFetching}
             onOffsetChange={setOffset}
           />
-        </>
-      )}
+      </>
     </MetricPanel>
   )
 }

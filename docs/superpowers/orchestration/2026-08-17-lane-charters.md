@@ -712,3 +712,25 @@ innocence rather than fixing anything.
 
 This is the same defect as a test that cannot fail, moved one level out: the check was real, the
 command made its result unable to matter.
+
+## The `^UU` check cannot see a committed conflict marker
+
+**Measured 2026-08-18.** `main` carried literal `<<<<<<< HEAD` in six files. `npm run build` died
+with `PARSE_ERROR`, the console did not parse, and no lane could gate.
+
+**Once markers are committed they are ordinary file content, not a conflict.** `git status` shows no
+`UU`. `git merge` reports success. The `git status --porcelain | grep -E '^(UU|AA|DD)'` guard — the
+one written into this charter after the coordinator committed markers twice — **passes clean**.
+
+Add this before the build, chained so a hit stops the push:
+
+```
+grep -rnE '^(<<<<<<<|>>>>>>>|=======)$' src web/src tests
+```
+
+**And the reason it happened, which is a coordination rule rather than a shell one.** Every conflict
+was one lane's token values against another lane's fix for the identical violations. The coordinator
+split that work by directory *after* both lanes had started. **A boundary announced after the work
+begins describes a collision rather than preventing one** — split first, or accept that you are
+arbitrating rather than dividing.
+

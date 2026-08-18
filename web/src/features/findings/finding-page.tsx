@@ -56,7 +56,7 @@ import {
 import { type Fact, FactList } from "@/components/fact-list"
 import { MetricPanel } from "@/components/metric-panel"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
-import { Skeleton } from "@/components/skeleton"
+import { Pending } from "@/features/findings/pending"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import {
@@ -66,15 +66,10 @@ import {
   type RemediationState,
 } from "@/features/findings/remediation"
 import { workspacePath } from "@/features/findings/workspace-path"
-import { DetailTitleText, findingTitle } from "@/lib/detail-title"
-import { formatFindingBadge, orAbsent } from "@/lib/format"
+import { orAbsent } from "@/lib/format"
 import { Button } from "@/components/ui/button"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
-import { PageHeader } from "@/layouts/page-header"
 import { UnknownRoute } from "@/layouts/unknown-route"
-
-const DEFAULT_QUESTION = "What is this finding, and what binding does it rest on?"
 
 /**
  * A set of recorded strings from the customer's own source, one chip each.
@@ -119,7 +114,7 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
  * `sync.dashboard.fleet.runs` is the query that lists every generation as its own row.
  */
 function remediationFact(state: RemediationState): ReactNode {
-  if (state.kind === "pending") return <Skeleton width="w-28" />
+  if (state.kind === "pending") return <Pending />
   if (state.kind === "none") {
     return <Absent>the checkpointer holds no run for this finding</Absent>
   }
@@ -158,7 +153,8 @@ function standingWord(standing: RemediationStanding, outcome: string | null): Re
  * The finding's own facts, label left and value right, in the rail beside the content.
  *
  * Three states per fact and they are three different claims, the same three every ported level
- * spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is a
+ * spells: `<Pending>` writes the word where the value goes while the query is in flight,
+ * `<Absent>` says it failed, and a value is a
  * value. Remediation is answered by a second query and carries its own four.
  *
  * `failure` is the caller's sentence rather than a boolean, because this level can fail two ways
@@ -178,10 +174,10 @@ function findingFacts(
   failure: ReactNode | null,
   remediation: RemediationState,
 ): Fact[] {
-  function fact(width: string, render: (found: FindingDetail) => ReactNode): ReactNode {
+  function fact(render: (found: FindingDetail) => ReactNode): ReactNode {
     if (data !== null) return render(data)
     if (failure !== null) return failure
-    return <Skeleton width={width} />
+    return <Pending />
   }
 
   return [
@@ -193,7 +189,7 @@ function findingFacts(
     },
     {
       label: "Severity",
-      value: fact("w-20", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.finding.severity)} />
         </span>
@@ -201,7 +197,7 @@ function findingFacts(
     },
     {
       label: "Repository",
-      value: fact("w-32", (found) =>
+      value: fact((found) =>
         found.finding.repo_id === null ? (
           <Absent>unknown</Absent>
         ) : (
@@ -216,7 +212,7 @@ function findingFacts(
     },
     {
       label: "Call site",
-      value: fact("w-36", (found) => (
+      value: fact((found) => (
         <code className="font-mono text-meta break-all">
           {found.finding.file}:{found.finding.line}
         </code>
@@ -224,7 +220,7 @@ function findingFacts(
     },
     {
       label: "Vendor",
-      value: fact("w-32", (found) => (
+      value: fact((found) => (
         <Link
           to={`${workspacePath(repoId)}/vendors/${encodeURIComponent(found.vendor)}`}
           className="font-mono underline underline-offset-2"
@@ -235,7 +231,7 @@ function findingFacts(
     },
     {
       label: "Operation",
-      value: fact("w-28", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.operation)} />
         </span>
@@ -243,7 +239,7 @@ function findingFacts(
     },
     {
       label: "Symbol",
-      value: fact("w-36", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.symbol)} />
         </span>
@@ -251,7 +247,7 @@ function findingFacts(
     },
     {
       label: "SDK version",
-      value: fact("w-16", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.sdk_version)} />
         </span>
@@ -259,7 +255,7 @@ function findingFacts(
     },
     {
       label: "This finding's rung",
-      value: fact("w-20", (found) => <RungBadge rung={found.finding.binding_source} />),
+      value: fact((found) => <RungBadge rung={found.finding.binding_source} />),
     },
     { label: "Remediation", value: remediationFact(remediation) },
   ]
@@ -269,7 +265,7 @@ export interface FindingPageProps {
   readonly question?: string
 }
 
-export function FindingPage({ question = DEFAULT_QUESTION }: FindingPageProps) {
+export function FindingPage() {
   // A URL is user input, so the identifier is checked here rather than assumed. The query
   // lives one level down so that check happens before a request is made for it.
   // `repoId` arrives because every route is workspace-scoped as of `M14-W386`. Links built
@@ -278,17 +274,15 @@ export function FindingPage({ question = DEFAULT_QUESTION }: FindingPageProps) {
   // because a path is a string and every one of these compiled perfectly.
   const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
-  return <FindingDetailPage repoId={repoId} findingId={findingId} question={question} />
+  return <FindingDetailPage repoId={repoId} findingId={findingId} />
 }
 
 function FindingDetailPage({
   repoId,
   findingId,
-  question,
 }: {
   repoId: string | undefined
   findingId: string
-  question: string
 }) {
   const query = useFinding(findingId)
   const run = useWorkflow(findingId)
@@ -308,27 +302,6 @@ function FindingDetailPage({
     )
   ) : null
 
-  const trail = [
-    { label: "Repositories", to: "/" },
-    ...(query.isSuccess
-      ? [
-          {
-            label: query.data.vendor,
-            to: `/vendors/${encodeURIComponent(query.data.vendor)}`,
-          },
-        ]
-      : []),
-    { label: formatFindingBadge(findingId) },
-  ]
-
-  const title = query.isSuccess ? (
-    <DetailTitleText title={findingTitle(query.data.vendor, query.data.operation)} />
-  ) : failure !== null ? (
-    failure
-  ) : (
-    <Skeleton width="w-96" />
-  )
-
   return (
     <DetailGrid
       /* Content left, rail right, which is what `screens/06-finding.png` draws. This screen
@@ -337,28 +310,14 @@ function FindingDetailPage({
          taste: the mock is authority 3 for layout, a port's own reasoning is 4, and no
          decision covers which side a rail sits on. One prop, so it reverses in one line. */
       railSide="end"
-      header={
-        <PageHeader
-          trail={<Breadcrumbs trail={trail} />}
-          title={title}
-          question={question}
-          /* The mock draws one primary action on the header row, right of the title, and this
-             screen had none — its destinations were prose links down in the rail. Ported as the
-             arrangement rather than as the label: the mock's button says "Review proposed patch"
-             unconditionally, and this one exists only when a run actually reached a pull request,
-             because a button offering to review a patch that was never opened is the kind of
-             claim the rest of this console spends six screens refusing. */
-          actions={
-            reachedPullRequest(remediation) ? (
-              <Button asChild>
-                <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
-                  Review proposed patch
-                </Link>
-              </Button>
-            ) : undefined
-          }
-        />
-      }
+      /* No header, which makes this the twelfth of twelve and closes the exception. Answer 7
+         removed page headers; this page was held back because it passed an action the other
+         eleven did not. Nothing needed rehousing in the end. The action was "Review proposed
+         patch", pointing at the same route, under the same `reachedPullRequest` condition, as
+         the "Pull request" control already standing in the rail below — a duplicate rather than
+         a second destination. The title was `findingTitle(vendor, operation)`, and the rail's
+         fact list already labels Vendor and Operation separately. `vendor-page.tsx` is the
+         converted detail page this now matches: no header, subject carried by the rail. */
       rail={
         <div className="flex min-w-0 flex-col gap-section">
           <FactList

@@ -30,13 +30,8 @@ export function AboutPlatformPanel() {
               provenance rung it was derived from. A finding without an attributed rung is rejected by
               the database schema.
             </p>
-<<<<<<< HEAD
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-row">
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
-=======
             <div className="grid grid-cols-1 md:grid-cols-2 gap-row pt-row">
               <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
->>>>>>> origin/main
                 <div className="flex items-center gap-row">
                   <Badge>static</Badge>
                   <span className="text-meta font-medium text-ink">AST Call Sites</span>
@@ -47,11 +42,7 @@ export function AboutPlatformPanel() {
                 </p>
               </div>
 
-<<<<<<< HEAD
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
-=======
               <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
->>>>>>> origin/main
                 <div className="flex items-center gap-row">
                   <Badge>resolved</Badge>
                   <span className="text-meta font-medium text-ink">Type-Resolved Symbols</span>
@@ -62,11 +53,7 @@ export function AboutPlatformPanel() {
                 </p>
               </div>
 
-<<<<<<< HEAD
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
-=======
               <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
->>>>>>> origin/main
                 <div className="flex items-center gap-row">
                   <Badge>observed</Badge>
                   <span className="text-meta font-medium text-ink">Runtime Telemetry</span>
@@ -77,11 +64,7 @@ export function AboutPlatformPanel() {
                 </p>
               </div>
 
-<<<<<<< HEAD
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
-=======
               <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
->>>>>>> origin/main
                 <div className="flex items-center gap-row">
                   <Badge>unattributed</Badge>
                   <span className="text-meta font-medium text-ink">Vendor Changes</span>
