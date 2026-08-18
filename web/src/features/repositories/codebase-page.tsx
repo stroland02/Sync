@@ -46,6 +46,15 @@
  * **No fact rail, and that is ruling 9 of the brief rather than an omission.** `IndexCoverageCard`
  * is mounted by the Signals level too, so hoisting its call-site figure into a Codebase-only rail
  * would either delete that figure from Signals or render it twice here.
+ *
+ * ## No runs panel and no repair record, until `B149` closes
+ *
+ * `RunsCard` and `CorpusSummaryCard` both name this screen as their destination and both are
+ * unmounted anywhere in the console. Neither is mounted here, and the reason is the payload rather
+ * than the layout: `RunRow` carries no `repo_id`, and `/api/corpus` accepts no repository
+ * parameter, so either one placed under this heading would render every repository's rows beneath
+ * one repository's name. That is the attribution `M14-W265` removed from the repository cards.
+ * `codebase-page.test.tsx` holds the absence so a later tidy cannot restore it quietly.
  */
 
 import type { ReactNode } from "react"
@@ -239,6 +248,36 @@ function ObservedTelemetryCard({ repoId }: { repoId: string }) {
   )
 }
 
+/**
+ * The one sentence that makes `/repositories/:repoId/vendors` reachable.
+ *
+ * That route is declared, built and tested, and nothing in the application linked to it: the
+ * sidebar renders a route with an unbound parameter as plain text, so the vendors list could be
+ * opened only from an address that already named a repository — which is this screen. The link
+ * belongs in prose rather than in the control bar's action slot, for the reason this file's
+ * docstring already gives about the Signals link: a qualification with its link taken out is a
+ * qualification shortened, and the sentence here is what says the list is of vendors and not of
+ * the calls made to them.
+ */
+function VendorsListLink({ repoId }: { repoId: string }) {
+  return (
+    <p className="max-w-prose text-body text-muted-foreground">
+      Which API vendors this repository is bound to, and how much is open against each, is its own
+      list —{" "}
+      <Link
+        to={`/repositories/${encodeURIComponent(repoId)}/vendors`}
+        className="underline underline-offset-2"
+      >
+        the vendors attached to this repository
+      </Link>
+      . A vendor appears there once INDEX finds a call site binding this repository to it. It is a
+      list of vendors and never of the individual operations called: no route computes the
+      operations a repository calls, so nothing on this screen or below it can be read as an
+      inventory of them.
+    </p>
+  )
+}
+
 export interface CodebasePageProps {
   readonly question?: string
 }
@@ -255,6 +294,7 @@ export function CodebasePage({ question = DEFAULT_QUESTION }: CodebasePageProps)
         <OpenFindingsCard repoId={repoId} />
         <IndexCoverageCard repoId={repoId} />
       </div>
+      <VendorsListLink repoId={repoId} />
       <ChangeUnitsTable repoId={repoId} />
       <ObservedTelemetryCard repoId={repoId} />
     </section>
