@@ -239,6 +239,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
 
   return (
     <DetailGrid
+      railSide="narrow"
       header={
         <PageHeader
           trail={
