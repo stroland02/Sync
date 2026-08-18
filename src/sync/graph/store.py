@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -366,6 +367,55 @@ def _reconcile_unique_constraints(connection: psycopg.Connection, creates: list[
 #
 # `false_positive` is load-bearing beyond the others: it is the only honest source of detector
 # accuracy, which is exactly the number Gate 2's quality axes have no samples for today.
+# The one channel every repository's events travel on.
+#
+# A Postgres channel name is an identifier, and a `repo_id` is `org/name` -- not one. So the scope
+# rides in the payload and the subscriber filters, while the API keeps `repo_id` in the route path
+# where owner decision 49 puts it. The channel being shared is an implementation detail; a client
+# never sees another repository's events.
+class _EventStream:
+    """One repository's slice of the shared channel.
+
+    Filtering happens here rather than in the publisher because Postgres channel names are
+    identifiers and a `repo_id` is not one. A subscriber therefore sees every repository's
+    notification on the wire and forwards only its own -- which is why this class exists at all
+    rather than the route reading the connection directly.
+    """
+
+    def __init__(self, connection, repo_id: str) -> None:
+        self._connection = connection
+        self._repo_id = repo_id
+        # One generator for the stream's whole life. A fresh `notifies()` per call drops every
+        # notification that arrived while no generator was open, so a burst -- which is exactly
+        # what an index run is -- loses everything after the first.
+        self._notices = connection.notifies()
+
+    def next(self, timeout: float) -> dict | None:
+        """The next event for this repository, or `None` when the timeout passes with none.
+
+        `None` is a real answer rather than an error: a quiet index is quiet, and the caller
+        needs to tell that apart from a broken stream so it can send an SSE keep-alive instead of
+        reporting a drop.
+        """
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                notice = next(self._notices)
+            except StopIteration:
+                return None
+            event = json.loads(notice.payload)
+            if event.get("repo_id") == self._repo_id:
+                return event
+        return None
+
+
+EVENT_CHANNEL = "sync_events"
+
+# `NOTIFY` refuses a payload over 8000 bytes and raises, which would take the write down with it.
+# The margin covers the JSON envelope around the longest field.
+_NOTIFY_PAYLOAD_LIMIT = 7900
+
+
 DISMISSAL_REASONS: frozenset[str] = frozenset(
     {"not_used_here", "intentional", "false_positive", "wont_fix"}
 )
@@ -600,6 +650,24 @@ class GraphStore:
                 site.operation_id, site.symbol, site.args_keys, site.response_fields_read,
                 site.sdk_version, site.content_hash, site.loop_depth,
             ),
+        )
+        # One event per call site, owner-selected: the finest grain, so the canvas can draw an
+        # edge the instant the index finds it. The cost -- thousands of notifications on a large
+        # repository -- was stated when the choice was made and taken deliberately.
+        #
+        # The payload carries the node rather than signalling a re-read, which is the other half
+        # of that selection: the canvas draws from the stream without a round trip. The rung is
+        # `static` because that is what a call site is, and it travels on the wire for the same
+        # reason it travels on the screen -- an edge whose rung cannot be named is unattributable.
+        self._publish(
+            {
+                "kind": "call_site.indexed",
+                "repo_id": site.repo_id,
+                "path": site.path,
+                "vendor_id": site.vendor_id,
+                "operation_id": site.operation_id,
+                "binding_rung": "static",
+            }
         )
         return site_id
 
@@ -1260,6 +1328,42 @@ class GraphStore:
             parameters,
         ).fetchall()
         return {row["rung"]: int(row["n"]) for row in rows}
+
+    def _publish(self, event: dict) -> None:
+        """Send one event on the shared channel, degrading rather than failing.
+
+        **The write must never fail because the notification did.** `NOTIFY` raises on a payload
+        over 8000 bytes, and a repository with deeply nested paths can produce one -- so an event
+        that will not fit is replaced by a thin one naming only its kind and scope, and the
+        console re-reads. Losing the fat payload costs a round trip; losing the write would cost
+        the index run.
+
+        `NOTIFY` is transactional: it fires on commit and not before, so a subscriber never hears
+        about a row that was rolled back. That is why this sits inside the writing statement's
+        transaction rather than after it.
+        """
+        payload = json.dumps(event, separators=(",", ":"))
+        if len(payload.encode("utf-8")) > _NOTIFY_PAYLOAD_LIMIT:
+            payload = json.dumps(
+                {"kind": f"{event['kind']}.unsent", "repo_id": event["repo_id"]},
+                separators=(",", ":"),
+            )
+        self._connect().execute("SELECT pg_notify(%s, %s)", (EVENT_CHANNEL, payload))
+
+    @contextmanager
+    def subscribe_events(self, repo_id: str) -> Iterator[_EventStream]:
+        """Listen for one repository's events on a connection of its own.
+
+        A dedicated connection because `LISTEN` occupies one: a session waiting on notifications
+        cannot also serve reads, and sharing the store's connection would block every query behind
+        the stream.
+        """
+        connection = psycopg.connect(self._dsn, autocommit=True, row_factory=dict_row)
+        try:
+            connection.execute(f"LISTEN {EVENT_CHANNEL}")
+            yield _EventStream(connection, repo_id)
+        finally:
+            connection.close()
 
     def record_dismissal(
         self, finding_id: str, *, reason: str | None, actor: str
