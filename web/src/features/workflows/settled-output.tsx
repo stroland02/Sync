@@ -104,8 +104,9 @@ export function SettledOutput({
         </p>
         <p className="max-w-prose text-body text-ink-muted">
           {/* Argued rather than merely omitted, because an omission is invisible to a reader who has
-              seen a competitor's screen. The scale quoted is Superlog's own documentation of its
-              `rootCause.confidence` field, read on 2026-08-18. */}
+              seen a competitor's screen. The scale quoted is a reference product's own documentation
+              of its `rootCause.confidence` field (`superlog-02` in the reference notes), read on
+              2026-08-18. */}
           A confidence score is not a different answer to this question — it is this one compressed.
           The scales that carry it read “ten means direct, verbatim evidence: a line of code, a
           matching stacktrace, a clear log message; zero means speculative.” That is a{" "}

@@ -270,3 +270,98 @@ def test_the_check_never_prints_an_absence_as_a_value():
     assert "null" not in stdout
     assert "undefined" not in stdout
 
+
+# -- `CI-W451`: the commands are ours to type ----------------------------------------------
+#
+# The package takes the command's own name, so `npx sync-up` is the whole instruction. What
+# these pin is the decision, so a future edit that quietly re-privatises the package or
+# renames it away from the bin it installs fails a test rather than a demo.
+
+
+def test_the_manifest_is_publishable_under_its_own_name():
+    """`private: true` was the right guard while the manifest carried a name that was not ours
+    to publish under. It carries the bin's own name now, verified free on the registry, so the
+    only remaining step is a credential -- and a manifest that still refuses `npm publish`
+    turns the owner's publish into a debugging session."""
+    manifest = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
+
+    assert manifest["name"] == "sync-up", (
+        "the package and the command it installs share a name, so `npx sync-up` is the whole "
+        "instruction; renaming one without the other splits them"
+    )
+    assert manifest["name"] in manifest["bin"], (
+        "npx runs the bin matching the package name without guessing; a package named after "
+        "no bin makes the one command ambiguous"
+    )
+    assert not manifest.get("private", False), (
+        "the manifest still refuses to publish; the name is ours and the guard is stale"
+    )
+
+
+def test_the_pnpm_commands_hand_over_to_things_that_exist():
+    """The pnpm surface is scripts, not a reimplementation: `start`/`down`/`check` reach the
+    doorbell and `dev` reaches the from-source bring-up. Asserted against the files rather
+    than exact strings, because a script that names a missing file installs cleanly and fails
+    on the one command it exists to provide -- the same defect the bin test above pins.
+
+    `start` rather than `up`, and it is not taste: `pnpm up` is pnpm's own alias for `update`,
+    so a script named `up` is unreachable from pnpm and the command mutates the lockfile
+    instead. Measured, not read about. `up` staying absent is part of what this pins."""
+    manifest = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
+    scripts = manifest.get("scripts", {})
+
+    for name in ("start", "down", "check"):
+        assert name in scripts, f"`pnpm {name}` does not exist"
+        assert "sync-up.mjs" in scripts[name], (
+            f"`pnpm {name}` must hand over to the doorbell rather than reimplement it"
+        )
+    assert "up" not in scripts, (
+        "`pnpm up` is pnpm's `update` builtin; a script named `up` is a command that runs "
+        "something different under each package manager"
+    )
+    assert "dev" in scripts, "`pnpm dev` does not exist"
+    assert "dev_up.py" in scripts["dev"], (
+        "`pnpm dev` must hand over to the from-source bring-up rather than reimplement it"
+    )
+    assert (REPO_ROOT / "scripts" / "dev_up.py").is_file()
+
+
+@pytest.mark.parametrize("source_tree_present, expected_ok", [(True, True), (False, False)])
+def test_a_registry_install_without_the_source_tree_is_refused_with_directions(
+    source_tree_present, expected_ok
+):
+    """The published tarball carries the compose file but not the tree it builds from, so a
+    registry `npx` used to die mid-`docker build` on a missing `src/` -- a Node traceback in
+    front of exactly the person the doorbell exists to protect. Refused up front instead,
+    naming the clone that works and the fact that no prebuilt image is published yet (`B190`
+    is what retires this).
+
+    **Executed rather than grepped**, for the same reason as the Docker diagnosis above: a
+    phrase asserted against the source passes even when no branch prints it.
+    """
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
+
+    script = (
+        f"import {{ sourceTreeDiagnosis }} from {DOORBELL.as_uri()!r};"
+        f"const r = sourceTreeDiagnosis({str(source_tree_present).lower()});"
+        "console.log(JSON.stringify(r));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["ok"] is expected_ok
+    if not expected_ok:
+        assert "git clone" in verdict["message"], (
+            "the refusal must print the command that works, not only the one that does not"
+        )
+        assert "image" in verdict["message"], (
+            "the refusal must say why: no prebuilt image is published yet"
+        )
+

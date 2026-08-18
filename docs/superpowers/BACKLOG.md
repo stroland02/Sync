@@ -4692,3 +4692,34 @@ failed record, so retiring the stale dispatch through the CLI is not currently a
 **Found 2026-08-18** after `task_7da1be4ca230` failed and Lane I was re-dispatched as
 `task_682298ebace4`. Until this is fixed, the standing reading is: **one known MANUAL line is
 noise; two means something real.**
+
+### B190 — a registry `npx` delivers directions, not the product, until an image is published
+
+**What is wrong.** `CI-W451` made the manifest publishable (`sync-up`, the package named after
+the bin it installs) and gave the doorbell an honest refusal: the published tarball carries
+`bin/`, the compose file and the Dockerfile — not the source tree the compose file's
+`build: context: .` needs — so a registry install now prints the clone that works instead of
+dying mid-`docker build` on a missing `src/`. Honest, but it means `npx sync-up` is a signpost
+rather than a doorbell.
+
+**Why it matters.** The one-command form is the install story's headline, and a one-command
+install that delivers directions instead of the product is a promise the reader catches within a
+minute. It cannot deliver the product until `docker compose` has an image to pull that it did
+not build.
+
+**What closes it, in order:**
+
+1. A container image published per release — `ghcr.io/stroland02/sync` needs only the repo's own
+   `GITHUB_TOKEN` with `packages: write`, no new credential; a Docker Hub name under an org is a
+   separate owner decision.
+2. `docker-compose.demo.yml` names that image alongside `build:`, so a checkout still builds from
+   the tree and a tarball pulls.
+3. The doorbell chooses by the fact it already probes: source tree present → `up --build` exactly
+   as today; absent → pull the pinned tag and `up --no-build`, and the `sourceTreeDiagnosis`
+   refusal is deleted rather than kept as a dead branch.
+4. The image tag is pinned to the published npm version, not `latest` — a launcher from March
+   pulling an image from August is two products wearing one version number.
+
+**Evidence that closes it:** `npx @superloglabs/sync` on a machine that has Docker and has never
+seen this repository reaches the console password prompt. Until that has been run, this entry
+stays open no matter how finished the pieces look.

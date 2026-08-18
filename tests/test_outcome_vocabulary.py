@@ -35,9 +35,9 @@ from sync.runner.outcome_tools import (
 
 
 def test_every_outcome_tool_has_a_flat_top_level_schema():
-    """Superlog learning: runner APIs reject composition keywords (oneOf/allOf/anyOf)
-    at the top level of a tool's input_schema. A rejected schema blocks every run at
-    agent-create time."""
+    """Reference-run learning (`superlog-02`): runner APIs reject composition keywords
+    (oneOf/allOf/anyOf) at the top level of a tool's input_schema. A rejected schema
+    blocks every run at agent-create time."""
     assert len(OUTCOME_TOOL_SCHEMAS) >= 5
     for schema in OUTCOME_TOOL_SCHEMAS:
         name = schema["name"]

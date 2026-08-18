@@ -44,19 +44,18 @@ exported `SYNC_CONSOLE_PASSWORD` first.
 
 ### 1. One command
 
-**Not available yet, and it is not a command you can be given today.** The one-command form is
-built -- `bin/sync-up.mjs` checks the single prerequisite and hands over to exactly the
-`docker compose` invocation below, reimplementing none of it, because npm delivers a Node
-program and a wrapper claiming to install Python and a database would fail in front of the
-person being shown it.
+**Named and publishable, but the package is not published, so no command is printed here yet.**
+The manifest carries the bin's own name — `sync-up`, verified free on the registry — so once it
+is on npm, the whole instruction is `npx` plus that one word (`CI-W451`). Two steps remain, and
+the second is the real one: `npm publish` needs the owner's credential, and until a prebuilt
+image exists to pull, the registry form prints the clone that works rather than starting the
+product — the published tarball carries the launcher and the compose file, not the source tree
+the compose file builds from. `B190` in `docs/superpowers/BACKLOG.md` carries what closes that,
+ending at one measured sentence: the one command reaching the console password prompt on a
+machine that has never seen this repository.
 
-What it does not have is a name we own. The manifest currently carries an npm scope belonging
-to somebody else, so there is nothing to publish and nothing to run; naming it is the owner's
-decision and publishing it needs a credential. No command is printed here rather than one that
-would resolve to a stranger's package.
-
-**Use [2. From a checkout](#2-from-a-checkout--one-prerequisite-and-it-is-docker). It is the
-same work, it is two lines, and it runs today.**
+**Until then, use [2. From a checkout](#2-from-a-checkout--one-prerequisite-and-it-is-docker).
+It is the same work, it is two lines, and it runs today.**
 
 ### 2. From a checkout — one prerequisite, and it is Docker
 
@@ -66,8 +65,13 @@ them.
 ```bash
 git clone https://github.com/stroland02/sync.git
 cd sync
-docker compose -f docker-compose.demo.yml up --build
+npm start         # or: pnpm start — both hand over to docker compose, reimplementing nothing
 ```
+
+`docker compose -f docker-compose.demo.yml up --build` is the same command with the doorbell's
+diagnosis removed; `npm run down` (or `pnpm down`) stops it and removes its database. The script
+is `start` rather than `up` because `pnpm up` is pnpm's own alias for `update` — a script named
+`up` runs something different under each package manager.
 
 ### 3. From source, for working on Sync itself
 
@@ -117,14 +121,14 @@ sits.
   vendor specification staged that a fresh container does not have. `B188` in
   `docs/superpowers/BACKLOG.md` carries the three ways out and what each one costs. Until that
   lands, this shows you that the product runs, not what it finds in your code.
-- **The one-command form is built but has no publishable name.** `bin/sync-up.mjs` checks the
+- **The one-command form is publishable and not yet published.** `bin/sync-up.mjs` checks the
   single prerequisite and hands over to exactly the `docker compose` invocation above — it
   deliberately reimplements none of it, because npm delivers a Node program and a wrapper claiming
-  to install Python and a database would fail in front of the person being shown it. **The
-  published path has been measured and it does not exist**: the registry answers 404, the
-  manifest is marked private so `npm publish` refuses, and the scope it names is not ours to
-  publish under. Naming it is a decision and publishing it is a credential, neither of which is
-  a task.
+  to install Python and a database would fail in front of the person being shown it. The name
+  question is settled — the package is `sync-up`, the same word as the command it installs — but
+  the registry answers 404 until the owner runs `npm publish`, and even then the registry form
+  refuses with directions rather than starting the product, because no prebuilt image exists for
+  it to pull. `B190` names what closes that.
 
 To stop it, and to remove its database with it:
 

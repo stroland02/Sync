@@ -66,6 +66,28 @@ export function dockerDiagnosis(cliProbe, daemonProbe) {
 }
 
 /**
+ * Whether the tree Docker would build from is actually here.
+ *
+ * The published tarball carries this script, the compose file and the Dockerfile -- and not the
+ * source tree the compose file's `build:` needs, so a registry install used to die mid-build on
+ * a missing `src/` with a traceback in front of exactly the person this file exists to protect.
+ * Refused up front instead, until a prebuilt image exists to pull (B190 is what retires this).
+ */
+export function sourceTreeDiagnosis(sourceTreePresent) {
+  if (sourceTreePresent) return { ok: true }
+  return {
+    ok: false,
+    message:
+      "This package delivers the launcher, not the product: the image is built from a clone of\n" +
+      "the repository, and no prebuilt image is published yet.\n\n" +
+      "  git clone https://github.com/stroland02/Sync\n" +
+      "  cd Sync\n" +
+      "  npm run up        (or: pnpm up)\n\n" +
+      "The clone is the supported path today. A published image retires this message.",
+  }
+}
+
+/**
  * What a zero-prerequisite install would do on this machine, without doing any of it.
  *
  * Decisions 97 and 98 decided both lifecycles and `CI-W445`/`CI-W446` built them; this is what
@@ -183,15 +205,24 @@ function main() {
     process.exit(1)
   }
 
+  // Before the Docker exit, not after: `--check` exists to tell a stranger what their machine
+  // still lacks, and a machine lacking Docker is its primary audience. Gating it behind a working
+  // Docker made it unrunnable exactly where it mattered -- found on such a machine, not theorised.
+  if (process.argv.includes("--check")) {
+    runCheck()
+    return
+  }
+
+  const source = sourceTreeDiagnosis(existsSync(join(REPO_ROOT, "pyproject.toml")))
+  if (!source.ok) {
+    process.stderr.write(`\n${source.message}\n\n`)
+    process.exit(1)
+  }
+
   const diagnosis = dockerDiagnosis(probe(["compose", "version"]), probe(["info"]))
   if (!diagnosis.ok) {
     process.stderr.write(`\n${diagnosis.message}\n\n`)
     process.exit(1)
-  }
-
-  if (process.argv.includes("--check")) {
-    runCheck()
-    return
   }
 
   const down = process.argv.includes("down")
