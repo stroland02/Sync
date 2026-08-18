@@ -334,3 +334,196 @@ identifier. **Rejected: infinite scroll**, which drops the footer count — and 
 ornament here: `1,204 rows` is how a reader knows the page they are looking at is a page.
 `interface-originality.md` lists *a footer bar owning pagination and the record count* among the
 conventions of the form, and this is why.
+
+## Round seven: decisions 41-44, owner-selected 2026-08-18
+
+**41. A toast in the bottom corner when a long-running action finishes**, carrying the result and a
+link to it. **Rejected: a count on the sidebar row**, and **rejected: silence**.
+
+**The constraint this puts on the toast, because a toast is transient and this product refuses
+transient truth.** A toast may *announce* a fact but may never be the only place it exists. `Index
+finished — 1,204 call sites` must be readable on the Overview a minute later without having caught
+the toast. And a toast never reports something the screens cannot corroborate: no `all clear`, no
+`healthy`, no completion claim for a run parked on the customer's CI.
+
+**42. Findings default to newest first, flat, with kind as a column you can sort and filter.**
+
+**This supersedes decision 15's grouping and is recorded as a reversal rather than reconciled
+quietly.** Decision 15 read *"findings group by kind, breaking first, under a triage header carrying
+each count."* The grouping is withdrawn; **the triage header with its counts is retained** as filter
+chrome above the flat table, because the counts answer *what would I get if I clicked* and that is
+the part decision 15 was actually buying. **The retention is a coordinator ruling and the owner can
+reverse it**; the grouping's withdrawal is the owner's.
+
+Any screen currently rendering the grouped shape changes. `M14`'s finding work was dispatched
+against 15 and must be re-read against this.
+
+**43. A command palette for navigation only.** Screens, workspaces, vendors, findings, files. **No
+actions in it at all** — not even safe ones. So it cannot become the surface where somebody triggers
+a run by typing three letters and pressing return.
+
+**44. The workspace switcher carries the list, a filter field, `Add workspace`, and `Manage in
+Settings`.** **Rejected: per-item last-indexed facts in the switcher** — the switcher is for changing
+scope, and a stale-vs-live judgement belongs on the screen that can explain it. **Rejected: a bare
+list**, which would have made adding a workspace reachable only through Settings.
+
+This is decision 1's *selection is chrome, not content* carried to its component: the switcher is
+where you change scope and start a workspace, Settings is where you manage what exists.
+
+## Round eight: decisions 45-48, owner-selected 2026-08-18
+
+**45. A finding can be dismissed with a reason from a closed vocabulary** — `not used here`,
+`intentional`, `false positive`, `won't fix`. **Dismissed findings stay listed and are filtered out
+by default.**
+
+**This is the first decision in this set that is not a rendering change, and it must not be built as
+one.** It needs a write path and a stored column, so:
+
+- **`schema.sql` declares the grain before the column exists.** One row is one *dismissal of one
+  finding by one person at one time*, not a property of the finding — a finding dismissed and later
+  un-dismissed has two rows and the current state is the latest, because otherwise the console cannot
+  show that somebody changed their mind.
+- **Dismissal is not deletion.** The finding remains, filtered out. `interface-originality.md`'s
+  rule that we take a vocabulary's *shape* and not its *values* applies: this vocabulary comes from
+  Sync's own reviewers, and it is deliberately the same discipline as `abandon_reason` — a closed set
+  because *a promise to learn from dismissals needs a schema that can answer the question*, and free
+  text cannot be aggregated.
+- **`false positive` feeds detector accuracy and nothing else does.** It is the only honest source of
+  that number, and it is exactly what Gate 2's quality axes have no samples for today.
+
+**46. The sidebar rests collapsed and expands on hover.** Icons at rest, full labels when reached
+for. The explicit collapse control stays for pinning it open.
+
+**47. The Pull Request screen leads with the diff**, with `3 files · +12 −9` and the check line
+beneath it. **Rejected: leading with the verification chain**, and **rejected: leading with the
+finding it answers.**
+
+**The constraint that keeps this honest.** Leading with the diff is the reviewer's instinct and it is
+right — but the verification chain is *why this product is different from a bot that opens pull
+requests*, so it sits **visibly below the diff, not behind a disclosure and not in a tooltip**.
+`tsc passed · customer CI: running` is on screen without a click. A run parked on the customer's CI
+still says so rather than reading as passed.
+
+**48. Below its threshold the sidebar collapses itself and the content keeps its width.** Tables keep
+every column and scroll horizontally **inside their own container**, never the page body. **Rejected:
+dropping columns by priority**, which decides for the reader which column mattered.
+
+## Round nine: decisions 49-52, owner-selected 2026-08-18
+
+**49. Every filter, sort and page lives in the URL now; named saved views come after Wednesday.**
+`[Copy link]` on each table; back and refresh both work.
+
+**The distinction that must not be lost, because `M14-W400` just spent a unit fixing its opposite.**
+**Scope is the path. Filters are the query string.** `/w/checkout/findings` says which workspace;
+`?kind=breaking&rung=observed` says which rows. A screen reading its *scope* from the query string is
+the defect that let a page claim fleet scope while its URL named one repository. Filters in the
+query string are correct and are not a reversal of that.
+
+**50. `Export CSV` on every table now; a token-authenticated read API documented after.**
+
+**The CSV header carries the filters and the counts** — workspace, filters applied, export time with
+offset, and `4 of 31 rows`. A CSV that does not say what it excluded is a screenshot of a filter
+somebody will later read as the whole set.
+
+**51. A `Since the last index` panel** — call sites added and removed, and rungs that strengthened or
+weakened, with the date of the first index. **Rejected: a pick-any-two comparison screen**, which is
+the larger build.
+
+**A first-ever index has no previous, and that is the fourth state again.** The panel says *this is
+the first index* rather than rendering `+0 / −0`, which would read as *nothing changed* about a
+codebase nothing had ever looked at.
+
+**52. One outbound webhook, configured in Settings, on finding-opened and pull-request-opened.**
+**Rejected: a digest email**, and **rejected: relying on the pull request to notify.**
+
+**The conflict, and how it resolves.** `CLAUDE.md` says *we never hold customer secrets*, and that
+one is unqualified. **A Slack incoming-webhook URL is a credential** — it grants post access to a
+channel — so a Settings field that accepts and stores one would break the invariant, in the product's
+own console, in a field labelled Endpoint.
+
+**It resolves against a pattern already in the tree.** `sync.cli._webhook_secret` reads GitHub's
+inbound secret from a named file or an environment variable and never stores it. The outbound
+endpoint takes the same shape: **Settings names the environment variable, says whether it is set, and
+offers `Send test` — it never accepts the value and never displays it.** This is the same answer
+already given for `.sync/context.md`: *show it, say where it comes from, never write it.* The
+screen states that difference rather than hiding it, because it is a better answer than the
+reference's, not a missing feature.
+
+## Round ten: decisions 53-56, the style contract. Owner-selected 2026-08-18
+
+**Stated influences: Radix, shadcn/ui, and Vercel's Geist — dark-first, high-density, keyboard
+accessible.** These are conventions of the form and `interface-originality.md` permits learning them
+from anything. What follows are token values, and `DESIGN.md` is the contract: **every one of these
+lands there with its arithmetic, or it does not land.**
+
+**53. Surfaces separate by a 1px border and nothing else.** Panels and cards share the page
+background; a divider is a rule, not a gap. **No shadow anywhere except true overlays** — drawer,
+command palette, popover. **Rejected: raised backgrounds**, and **rejected: border plus a step.**
+
+This is the flattest of the three and the densest, and it suits a console whose screens are mostly
+tables and facts rather than objects.
+
+**54. The system font stack, with monospace for identifiers.** No webfont, no build step, no network
+cost. Monospace is reserved for things that are code or an id — file paths with line numbers,
+operation names, run ids, vendor slugs. **Rejected: self-hosted Geist**, and **rejected: Inter with
+JetBrains Mono.**
+
+**Monospace is doing semantic work here, not decorative work.** If a value is monospace it is
+something you could search for or paste; that rule is worth keeping when somebody is tempted to
+monospace a number.
+
+**55. The focus ring is always visible, and keyboard navigation is tab order only.** No arrow-key
+grid behaviour inside tables.
+
+**The consequence, and it is reversible.** Radix's default is `:focus-visible`, which hides the ring
+from mouse users precisely because a ring left behind after a click reads as noise. Choosing
+always-visible trades that for never being invisible to somebody who needs it. **If the rings feel
+loud in use, the fix is `:focus-visible` and it is a one-token change** — recorded here so it is a
+decision to revisit rather than a bug to report.
+
+**56. 6px radius, 32px control height, 32px table rows** — shadcn's proportions. About 28 rows at
+1080p. **Rejected: 4px/28px** as too tight, **rejected: 8px/36px** as too roomy.
+
+**This binds decision 40.** Dense tables at 50 rows per page now means 32px rows, and
+`--spacing-row` already names 8px — the guards that failed on `main` tonight exist to keep exactly
+these values in one place. **No screen spells 32px raw.**
+
+## Round eleven: decisions 57-60, components. Owner-selected 2026-08-18
+
+**57. The table gets a sticky header, a sticky first column, and column sort whose state is in the
+URL.** **Not selected: row multi-select with bulk actions**, and **not selected: filter chips.**
+
+**Not selecting chips leaves a gap that must be closed elsewhere, because it is an honesty gap rather
+than a convenience one.** Decision 49 puts filters in the URL; with no chips, a filtered table looks
+exactly like an unfiltered one. **The footer count from decision 40 carries it: `showing 4 of 31 ·
+27 filtered out`, and never a bare `4 rows` when a filter is active.** That is a coordinator ruling
+and reversible — but *something* must say it, because a subset presented as a set is the failure this
+console exists to prevent.
+
+**Bulk dismissal not being selected also settles a question decision 45 raised**: dismissal is
+one finding at a time, so every dismissal has a reason somebody actually chose.
+
+**58. Charts get a quiet baseline and tick labels. No gridlines, no legend unless there are multiple
+series.**
+
+**59. Radix primitives, styled by us — which is already the architecture, so this decision changes
+nothing and deletes something.** All three existing overlays already import `radix-ui` directly:
+`components/ui/dialog.tsx`, and the vendored `dialog.tsx` and `sheet.tsx`. Nothing new to install.
+
+**What it does settle: `web/src/vendor/supabase/ui/dialog.tsx` has zero importers.** Our own
+`components/ui/dialog.tsx` has one, and the vendored `sheet.tsx` has one. **Delete the dead one** —
+delete rather than deprecate, and two dialog implementations for one job is the fact-written-twice
+defect wearing a component's clothes. The Supabase carve-out is unaffected: `sheet.tsx` stays,
+attributed in `web/NOTICE`.
+
+**60. Counts group with separators and abbreviate above ten thousand**, with the exact value on
+hover — `892k`, hover `892,317`.
+
+**Two consequences, and the first is the same shape as decision 38's.** **Hover does not exist on
+touch, in a screenshot, or for a keyboard user who never points at it.** So the exact value goes in
+the `title` attribute and in the accessible name, not only in a floating tooltip — and **`Export CSV`
+never abbreviates**, because a CSV is the artifact somebody sums.
+
+**Second: tabular figures still apply.** Whatever is shown, digits align in a column. A right-aligned
+column of numbers that do not line up is harder to compare than one that does, and comparison is the
+only reason to put them in a column.

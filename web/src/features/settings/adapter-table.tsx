@@ -66,7 +66,8 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
   }
 
   return (
-    <Table>
+    <>
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Vendor</TableHead>
@@ -118,6 +119,14 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+
+      <p className="text-meta text-ink-muted leading-relaxed">
+        Showing all {adapters.length.toLocaleString()}{" "}
+        {adapters.length === 1 ? "adapter" : "adapters"} this deployment registers. Not a page: the
+        inventory is bounded by what an operator configured plus what the graph holds history for,
+        so there is nothing behind this list.
+      </p>
+    </>
   )
 }

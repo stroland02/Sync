@@ -126,6 +126,15 @@ export function VendorExposureCard({
           </TableBody>
         </Table>
       )}
+
+      {operations.length > 0 && (
+        <p className="text-meta text-ink-muted leading-relaxed">
+          Showing all {operations.length.toLocaleString()}{" "}
+          {operations.length === 1 ? "operation" : "operations"} this codebase calls on {vendorId}.
+          This list is not a page: the answer is one row per operation, bounded by the vendor's
+          operation surface rather than by traffic, so there is nothing behind it.
+        </p>
+      )}
     </MetricPanel>
   )
 }
