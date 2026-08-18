@@ -7,8 +7,6 @@ Vendored files:
   src/vendor/supabase/ui/breadcrumb.tsx
   src/vendor/supabase/ui/button.tsx
   src/vendor/supabase/ui/card.tsx
-  src/vendor/supabase/ui/command.tsx
-  src/vendor/supabase/ui/dialog.tsx
   src/vendor/supabase/ui/dropdown-menu.tsx
   src/vendor/supabase/ui/hooks/use-horizontal-scroll.ts
   src/vendor/supabase/ui/hooks/use-mobile.tsx

@@ -39,6 +39,9 @@ interface Paging {
   limit: number
   shown: number
   total: number
+  /** The scope's count with no filter applied. Decision 60: with a filter active the count says
+      what it excluded, because a bare range under a narrowed table reads as the whole set. */
+  unfilteredTotal?: number
   nextOffset: number | null
   busy: boolean
   onOffsetChange: (offset: number) => void
@@ -67,6 +70,7 @@ export function FooterBar(props: FooterBarProps) {
             limit={props.limit}
             shown={props.shown}
             total={props.total}
+            unfilteredTotal={props.unfilteredTotal}
             nextOffset={props.nextOffset}
             busy={props.busy}
             onOffsetChange={props.onOffsetChange}
