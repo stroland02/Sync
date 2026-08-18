@@ -59,6 +59,16 @@ function renderOverview(entry = "/") {
 }
 
 describe("the overview screen", () => {
+  it("mounts dashboard 1, because a card nobody mounts is not shipped", () => {
+    const { container } = renderOverview()
+
+    // Fleet-scoped and propless. The assertion is on the card being on the screen at all: a
+    // finished card left unmounted is the failure this guards, and it is invisible without one.
+    // Matches the card in either state -- mounted-and-loading is still mounted, and the
+    // assertion is about the mount rather than about what the API happened to answer.
+    expect(container.textContent).toMatch(/findings over time/i)
+  })
+
   it("carries no page header, because density is dense", () => {
     renderOverview()
 
