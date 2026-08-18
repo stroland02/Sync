@@ -602,6 +602,26 @@ jobs:
       # The console rendering is half the claim. A console whose panels are all 401 renders
       # perfectly and shows nothing, which is exactly what B187 was, so the API is asked through
       # the proxy the console actually uses rather than directly.
+      # `200` is what a blank page returns too. Decision 32 makes this the first thirty seconds
+      # of Wednesday, and a console that served an empty document would have passed the check
+      # above and failed the room -- so the document is asked for the two things that make it an
+      # application rather than a response: the element React mounts into, and the built bundle
+      # that does the mounting. A Vite build that silently emitted nothing still answers 200.
+      - name: The served document is the console, not an empty 200
+        run: |
+          set -euo pipefail
+          page=$(curl -fsS -u "sync:sync-local-demo" http://127.0.0.1:4173/)
+          grep -q '<div id="root"' <<<"$page" || {
+            echo "the served document has no React root; it answered 200 with nothing to mount"
+            docker compose -f docker-compose.demo.yml logs --no-color
+            exit 1
+          }
+          grep -qE 'src="/assets/index-[^"]+\.js"' <<<"$page" || {
+            echo "the served document references no built bundle, so nothing would ever render"
+            exit 1
+          }
+          echo "the document carries a root and a bundle"
+
       - name: The API answers through the console's own proxy
         run: |
           set -euo pipefail
@@ -612,7 +632,16 @@ jobs:
             docker compose -f docker-compose.demo.yml logs --no-color
             exit 1
           }
-          echo "the API answered 200 through the proxy"
+          # The shape rather than the status. A route that answered 200 with an error envelope,
+          # or with HTML because the proxy fell through to the console's own index, would pass a
+          # status check and leave every panel empty -- which is B187's failure wearing a
+          # different hat.
+          body=$(curl -fsS -u "sync:sync-local-demo" http://127.0.0.1:4173/api/repositories)
+          grep -q '"repo_ids"' <<<"$body" || {
+            echo "the API answered 200 but not with the shape a screen reads: $body"
+            exit 1
+          }
+          echo "the API answered 200 through the proxy, carrying repo_ids"
 
       # Unauthenticated must be refused. The console is the only published surface and its
       # credential is the only boundary in front of it.
