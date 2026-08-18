@@ -56,7 +56,7 @@ import {
 import { type Fact, FactList } from "@/components/fact-list"
 import { MetricPanel } from "@/components/metric-panel"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
-import { Skeleton } from "@/components/skeleton"
+import { Pending } from "@/features/findings/pending"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import {
@@ -114,7 +114,7 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
  * `sync.dashboard.fleet.runs` is the query that lists every generation as its own row.
  */
 function remediationFact(state: RemediationState): ReactNode {
-  if (state.kind === "pending") return <Skeleton width="w-28" />
+  if (state.kind === "pending") return <Pending />
   if (state.kind === "none") {
     return <Absent>the checkpointer holds no run for this finding</Absent>
   }
@@ -153,7 +153,8 @@ function standingWord(standing: RemediationStanding, outcome: string | null): Re
  * The finding's own facts, label left and value right, in the rail beside the content.
  *
  * Three states per fact and they are three different claims, the same three every ported level
- * spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is a
+ * spells: `<Pending>` writes the word where the value goes while the query is in flight,
+ * `<Absent>` says it failed, and a value is a
  * value. Remediation is answered by a second query and carries its own four.
  *
  * `failure` is the caller's sentence rather than a boolean, because this level can fail two ways
@@ -173,10 +174,10 @@ function findingFacts(
   failure: ReactNode | null,
   remediation: RemediationState,
 ): Fact[] {
-  function fact(width: string, render: (found: FindingDetail) => ReactNode): ReactNode {
+  function fact(render: (found: FindingDetail) => ReactNode): ReactNode {
     if (data !== null) return render(data)
     if (failure !== null) return failure
-    return <Skeleton width={width} />
+    return <Pending />
   }
 
   return [
@@ -188,7 +189,7 @@ function findingFacts(
     },
     {
       label: "Severity",
-      value: fact("w-20", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.finding.severity)} />
         </span>
@@ -196,7 +197,7 @@ function findingFacts(
     },
     {
       label: "Repository",
-      value: fact("w-32", (found) =>
+      value: fact((found) =>
         found.finding.repo_id === null ? (
           <Absent>unknown</Absent>
         ) : (
@@ -211,7 +212,7 @@ function findingFacts(
     },
     {
       label: "Call site",
-      value: fact("w-36", (found) => (
+      value: fact((found) => (
         <code className="font-mono text-meta break-all">
           {found.finding.file}:{found.finding.line}
         </code>
@@ -219,7 +220,7 @@ function findingFacts(
     },
     {
       label: "Vendor",
-      value: fact("w-32", (found) => (
+      value: fact((found) => (
         <Link
           to={`${workspacePath(repoId)}/vendors/${encodeURIComponent(found.vendor)}`}
           className="font-mono underline underline-offset-2"
@@ -230,7 +231,7 @@ function findingFacts(
     },
     {
       label: "Operation",
-      value: fact("w-28", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.operation)} />
         </span>
@@ -238,7 +239,7 @@ function findingFacts(
     },
     {
       label: "Symbol",
-      value: fact("w-36", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.symbol)} />
         </span>
@@ -246,7 +247,7 @@ function findingFacts(
     },
     {
       label: "SDK version",
-      value: fact("w-16", (found) => (
+      value: fact((found) => (
         <span className="font-mono">
           <Formatted value={orAbsent(found.sdk_version)} />
         </span>
@@ -254,7 +255,7 @@ function findingFacts(
     },
     {
       label: "This finding's rung",
-      value: fact("w-20", (found) => <RungBadge rung={found.finding.binding_source} />),
+      value: fact((found) => <RungBadge rung={found.finding.binding_source} />),
     },
     { label: "Remediation", value: remediationFact(remediation) },
   ]

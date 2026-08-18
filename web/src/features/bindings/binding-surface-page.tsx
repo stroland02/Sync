@@ -86,7 +86,7 @@ import {
   sortCallSites,
   type SortState,
 } from "./call-site-columns"
-import { Skeleton } from "@/components/skeleton"
+import { Pending } from "@/features/findings/pending"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { BindingDrawer } from "@/features/bindings/binding-drawer"
@@ -138,7 +138,7 @@ function boundCallSites(data: BindingSurfaceResponse): number {
 /**
  * The operation's own facts, label left and value right, beside the header rather than under it.
  *
- * Three states per counted fact and they are three different claims. A `Skeleton` says the query
+ * Three states per counted fact and they are three different claims. `<Pending>` says the query
  * is in flight — `components/skeleton.tsx` carries why that is not one of `states.tsx`'s five
  * sentences. `<Absent>` says the query failed, which is not the same as a count of zero, and the
  * error state under it names what failed. A number says the number.
@@ -150,9 +150,9 @@ function operationFacts(
   data: BindingSurfaceResponse | null,
   failed: boolean
 ): Fact[] {
-  const counted = (value: number, width: string) => {
+  const counted = (value: number) => {
     if (data !== null) return value.toLocaleString()
-    return failed ? <Absent>the API did not answer</Absent> : <Skeleton width={width} />
+    return failed ? <Absent>the API did not answer</Absent> : <Pending />
   }
 
   return [
@@ -162,9 +162,9 @@ function operationFacts(
       label: "Repository scope",
       value: <span className="font-mono">{repoId}</span>,
     },
-    { label: "Call sites bound", value: counted(data ? boundCallSites(data) : 0, "w-16") },
-    { label: "Repositories", value: counted(data ? data.repositories.length : 0, "w-10") },
-    { label: "Vendor changes", value: counted(data ? data.changes.total : 0, "w-10") },
+    { label: "Call sites bound", value: counted(data ? boundCallSites(data) : 0) },
+    { label: "Repositories", value: counted(data ? data.repositories.length : 0) },
+    { label: "Vendor changes", value: counted(data ? data.changes.total : 0) },
     // Hardcoded because the payload hardcodes it, and `RungNote` below carries the argument. A
     // badge rather than the word so the page-level rung and the column read as the same claim.
     { label: "Binding rung", value: <RungBadge rung="static" /> },
