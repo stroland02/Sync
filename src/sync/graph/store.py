@@ -26,7 +26,6 @@ from sync.core import (
     REFUSED_MERGE_POLICIES,
 )
 from sync.core.models import (
-    DISMISSAL_REASONS,
     SEVERITY_ORDER,
     UNATTRIBUTED,
     ObservedCall,
@@ -354,6 +353,22 @@ def _reconcile_unique_constraints(connection: psycopg.Connection, creates: list[
             cols_sql = ", ".join(required_cols)
             connection.execute(f"ALTER TABLE {table} ADD UNIQUE ({cols_sql})")
 
+
+
+# Owner decision 45's vocabulary, as codes. Deliberately here rather than in `sync.core`: that
+# package is the published plugin SDK and a vendor adapter has no use for a reviewer's reason for
+# dismissing a finding, so putting it there would widen the SDK for nobody.
+#
+# Closed for the same reason `AbandonReasonCode` is closed -- a promise to learn from dismissals
+# needs a schema that can answer the question, and free text cannot be aggregated. The values are
+# Sync's own reviewers'; `interface-originality.md` takes a vocabulary's shape and never its
+# values.
+#
+# `false_positive` is load-bearing beyond the others: it is the only honest source of detector
+# accuracy, which is exactly the number Gate 2's quality axes have no samples for today.
+DISMISSAL_REASONS: frozenset[str] = frozenset(
+    {"not_used_here", "intentional", "false_positive", "wont_fix"}
+)
 
 
 class GraphStore:
@@ -770,112 +785,6 @@ class GraphStore:
             parameters,
         ).fetchall()
         return [CallSite(**row) for row in rows]
-
-    def dismiss_finding(
-        self, finding_id: str, *, reason: str, actor: str, at: datetime
-    ) -> str:
-        """Record that somebody set this finding aside, and why.
-
-        An event, not a property. `schema.sql` carries the grain: a finding dismissed and later
-        reinstated has two rows and the current state is the latest, because a boolean on
-        `finding` would flip back and leave no trace anybody changed their mind.
-
-        The vocabulary check is here rather than as a CHECK constraint because
-        `CREATE TABLE IF NOT EXISTS` means a column-level CHECK never reaches a database that
-        already holds the table -- the constraint would bind only on machines that had never run
-        an older revision. This is a boundary every write passes through, which is where
-        `CLAUDE.md` asks for validation.
-        """
-        if reason not in DISMISSAL_REASONS:
-            raise ValueError(
-                f"{reason!r} is not a dismissal reason; the closed vocabulary is "
-                f"{', '.join(DISMISSAL_REASONS)}"
-            )
-        return self._write_dismissal(finding_id, "dismissed", reason, actor, at)
-
-    def reinstate_finding(self, finding_id: str, *, actor: str, at: datetime) -> str:
-        """Undo a dismissal, without deleting it.
-
-        Carries no reason: a reinstatement undoes rather than asserts, and inventing a vocabulary
-        member for it would put a claim in the column that nobody made.
-        """
-        return self._write_dismissal(finding_id, "reinstated", None, actor, at)
-
-    def _write_dismissal(
-        self, finding_id: str, action: str, reason: str | None, actor: str, at: datetime
-    ) -> str:
-        row_id = _stable_id(finding_id, actor, at.isoformat())
-        self._connect().execute(
-            """
-            INSERT INTO finding_dismissal (id, finding_id, action, reason, actor, at)
-                 VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (finding_id, actor, at) DO UPDATE
-                    SET action = EXCLUDED.action, reason = EXCLUDED.reason
-            """,
-            [row_id, finding_id, action, reason, actor, at],
-        )
-        return row_id
-
-    def current_dismissal(self, finding_id: str) -> dict | None:
-        """The finding's latest dismissal row, or `None` when it is not currently dismissed.
-
-        `None` covers both never-dismissed and dismissed-then-reinstated, which are different
-        histories reaching the same present state. `dismissal_history` is where the difference
-        lives, because that is the question it answers.
-        """
-        row = self._connect().execute(
-            """
-            SELECT id, finding_id, action, reason, actor, at
-              FROM finding_dismissal
-             WHERE finding_id = %s
-             ORDER BY at DESC
-             LIMIT 1
-            """,
-            [finding_id],
-        ).fetchone()
-        if row is None or row["action"] != "dismissed":
-            return None
-        return dict(row)
-
-    def dismissal_history(self, finding_id: str) -> list[dict]:
-        """Every dismissal and reinstatement this finding has, oldest first.
-
-        Somebody changing their mind is the fact this table exists to hold, so nothing here
-        collapses the history into its result.
-        """
-        rows = self._connect().execute(
-            """
-            SELECT id, finding_id, action, reason, actor, at
-              FROM finding_dismissal
-             WHERE finding_id = %s
-             ORDER BY at
-            """,
-            [finding_id],
-        ).fetchall()
-        return [dict(row) for row in rows]
-
-    def dismissed_finding_ids(self, *, repo_id: str | None = None) -> set[str]:
-        """Which findings are dismissed right now, so a screen can filter rather than delete.
-
-        One query with the latest row per finding picked in SQL, rather than a fetch of the whole
-        table folded in Python: the fold would be a second answer to "what is the current state",
-        and the two could disagree.
-        """
-        clause = ""
-        parameters: list[object] = []
-        if repo_id is not None:
-            clause = " JOIN call_site ON call_site.id = finding.call_site_id AND call_site.repo_id = %s"
-            parameters.append(repo_id)
-        rows = self._connect().execute(
-            f"""
-            SELECT DISTINCT ON (d.finding_id) d.finding_id, d.action
-              FROM finding_dismissal d
-              JOIN finding ON finding.id = d.finding_id{clause}
-             ORDER BY d.finding_id, d.at DESC
-            """,
-            parameters,
-        ).fetchall()
-        return {row["finding_id"] for row in rows if row["action"] == "dismissed"}
 
     def call_sites_for_repository(
         self, repo_id: str, *, limit: int | None = None
@@ -1351,6 +1260,91 @@ class GraphStore:
             parameters,
         ).fetchall()
         return {row["rung"]: int(row["n"]) for row in rows}
+
+    def record_dismissal(
+        self, finding_id: str, *, reason: str | None, actor: str
+    ) -> None:
+        """Dismiss a finding with a reason, or restore it by passing `reason=None`.
+
+        **This writes a row, never a column**, which is owner decision 45's actual requirement:
+        a finding dismissed and later restored has two rows and the current state is the latest.
+        A column would overwrite, and the console could then never show that somebody changed
+        their mind -- which is the one thing keeping this history buys.
+
+        The reason is refused unless it is in the closed vocabulary. Free text cannot be
+        aggregated, and `false_positive` in particular is the only honest source of detector
+        accuracy, so a reason spelled three ways is a number nobody can compute. Validation lives
+        here rather than in the database because a `CHECK` constraint cannot be added to a
+        populated table without a migration this project has no path for yet, and the refusal
+        needs to exist now.
+        """
+        if reason is not None and reason not in DISMISSAL_REASONS:
+            raise ValueError(
+                f"{reason!r} is not a dismissal reason. The vocabulary is closed -- "
+                f"{', '.join(sorted(DISMISSAL_REASONS))} -- because a promise to learn from "
+                "dismissals needs a schema that can answer the question, and free text cannot "
+                "be aggregated."
+            )
+        self._connect().execute(
+            "INSERT INTO finding_dismissal (finding_id, reason, actor) VALUES (%s, %s, %s)",
+            (finding_id, reason, actor),
+        )
+
+    def dismissal_state(self, finding_id: str) -> dict:
+        """Whether this finding stands dismissed right now, and on whose word.
+
+        The latest row wins. `dismissed` is `False` with a `None` reason for a finding nobody has
+        ever touched *and* for one that was dismissed and then restored -- those are the same
+        current state, and the difference between them lives in the history rather than here.
+        """
+        row = self._connect().execute(
+            """
+            SELECT reason, actor FROM finding_dismissal
+             WHERE finding_id = %s
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1
+            """,
+            (finding_id,),
+        ).fetchone()
+        if row is None or row["reason"] is None:
+            return {"dismissed": False, "reason": None, "actor": None}
+        return {"dismissed": True, "reason": row["reason"], "actor": row["actor"]}
+
+    def dismissal_history_count(self, finding_id: str) -> int:
+        """How many times this finding has been dismissed or restored.
+
+        Exposed because the grain is the decision: a caller that wants to know whether anybody
+        changed their mind asks this, and a caller that wants the current state asks
+        `dismissal_state`. Neither answers the other's question.
+        """
+        row = self._connect().execute(
+            "SELECT count(*) AS n FROM finding_dismissal WHERE finding_id = %s",
+            (finding_id,),
+        ).fetchone()
+        return int(row["n"])
+
+    def dismissal_reason_counts(self) -> dict[str, int]:
+        """Currently-dismissed findings, tallied by the reason standing against each.
+
+        Counted over the latest row per finding rather than over every row, because a finding
+        dismissed, restored and dismissed again is one dismissal now and not three. Only reasons
+        that occur are returned -- a reason absent here and a reason at nought are different
+        claims and this query cannot make the second.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT latest.reason AS reason, count(*) AS n
+              FROM (
+                SELECT DISTINCT ON (finding_id) finding_id, reason
+                  FROM finding_dismissal
+                 ORDER BY finding_id, created_at DESC, id DESC
+              ) AS latest
+             WHERE latest.reason IS NOT NULL
+             GROUP BY latest.reason
+             ORDER BY latest.reason
+            """
+        ).fetchall()
+        return {row["reason"]: int(row["n"]) for row in rows}
 
     def observed_edges_for_repository(self, repo_id: str) -> list[dict]:
         """One row per (vendor, operation, rung) this repository's traffic actually named.

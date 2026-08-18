@@ -133,14 +133,4 @@ src/sync/index/codebase.py:index_codebase
 # read-only root, a per-container wall-clock kill -- `ephemeral_container` still grants neither).
 src/sync/runner/docker_sdk.py:DockerSdkRunner
 
-# Decision 45, added 2026-08-18. The owner ruled dismissal is NOT a rendering change and named
-# its first step: schema.sql declares the grain before the column exists. These four are that
-# step -- the table, its closed vocabulary and the reads over it, finished and tested against a
-# real database. What will call them is the write path: a POST route on the finding, and the
-# findings table filtering dismissed rows out by default. Delete these lines in the commit that
-# wires that route, which is what this file's own rule asks for.
-src/sync/graph/store.py:GraphStore.dismiss_finding
-src/sync/graph/store.py:GraphStore.reinstate_finding
-src/sync/graph/store.py:GraphStore.current_dismissal
-src/sync/graph/store.py:GraphStore.dismissal_history
-src/sync/graph/store.py:GraphStore.dismissed_finding_ids
+

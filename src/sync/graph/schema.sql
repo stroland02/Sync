@@ -546,55 +546,37 @@ CREATE TABLE IF NOT EXISTS intake_attempt (
 
 CREATE INDEX IF NOT EXISTS intake_attempt_vendor_idx ON intake_attempt (vendor_id, attempted_at DESC);
 
-
--- Grain: one row per dismissal OR reinstatement of one finding, by one person, at one time.
--- Emphatically NOT a property of the finding. A finding dismissed and later un-dismissed has two
--- rows and the current state is the latest of them; a boolean column on `finding` would flip back
--- and leave no trace anybody had ever changed their mind, and that trace is the point.
+-- Grain: one row per DISMISSAL of one finding by one person at one time. Not a property of the
+-- finding, and that distinction is the whole decision (owner decision 45, 2026-08-18): a finding
+-- dismissed and later un-dismissed has two rows and the current state is the latest one, because
+-- a column would overwrite and the console could not then show that somebody changed their mind.
+-- Counting dismissed findings by counting rows here is wrong for exactly the reason it is wrong
+-- on `migration_outcome`.
 --
--- Identity is (finding_id, actor, at). One person dismissing one finding at one instant is one
--- event however many times the write is replayed, which is what the conflict clause on the insert
--- is for -- `CLAUDE.md` requires a natural key and an explicit conflict clause on every table, and
--- `efcc19d` was this bug.
+-- `reason` is NULL on an un-dismissal and one of the closed vocabulary otherwise. The vocabulary
+-- is closed for the same reason `abandon_reason_code` is: a promise to learn from dismissals
+-- needs a schema that can answer the question, and free text cannot be aggregated. The values are
+-- Sync's own reviewers' -- `interface-originality.md` takes a vocabulary's shape and never its
+-- values.
 --
--- `reason` is from the closed four-member vocabulary in `sync.core.models.DISMISSAL_REASONS` --
--- `not-used-here`, `intentional`, `false-positive`, `wont-fix` -- and is NULL on a reinstatement,
--- which undoes rather than asserts. Named in a comment rather than declared as a CHECK for the
--- reason `severity` is at the top of this file: `CREATE TABLE IF NOT EXISTS` means a CHECK riding
--- on a column definition never reaches a database that already has the table, so the constraint
--- would hold only on machines that had never run an older revision. The refusal lives in
--- `GraphStore.dismiss_finding`, which is a boundary every write passes through.
+-- `false_positive` is the only honest source of detector accuracy, so it must stay separable
+-- rather than pooled with the other three. That is why the reason is a column here and not a
+-- boolean beside a note.
 --
--- Closed for the reason `abandon_reason_code` is closed: a promise to learn from dismissals needs
--- a schema that can answer the question, and free text cannot be aggregated. `false-positive` is
--- the only honest source of detector accuracy in this system, which is exactly the number Gate 2
--- has no samples for -- so it is a vocabulary member rather than a note somebody typed.
---
--- Dismissed findings are FILTERED, never deleted. The row stays listed so a reader can ask what
--- was set aside and why, and so a dismissal can be argued with.
+-- Dismissal is not deletion: the finding row is untouched and stays listed, filtered out by
+-- default. A read surface can only offer that filter because the finding is still there.
 CREATE TABLE IF NOT EXISTS finding_dismissal (
-    id          TEXT PRIMARY KEY,
-    -- Deliberately NOT a foreign key to `finding`, and no other durable table has one either.
-    -- `finding` is re-derived: a scan truncates it and writes it again, and a FK here would both
-    -- block that truncate and, with a cascade, delete a human's decision every time the indexer
-    -- ran. Finding ids are stable across re-derivation -- `insert_finding` hashes
-    -- (detector, call_site_id, vendor_change_id, claim) -- so a dismissal keyed on the id still
-    -- names the same finding after the row is rebuilt. A dismissal outlives the finding row for
-    -- the same reason `migration_outcome` and observed telemetry do: it is evidence somebody
-    -- produced, not something the pipeline can recompute.
-    finding_id  TEXT NOT NULL,
-    -- 'dismissed' or 'reinstated'. Two verbs rather than a nullable boolean, because a row here
-    -- records what somebody did and "not dismissed" is not something anybody does.
-    action      TEXT NOT NULL,
-    reason      TEXT,
-    actor       TEXT NOT NULL,
-    at          TIMESTAMPTZ NOT NULL,
-    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    UNIQUE (finding_id, actor, at)
+    id           BIGSERIAL PRIMARY KEY,
+    finding_id   TEXT NOT NULL REFERENCES finding (id) ON DELETE CASCADE,
+    -- NULL means this row un-dismissed the finding. A reason is required to dismiss and
+    -- meaningless to restore, and `record_dismissal` enforces the pairing.
+    reason       TEXT,
+    -- Who, as recorded by whatever authenticates the write. Not nullable: a dismissal nobody can
+    -- be attributed to is not reviewable, and the point of keeping history is that a reader can
+    -- ask who decided.
+    actor        TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- The current state of one finding is the latest row it has, so every read orders by `at` within
--- a finding and stops at the first.
-CREATE INDEX IF NOT EXISTS finding_dismissal_current_idx
-    ON finding_dismissal (finding_id, at DESC);
+CREATE INDEX IF NOT EXISTS finding_dismissal_latest_idx
+    ON finding_dismissal (finding_id, created_at DESC);

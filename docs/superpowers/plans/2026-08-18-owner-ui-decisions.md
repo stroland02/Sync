@@ -738,3 +738,147 @@ followed by the finished graph**, which hides the moment worth watching.
 arriving. **The stagger caps at the first 12 rows and the remainder appear together** — the effect
 is entirely in the first few anyway, and a demo that visibly crawls on real data is worse than one
 that never staggered.
+
+## Round seventeen: decisions 80-83, the framer-motion contract
+
+**The mechanism already exists and this expands it rather than introducing it.** `framer-motion`
+`12.43.0` is installed, `lib/motion.ts` drives it, and `test_nothing_transitions_geometry_anywhere`
+bans **Tailwind's** `transition`/`transition-all`/`transition-transform`/`transition-shadow` while
+**explicitly permitting framer's `transition={{ … }}` prop**. Opacity is not geometry;
+`transition-colors` stays legal. **So a motion system is buildable without touching the guard, and
+anything animating geometry through a Tailwind class is still a failure.**
+
+**80. Every motion instance stays named in `DESIGN.md`'s Motion section**, as the three sanctioned
+ones are today. **Rejected: named primitives with composed instances**, and **rejected: relaxing the
+guard.**
+
+**This is the strictest of the three and it is the one consistent with everything else here.** The
+register is the same discipline as `abandon_reason` and the dismissal vocabulary: **a closed set,
+auditable, where adding an entry is a deliberate act.** It also means motion cannot creep — a screen
+that wants a new animation adds a line to the contract first, which is exactly how `--spacing-row`
+and the colour tokens already work.
+
+**81. Springs, stiff and damped** — `stiffness: 400, damping: 40, mass: 0.8`, settling in about
+250ms with almost no overshoot, and reacting instantly when interrupted. **Rejected: expressive
+springs with visible rebound**, and **rejected: fixed durations with a cubic-bezier.**
+
+**Interruption is the reason this matters more than the numbers.** Rows arrive from a live event
+stream, so a second event can land mid-animation. A duration-and-easing transition restarts or
+jumps; a stiff spring absorbs it and keeps its velocity. **Motion bound to real events needs physics
+that survive being interrupted by more real events.**
+
+**82. Shared-element layout animation on the canvas only.** A node morphs into its detail via
+`layoutId`; a table row opens a drawer that **slides in from the right with no morph**. **Rejected:
+morphing table rows**, and **rejected: no shared layout at all.**
+
+**The split is where the morph earns its cost.** On the canvas the morph *explains* something — the
+detail is that node, in that position, in a graph you are looking at. In a table it is decoration,
+and `layoutId` across a 50-row virtualised list is the easiest way to make framer thrash.
+
+**83. Route changes are instant. No transition between screens at all.** **Rejected: cross-fade**,
+and **rejected: a directional slide.**
+
+**This is the sharpest decision in the set and it is not a reduction of decision 79.** Maximum
+motion, and **zero of it spent on navigation** — because a route change is something *you* did and
+already know about, while an arriving row, a changing value and a building graph are things *the
+system* did that you would otherwise miss. **The entire motion budget goes to what changed rather
+than to where you went**, which is the same argument as every other refusal in this document,
+applied to milliseconds instead of pixels.
+
+## Round eighteen: decisions 84-87 — and 79 is substantially superseded
+
+**84. `lib/motion.ts`'s bar stands unchanged: motion is permitted where the data holds a time, and
+on a surface the operator meets occasionally rather than crosses on every pointer move.** **Rejected:
+splitting it into a strict class and a looser interaction class**, and **rejected: replacing it with
+taste.**
+
+**This is the decision that reshapes the whole motion round, so the supersession is written out
+rather than left to be discovered.** Decision 79 was *maximum motion — staggered entrances, charts
+drawing in, panels springing, page cross-fades*. Against decision 84:
+
+| 79 promised | status now | why |
+|---|---|---|
+| staggered row entrance on page load | **withdrawn** | a page load is not a time the data holds |
+| charts drawing in on mount | **withdrawn** | same; mount is not an event |
+| panels springing on mount | **withdrawn** | same |
+| page cross-fades | already withdrawn by 83 | navigation is something you did |
+| numbers rolling | already withdrawn by 77 | renders a figure nothing measured |
+| hover easing | **withdrawn** | crossed on every pointer move |
+
+**What survives is not less alive — it is differently alive.** Every animation left in the console
+points at something that actually happened: a stage transition arriving, a value changing, the canvas
+building as files are read, the new-findings banner appearing. **Nothing moves because a page
+rendered.** The console feels alive exactly when the system is doing something, and still when it is
+not — which is information rather than decoration.
+
+**The bar is also load-bearing evidence rather than a slogan:** `lib/motion.ts` records that its
+third sanctioned usage was **measured and deleted** after it was found never to have run once.
+
+**85. Overlays split along a real line: the panel is a framer `motion.div` on the spring; the scrim
+is Radix `[data-state]` opacity in CSS.** **Rejected: framer for both via `forceMount`**, and
+**rejected: CSS keyframes for both.**
+
+**One honest note on 84 and 85 together.** A drawer opening is *not* a time the data holds, so it
+fails the bar's first clause and passes its second. **It is granted deliberately as a named register
+entry rather than by reinterpreting the bar** — which is precisely what decision 80's
+name-every-instance register is for. The bar governs whether a motion earns an entry; the register is
+the authority on what exists.
+
+**86. A dismissed or filtered-out row is gone on the next render.** No exit animation. The toast says
+what happened and why — `PostRefunds dismissed · not used here`. **Rejected: collapse-and-settle**,
+and **rejected: fade-in-place.** Exit animation on a virtualised list is the easiest thing here to
+make janky, and the row leaving is something *you* did.
+
+**87. New rows arriving on the stream are held behind a banner — `↓ 2 new findings [Show]`.** The
+table does not move while you read it; **the count is live even so.** **Rejected: inserting at the
+top**, and **rejected: inserting only when scrolled to the top.**
+
+**This is the log-tail problem answered in the reader's favour**, and it is the same instinct as
+decision 34's drawer: content that shifts under your eyes while you are reading it costs more than
+freshness buys. The banner is the arrival animation.
+
+## Round nineteen: decisions 88-89, and two questions answered from the tree
+
+**88. A run that cannot produce a safe patch abandons with a reason code and opens no pull request.**
+The finding stays open, the reason is recorded and queryable, and the screen offers `Retry` and
+`Open manually ↗`. **Rejected: a draft PR carrying an unverified diff**, and **rejected: an
+unverified suggested diff shown inside the finding.**
+
+**This is `CLAUDE.md`'s *nothing reaches a pull request unverified* held at the moment it costs
+something.** Both rejected options are the same trade — put a diff in front of a human with a label
+saying it does not compile — and both would have made the invariant conditional. The abandon reason
+is not a failure to hide; `CLAUDE.md` already says **abandoned runs are data**, and they are where
+routing learns which change kinds are not mechanically safe.
+
+**89. Production is a self-hosted container on the customer's infrastructure** — their Postgres,
+their tokens, running beside their CI. **Rejected: a hosted GitHub App**, and **rejected: self-host
+now with hosted later as a stated plan.**
+
+**This keeps the one unqualified invariant intact.** A hosted app means holding a GitHub App
+installation token, which is a customer credential, and `CLAUDE.md`'s *we never hold customer
+secrets* has no qualification on it. Self-hosting is not a smaller version of the hosted product —
+**it is the deployment shape in which that sentence stays true.**
+
+### Two owner questions, answered from the tree rather than re-asked
+
+**"Was there anything planned for reading many codebases?"** — **Yes, and it is built.**
+`LanguageAdapter` is a protocol at `core/protocols.py:12` with **two implementations already wired**:
+`TypeScriptAdapter` and `PythonAdapter`, both returned by `cli.py:198`. `core/conformance.py:361`
+checks an adapter against every guarantee the protocol states but cannot enforce, and the design spec
+records why Python exists at all — *"to prove `LanguageAdapter` generalizes past TypeScript."*
+
+**The real shape is therefore: indexing is polyglot, remediation is not.** The verification gate is
+`tsc`, so Sync can *see* Python call sites and cannot *fix* them. That is a live distinction the
+console does not yet render, and it is exactly the kind of gap that reads as zero findings.
+
+**"How did we plan for adding different vendors?"** — **Also built, deliberately without a plugin
+scan.** `signals/registry.py` holds `_CODED_ADAPTERS` (`stripe`, `twilio`) beside configured vendors
+served by `GeneratedSpecAdapter` and `McpServerAdapter`, with `available_vendors()` returning both.
+Its own docstring states the choice: *"No entry-point discovery and no plugin scan. A third party's
+adapter is registered by adding a line to `_BUILDERS`... Discovery would be the right shape once an
+adapter ships outside this repository and is guesswork until then."* That is *build for the case that
+exists*, applied and written down.
+
+**And it already reports its own gap honestly**: a configured vendor's *specifications* are
+discoverable while its *call sites* are not, so it binds nothing — and `signals/intake` reports that
+as missing configuration rather than hiding it behind a vendor that appears served.

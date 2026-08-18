@@ -434,8 +434,15 @@ function BindingSurfaceDetail({
               /* The table scrolls inside itself rather than widening the page. Nine columns of
                  real call-site data do not fit 1440px, and a page that scrolls horizontally takes
                  the navigation and the header with it -- the reader loses the screen to read a
-                 cell. `min-w-max` lets the row keep its natural width inside that scroller. */
-              <div className="w-full overflow-x-auto">
+                 cell. `min-w-max` lets the row keep its natural width inside that scroller.
+
+                 `min-w-0` is what makes that true rather than merely intended, and it was
+                 missing: a scroll container inside a flex or grid parent keeps a min-content
+                 floor, so nine columns push the parent wider and the *page* scrolls while this
+                 div never does -- the exact failure the comment above says it prevents.
+                 `components/data-table.tsx`'s `TableFrame` carries the same reasoning and the
+                 same pair. */
+              <div className="min-w-0 w-full overflow-x-auto">
               <Table className="min-w-max">
                 <TableHeader>
                   <TableRow>
