@@ -442,8 +442,14 @@ def test_a_resign_that_arrives_as_a_new_document_is_seen(tmp_path) -> None:
 
 
 def test_a_recorded_signature_older_than_the_console_says_so_in_those_words(tmp_path) -> None:
-    """The legibility half. A lane whose re-sign did not register must be told why, not left to
-    guess -- the answer is almost always that it updated the prose and not the signature line."""
+    """The legibility half. A lane whose signature did not register must be told why and where
+    the date lives, not left to guess.
+
+    **The premise changed at `CI-W390` and the assertion did not.** This used to read that the
+    answer is almost always a lane updating the prose and not the signature line, which is true
+    and was being used to justify a message telling readers to move the date. The ruling is that
+    a stale signature is answered by walking the screens again; the message must still name
+    `Signed:` so somebody who has walked knows where the date goes."""
     directory = _reports(
         tmp_path, **{"2026-08-17-gate-3-resign": "Signed: 2026-08-17T09:00:00-04:00\n"}
     )
@@ -763,3 +769,71 @@ def test_a_failing_suite_on_a_clean_tree_is_a_real_answer() -> None:
     )
 
     assert ok is False
+
+
+# --- a report that is unsigned on purpose is not a report somebody forgot to sign ----
+
+
+def test_a_historical_report_is_reported_apart_from_an_unsigned_one(tmp_path) -> None:
+    """`CI-W390`: unmeasured is a legitimate verdict; ambiguous is not.
+
+    `2026-08-17-gate-3-screen-pass.md` carries no `Signed:` line **by design** -- it is the
+    historical record, and `M0-W291` resolved that after two reports disagreed about the mechanism
+    that reads them. Gate 3 listed it under "not read, because they record no signature date",
+    which is exactly what it would say about a report somebody forgot to sign. A reader cannot tell
+    a deliberate omission from a mistake, and every sweep re-asks the same question.
+    """
+    (tmp_path / "a-gate-3-historical.md").write_text(
+        "# old\n\nHistorical: no signature by design, superseded by the walk below\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "b-gate-3-current.md").write_text(
+        "# current\n\nSigned: 2026-08-18T03:15:21-04:00\n", encoding="utf-8"
+    )
+
+    verdict = gate_three_console_truth(tmp_path, console_changed_at="2026-08-18T01:00:00-04:00")
+
+    joined = " ".join(verdict.evidence)
+    assert "by design" in joined, f"the deliberate one has to say so: {verdict.evidence}"
+    assert "not read, because they record no signature date" not in joined, (
+        "a report unsigned on purpose must not be listed as one that is missing a signature"
+    )
+
+
+def test_a_genuinely_unsigned_report_is_still_called_out(tmp_path) -> None:
+    """The guard, so the marker cannot become a way to silence the warning.
+
+    A report with neither line is still an omission and still says so -- otherwise anyone could
+    quiet the gate by leaving a file ambiguous, which is the opposite of what this change is for.
+    """
+    (tmp_path / "a-gate-3-forgotten.md").write_text("# a walk with no line\n", encoding="utf-8")
+    (tmp_path / "b-gate-3-current.md").write_text(
+        "# current\n\nSigned: 2026-08-18T03:15:21-04:00\n", encoding="utf-8"
+    )
+
+    verdict = gate_three_console_truth(tmp_path, console_changed_at="2026-08-18T01:00:00-04:00")
+
+    assert any("record no signature date" in line for line in verdict.evidence)
+
+
+def test_the_stale_message_does_not_advise_stamping_a_date(tmp_path) -> None:
+    """`CI-W390`: the gate was recommending the one action it exists to prevent.
+
+    Its stale branch read "update that line rather than re-walking the screens." A signature says
+    somebody walked the screens and found them truthful; moving the date without walking produces a
+    green nobody can trace to a check, which is the failure this console exists to replace. The
+    coordinator's ruling is explicit -- do not update a date line to make a gate go green -- and the
+    gate itself was arguing the opposite to every reader who hit it.
+    """
+    (tmp_path / "a-gate-3-walk.md").write_text(
+        "# walk\n\nSigned: 2026-08-01T00:00:00-04:00\n", encoding="utf-8"
+    )
+
+    verdict = gate_three_console_truth(tmp_path, console_changed_at="2026-08-18T00:00:00-04:00")
+
+    joined = " ".join(verdict.evidence)
+    assert verdict.status is CANNOT_TELL
+    assert "update that line" not in joined, (
+        f"the gate must not tell a reader to move a date instead of walking: {joined}"
+    )
+    assert "walk" in joined.lower(), "it has to name the action that would honestly move it"

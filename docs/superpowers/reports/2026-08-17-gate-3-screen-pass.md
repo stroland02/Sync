@@ -1,5 +1,8 @@
 # Gate 3 — does anything on this screen assert a number nothing computed?
 
+Historical: no signature by design. This file is the record of the walks that came before, and `M0-W291` settled that it carries no `Signed:` line -- the re-sign is recorded in the report that did the walking. The line above is read by `scripts/beta_gates.py`, which now reports a report unsigned on purpose apart from one missing a signature, so this stops reading as an omission somebody has to re-investigate every sweep.
+
+
 > **Re-signed 2026-08-17 evening, and this file is the signature the meter reads.**
 > The original pass below was signed at 11:10. The console changed at 11:54 — `M14-W277` (Fleet
 > reads the change-unit grain), `M14-W278` (Settings composed as a grid) and `M14-W279` — and
