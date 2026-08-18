@@ -289,6 +289,11 @@ def app_factory() -> Starlette:
         findings_reader=findings_reader,
         settings_reader=settings_reader,
         settings_writer=settings_writer,
+        # The store itself, because `subscribe_events` opens a connection of its own for the
+        # subscription rather than sharing this one -- a session waiting on `LISTEN` cannot
+        # also serve reads. Passing the store rather than a bound method keeps the protocol
+        # in `app.py` describing the thing that exists instead of a wrapper around it.
+        events_reader=store,
         api_password=configured_api_password(),
     )
 

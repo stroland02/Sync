@@ -343,6 +343,7 @@ def _build_app(
     findings_reader=None,
     settings_reader=_fake_settings_reader,
     settings_writer=_fake_settings_writer,
+    events_reader=None,
     api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
@@ -380,6 +381,7 @@ def _build_app(
         settings_reader=settings_reader,
         settings_writer=settings_writer,
         api_password=api_password,
+        events_reader=events_reader,
     )
 
 
@@ -1802,6 +1804,11 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
 #   unpaginated deliberately.
 _NOT_COLLECTIONS = {
+    # A subscription rather than a page. `limit` and `offset` describe a set that is already
+    # complete when it is asked for, and this one is not: what it carries has not happened
+    # yet. Decision 76 also refused a polling fallback, so there is no second, paged reading
+    # of the same route to keep consistent with.
+    "/api/events",
     "/api/overview",
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
@@ -2134,6 +2141,14 @@ def _normalized(path: str) -> str:
 # it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
+    # CI-W426: the route exists and the console side is the motion work of decisions 76-79.
+    # **Its removal condition is not the same as the others in this set** and that is worth
+    # saying plainly rather than letting a reader assume: an event stream is consumed with
+    # `EventSource`, not `fetch`, so `client.ts` fetching this path is not what will retire
+    # the entry. When the console subscribes, this guard has to learn to see an EventSource
+    # -- otherwise the receipt silently becomes the permanent exemption the note above warns
+    # against.
+    "/api/events",
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
