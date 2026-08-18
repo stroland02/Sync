@@ -65,8 +65,10 @@ them.
 ```bash
 git clone https://github.com/stroland02/sync.git
 cd sync
-npm start         # or: pnpm start — both hand over to docker compose, reimplementing nothing
+npm start
 ```
+
+`pnpm start` is the same command — both hand over to `docker compose`, reimplementing nothing.
 
 `docker compose -f docker-compose.demo.yml up --build` is the same command with the doorbell's
 diagnosis removed; `npm run down` (or `pnpm down`) stops it and removes its database. The script
