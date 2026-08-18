@@ -75,6 +75,7 @@ import { ActivityTimeline } from "@/features/workflows/activity-timeline"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { ReplyBox } from "@/features/workflows/reply-box"
 import { RunFactRail } from "@/features/workflows/run-fact-rail"
+import { runIdentity } from "@/features/workflows/run-identity"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { SettledOutput } from "@/features/workflows/settled-output"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
@@ -238,6 +239,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
 
   return (
     <DetailGrid
+      railSide="narrow"
       header={
         <PageHeader
           trail={
@@ -326,7 +328,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
 
                 <ActivityTimeline state={data} />
 
-                <ReplyBox />
+                <ReplyBox waitingOn={data === undefined ? null : runIdentity(data).waitingOn} />
               </TabsContent>
 
               <TabsContent value="findings" className="flex min-w-0 flex-col gap-8">
