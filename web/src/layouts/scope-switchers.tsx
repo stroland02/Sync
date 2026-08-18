@@ -63,6 +63,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/vendor/supabase/ui/po
  * is still a path the registry declares, which is the drift that would otherwise be silent.
  */
 export const REPO_SCOPED_PATHS: readonly string[] = [
+  // The Overview takes a scope in place rather than being navigated away from, because the owner
+  // ruled it IS the selected codebase rather than a directory of codebases. Without this entry the
+  // switcher sends a reader to `/repositories/{id}` and the codebase fact band on `/` can only ever
+  // be filled by typing `?repo_id=` into the address bar.
+  "/",
   "/vendors/:vendorId",
   "/detectors",
   "/bindings/vendors/:vendorId/operations/:operationId",
