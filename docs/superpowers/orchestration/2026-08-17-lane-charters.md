@@ -677,3 +677,19 @@ the work described in it is real and landed. And a worker whose terminal loses i
 `consumer_fenced` on a scoped check and **silence on an unscoped one**, which is why Lane A spent
 turns diagnosing an empty inbox. The lane's own fix is `orca orchestration run-use --run <run_id>`;
 until it runs, `orca terminal send` is the only channel that reaches it.
+
+## Trap: `orca terminal send` types without submitting, and truncates a long paste at the start
+
+Two separate defects, both measured 2026-08-18 while reaching a lane whose mailbox was fenced.
+
+**It does not press Enter.** Without `--enter` the text lands in the agent's input box and sits
+there unsubmitted, looking — in `terminal read` — exactly like a message that was delivered and
+ignored. A coordinator watching for a reply waits on a prompt that was never sent.
+
+**A long paste loses its beginning, not its end.** A ~2,000-character brief arrived with its first
+half gone; the lane received the tree-hygiene footer and none of the two work assignments above it,
+then said so rather than guessing, which is the only reason it was caught. **Send several short
+messages with `--enter`, numbered `1 of N`, and put nothing load-bearing in the first sentence.**
+
+This channel is the fallback for a fenced lane, so it is used at exactly the moment nothing else
+works — which is the worst moment to discover that a delivery reported `ok` and arrived headless.
