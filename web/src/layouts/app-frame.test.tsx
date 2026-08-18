@@ -51,6 +51,9 @@ vi.mock(import("@/api/queries"), async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   clearErrors()
+  // The pin persists, which is the point of it — and a test that pins the sidebar would otherwise
+  // hand the next one a reader who has already chosen. Caught by exactly that, once.
+  window.localStorage.clear()
 })
 
 function renderAt(path: string) {
@@ -208,7 +211,128 @@ describe("a failure displaces the chassis rather than floating over it", () => {
   })
 })
 
-describe("the sidebar minimises without moving a row", () => {
+describe("the sidebar reveals itself on hover and returns to a rail", () => {
+  /**
+   * The owner asked for this by name: *"the sidebar only expands when you're hovering over it and
+   * then automatically minimizes once you drag off."* It reconciles the two things otherwise in
+   * conflict — a rail that does not consume width, and full labels when they are wanted.
+   *
+   * **jsdom has no layout**, so no width here is read as a pixel. What is asserted is the state
+   * each element declares, which is the thing the derivation in `sidebar-collapse.ts` computes and
+   * the thing a wrong answer would show up in. The widths themselves are measured in Chrome and
+   * recorded in `DESIGN.md`.
+   */
+  function panel(): HTMLElement {
+    return destinations().closest("[data-state]") as HTMLElement
+  }
+
+  /** The box the content column actually gives up, which a hover must never move. */
+  function reserve(): HTMLElement {
+    return document.querySelector("[data-sidebar-reserve]") as HTMLElement
+  }
+
+  function pin(): HTMLElement {
+    return screen.getByRole("button", { name: /pin the sidebar|unpin the sidebar/i })
+  }
+
+  it("starts as a rail for a reader who has not pinned it", () => {
+    renderAt("/")
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+  })
+
+  it("expands while the pointer is inside it and returns to a rail when it leaves", () => {
+    renderAt("/")
+
+    fireEvent.pointerEnter(reserve())
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+
+    fireEvent.pointerLeave(reserve())
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+  })
+
+  it("holds open while focus is inside it, so a hover does not trap a keyboard reader", () => {
+    // Hover alone would put every label behind a pointer. A reader tabbing into the sidebar has to
+    // see what they are tabbing through, and has to keep seeing it after any pointer has left.
+    renderAt("/")
+
+    const detectors = within(destinations()).getByRole("link", { name: /detectors/i })
+    fireEvent.focusIn(detectors)
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+
+    fireEvent.pointerLeave(reserve())
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+
+    fireEvent.focusOut(detectors)
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+  })
+
+  it("keeps focus inside when it moves between two rows", () => {
+    // `focusout` fires before `focusin` when focus travels within the sidebar. Collapsing on it
+    // unconditionally would flicker the panel shut and open again on every arrow key.
+    renderAt("/")
+
+    const detectors = within(destinations()).getByRole("link", { name: /detectors/i })
+    const settings = within(destinations()).getByRole("link", { name: /settings/i })
+
+    fireEvent.focusIn(detectors)
+    fireEvent.focusOut(detectors, { relatedTarget: settings })
+
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+  })
+
+  it("never moves the width it has taken from the content column on a hover", () => {
+    // The reveal is an overlay. If the reserved box tracked the revealed one, the page beside it
+    // would jump every time a pointer crossed the rail on its way somewhere else.
+    renderAt("/")
+
+    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
+    fireEvent.pointerEnter(reserve())
+    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+  })
+
+  it("holds the panel open once pinned, and gives up the width to do it", () => {
+    renderAt("/")
+
+    fireEvent.click(pin())
+
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("expanded")
+
+    // A pointer that never enters, and one that leaves, both leave a pinned panel alone.
+    fireEvent.pointerLeave(reserve())
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+  })
+
+  it("says whether it is pinned, and offers the other state", () => {
+    renderAt("/")
+
+    // `aria-pressed` is the pin — a preference the reader sets. `aria-expanded` is what the panel
+    // is doing right now, which the pointer also moves. Both are true statements and neither
+    // substitutes for the other.
+    expect(pin().getAttribute("aria-pressed")).toBe("false")
+    expect(pin().getAttribute("aria-expanded")).toBe("false")
+
+    fireEvent.click(pin())
+
+    expect(pin().getAttribute("aria-pressed")).toBe("true")
+    expect(pin().getAttribute("aria-expanded")).toBe("true")
+  })
+
+  it("carries the pin control in the top row beside the wordmark", () => {
+    // Owner review item 4. It floated in the list; the reference convention is one top row holding
+    // the wordmark and the panel control together, and that is also what frees the list.
+    renderAt("/")
+
+    const wordmark = within(destinations()).getByText("sync")
+    const row = wordmark.parentElement
+
+    expect(row).not.toBeNull()
+    expect(row!.contains(pin())).toBe(true)
+  })
+})
+
+describe("the sidebar changes density without moving a row", () => {
   /**
    * The constraint, carried from `M7-W160`'s commit body and the reason its predecessor was
    * deleted: **minimising changes density, not navigation.** Every destination reachable expanded
@@ -222,6 +346,8 @@ describe("the sidebar minimises without moving a row", () => {
    * heading's text goes `sr-only` rather than the heading row being removed.
    *
    * This is `M7-W160`'s own guard shape, which was proved red twice before it was trusted.
+   * `M14-W376` drives it from the hover reveal as well as the pin, because the reveal is now the
+   * transition a reader meets constantly and the pin is the one they meet once.
    */
   function skeleton(): string[] {
     return [...destinations().querySelectorAll("*")].map(
@@ -229,47 +355,50 @@ describe("the sidebar minimises without moving a row", () => {
     )
   }
 
-  function toggle(): HTMLElement {
-    return screen.getByRole("button", { name: /minimise the sidebar|expand the sidebar/i })
+  function reserve(): HTMLElement {
+    return document.querySelector("[data-sidebar-reserve]") as HTMLElement
   }
 
-  it("keeps the same elements in the same order at both widths", () => {
+  it("keeps the same elements in the same order across a hover", () => {
     renderAt("/")
 
-    const expanded = skeleton()
-    fireEvent.click(toggle())
-    const minimised = skeleton()
+    const rail = skeleton()
+    fireEvent.pointerEnter(reserve())
+    const revealed = skeleton()
 
-    // Identical, element for element. A heading row that vanished when minimised would shorten this
-    // list and move every icon beneath it upward — which is the defect, not a detail of it.
-    expect(minimised).toEqual(expanded)
+    // Identical, element for element. A heading row that vanished at the rail width would shorten
+    // this list and move every icon beneath it upward — which is the defect, not a detail of it.
+    expect(rail.length).toBeGreaterThan(0)
+    expect(revealed).toEqual(rail)
   })
 
-  it("keeps every destination reachable at the minimised width", () => {
+  it("keeps the same elements in the same order across a pin", () => {
     renderAt("/")
 
-    fireEvent.click(toggle())
+    const rail = skeleton()
+    fireEvent.click(screen.getByRole("button", { name: /pin the sidebar|unpin the sidebar/i }))
+    const pinned = skeleton()
+
+    expect(rail.length).toBeGreaterThan(0)
+    expect(pinned).toEqual(rail)
+  })
+
+  it("keeps every destination reachable at the rail width", () => {
+    // No hover, no pin, no click of any kind: this is the state the console loads in now.
+    renderAt("/")
 
     const reachable = [...destinations().querySelectorAll("a[href]")].map((el) =>
       el.getAttribute("href")
     )
-    for (const route of ROUTES.filter((r) => !r.path.includes(":"))) {
+    const parameterless = ROUTES.filter((r) => !r.path.includes(":"))
+    expect(parameterless.length).toBeGreaterThan(0)
+    expect(DESTINATIONS.length).toBeGreaterThan(0)
+    for (const route of parameterless) {
       expect(reachable).toContain(route.path)
     }
     for (const entry of DESTINATIONS) {
       expect(reachable).toContain(entry.path)
     }
-  })
-
-  it("says which state it is in, and offers the other one", () => {
-    renderAt("/")
-
-    // An explicit control with `aria-expanded`, not a hover and not a viewport read. `M7-W171`
-    // deleted a `collapsed` state initialised from `window.innerWidth` once at mount with no resize
-    // listener, so an operator's choice did not survive a resize. Nothing here infers one.
-    expect(toggle().getAttribute("aria-expanded")).toBe("true")
-    fireEvent.click(toggle())
-    expect(toggle().getAttribute("aria-expanded")).toBe("false")
   })
 })
 
@@ -538,6 +667,23 @@ describe("the console says whose data this is", () => {
     const note = screen.getByText(/one deployment/i).textContent ?? ""
     expect(note).toMatch(/filtered/i)
     expect(note).toMatch(/not another customer/i)
+  })
+
+  it("keeps both qualifications out of the sidebar, so no reveal gates them", () => {
+    /**
+     * `.claude/rules/console-surface.md` forbids collapsing a protected sentence behind a
+     * disclosure. These two used to sit in the sidebar footer, and that was defensible while the
+     * sidebar loaded expanded — the file said so in as many words. **Hover-expand destroys that
+     * justification**: an unpinned rail would put both sentences behind a pointer move, which is a
+     * disclosure whatever it is called. They moved into the content column instead, where nothing
+     * gates them, and this is the assertion that stops them drifting back.
+     */
+    renderAt("/")
+
+    for (const sentence of [/one deployment/i, /Nine graph levels/i]) {
+      const node = screen.getByText(sentence)
+      expect(destinations().contains(node)).toBe(false)
+    }
   })
 })
 

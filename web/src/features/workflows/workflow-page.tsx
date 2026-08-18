@@ -38,16 +38,34 @@
  * page's only focal point behind a query that 404s for every patched or abandoned finding, which is
  * exactly the run most worth reading. `lib/detail-title.tsx` carries the argument; the breadcrumb
  * and the rail's first row both still reach the finding in one click.
+ *
+ * ## A persistent fact rail beside two tabs, by the page-IA plan's section 1
+ *
+ * The owner's sentence redefined the screen: it is where a human intervenes in work that is still
+ * in progress, not a record of what an agent did. Three things follow, and each is a structural
+ * change rather than a restyle.
+ *
+ * **The rail holds still.** It carried the sequence before, which meant the run's identity scrolled
+ * away exactly when a reviewer reading the transcript needed it. `run-fact-rail.tsx` now owns it and
+ * sticks; the sequence moved into the main pane where it belongs.
+ *
+ * **Two tabs over one run.** `Activity` is the turn-by-turn transcript — the narrative, the
+ * checkpoint timeline, and the reply box at the bottom. `Findings` is the settled output. Nothing is
+ * duplicated across them: the run's outcome appears in Activity at the point in the narrative where
+ * the run stopped, which is what makes an abandoned run legible, and in Findings as the verdict the
+ * tab exists to state. Only one tab is on screen at a time, so that is one fact in two places a
+ * reader reaches by two different questions rather than the same fact at two weights.
+ *
+ * **The reply box cannot send, and says so.** `M10` built resume-on-review-comment; the route that
+ * would carry a reviewer's turn into a run does not exist, because the API is read-only.
+ * `reply-box.tsx` carries the refusal and names the missing route.
  */
 
-import type { ReactNode } from "react"
 import { FetchedAt } from "@/components/fetched-at"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
-import type { WorkflowState } from "@/api/types"
-import { type Fact, FactList } from "@/components/fact-list"
 import { MetricPanel } from "@/components/metric-panel"
 import { Skeleton } from "@/components/skeleton"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
@@ -55,7 +73,10 @@ import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { ActivityTimeline } from "@/features/workflows/activity-timeline"
 import { NodeSequence } from "@/features/workflows/node-sequence"
+import { ReplyBox } from "@/features/workflows/reply-box"
+import { RunFactRail } from "@/features/workflows/run-fact-rail"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
+import { SettledOutput } from "@/features/workflows/settled-output"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { DetailGrid } from "@/layouts/detail-grid"
@@ -64,6 +85,7 @@ import { UnknownRoute } from "@/layouts/unknown-route"
 import { DetailTitleText, runTitle } from "@/lib/detail-title"
 import { formatFindingBadge } from "@/lib/format"
 import { formatTimestamp } from "@/lib/format"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/tabs"
 
 const DEFAULT_QUESTION =
   "What did Sync's remediation graph do about this finding, node by node?"
@@ -190,66 +212,6 @@ function Arrival({ findingId }: { findingId: string }) {
   )
 }
 
-/**
- * The run's own facts, in the rail beside the narrative.
- *
- * Three states per fact and they are three different claims, the same three every ported detail
- * level spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is
- * a value. The finding is answered by the URL rather than by the query, so it never wears either.
- *
- * There is no Outcome row here on purpose. The outcome is the narrative's closing entry, where it
- * carries its reason and its position; a word for it in the rail as well would be the same fact at
- * two weights, which is the defect the Fleet port's ruling 2 named.
- *
- * Both identifiers are `<code>` at the meta step. They are values a reader copies rather than reads,
- * which is the register they belong in and the reason M7-W193 took the finding id out of the title.
- */
-function runFacts(data: WorkflowState | undefined, failure: ReactNode | null, findingId: string): Fact[] {
-  function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
-    if (data !== undefined) return render(data)
-    if (failure !== null) return failure
-    return <Skeleton width={width} />
-  }
-
-  return [
-    {
-      label: "Finding",
-      value: (
-        <Link
-          to={`/findings/${encodeURIComponent(findingId)}`}
-          className="underline underline-offset-2"
-        >
-          <code className="font-mono text-meta break-all select-all">{findingId}</code>
-        </Link>
-      ),
-    },
-    {
-      label: "Run",
-      value: fact("w-40", (state) => (
-        <code className="font-mono text-meta break-all select-all">{state.thread_id}</code>
-      )),
-    },
-    {
-      label: "Generations",
-      value: fact("w-12", (state) => (
-        <div className="flex flex-col gap-field">
-          <span className="font-mono">{state.generation_count}</span>
-          {state.generation_count > 1 && (
-            <span className="text-meta text-ink-muted">
-              This is the most recent of {state.generation_count} runs the checkpointer holds for
-              this finding.{" "}
-              <Link to="/" className="underline underline-offset-2">
-                The fleet screen
-              </Link>{" "}
-              lists every one.
-            </span>
-          )}
-        </div>
-      )),
-    },
-  ]
-}
-
 function Workflow({ findingId, question }: { findingId: string; question: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
@@ -291,48 +253,7 @@ function Workflow({ findingId, question }: { findingId: string; question: string
           question={question}
         />
       }
-      rail={
-        <div className="flex min-w-0 flex-col gap-section">
-          <FactList facts={runFacts(data, failure, findingId)} />
-
-          {data !== undefined && (
-            <>
-              <p className="text-body text-muted-foreground">
-                <Link
-                  to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
-                  className="underline underline-offset-2"
-                >
-                  {/* The possessive asserted a pull request on every run, including the ones that
-                      never opened one. The link goes to the same place either way; what it says
-                      follows the outcome the payload already carries. */}
-                  {data.outcome === "opened"
-                    ? "See the pull request's evidence bundle"
-                    : "See the evidence bundle for this run"}
-                </Link>{" "}
-                — the five nodes that answer whether this run earned a merge, at their own address
-                a reviewer can send on.
-              </p>
-
-              <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>
-                <NodeSequence
-                  nodes={data.nodes}
-                  outcome={data.outcome}
-                  opening={<Arrival findingId={findingId} />}
-                  closing={
-                    <RunOutcome
-                      outcome={data.outcome}
-                      abandonReason={data.abandon_reason}
-                      reportReason={data.report_reason}
-                      below={BELOW}
-                      frame="entry"
-                    />
-                  }
-                />
-              </MetricPanel>
-            </>
-          )}
-        </div>
-      }
+      rail={<RunFactRail findingId={findingId} data={data} failure={failure} />}
     >
       <div className="flex min-w-0 flex-col gap-8">
         {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
@@ -379,12 +300,44 @@ function Workflow({ findingId, question }: { findingId: string; question: string
               />
             )}
 
-            <ActivityTimeline state={data} />
+            <Tabs defaultValue="activity" className="flex min-w-0 flex-col gap-8">
+              <TabsList className="gap-section">
+                <TabsTrigger value="activity">Activity</TabsTrigger>
+                <TabsTrigger value="findings">Findings</TabsTrigger>
+              </TabsList>
 
-            <SupersededGenerations
-              generations={data.generations}
-              currentThreadId={data.thread_id}
-            />
+              <TabsContent value="activity" className="flex min-w-0 flex-col gap-8">
+                <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>
+                  <NodeSequence
+                    nodes={data.nodes}
+                    outcome={data.outcome}
+                    opening={<Arrival findingId={findingId} />}
+                    closing={
+                      <RunOutcome
+                        outcome={data.outcome}
+                        abandonReason={data.abandon_reason}
+                        reportReason={data.report_reason}
+                        below={BELOW}
+                        frame="entry"
+                      />
+                    }
+                  />
+                </MetricPanel>
+
+                <ActivityTimeline state={data} />
+
+                <ReplyBox />
+              </TabsContent>
+
+              <TabsContent value="findings" className="flex min-w-0 flex-col gap-8">
+                <SettledOutput findingId={findingId} state={data} />
+
+                <SupersededGenerations
+                  generations={data.generations}
+                  currentThreadId={data.thread_id}
+                />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
