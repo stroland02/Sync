@@ -714,6 +714,10 @@ class RepoSettings(BaseModel):
     merge_policy: MergePolicy = "when_checks_pass"
     merge_method: MergeMethod = "squash"
     base_branch: str = "main"
+    # The git remote the full loop addresses: `sync run` clones it, `gh api` reads its CI and
+    # opens the pull request. None means never configured -- a different fact from configured
+    # and empty, and the setup checklist reports it as the missing step.
+    remote_url: str | None = None
     merge_policy_refusals: dict[str, str] = Field(
         default_factory=lambda: dict(REFUSED_MERGE_POLICIES)
     )

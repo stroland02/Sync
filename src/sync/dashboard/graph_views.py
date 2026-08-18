@@ -663,6 +663,7 @@ def repo_settings(store: GraphStore, repo_id: str) -> dict:
         "merge_policy": settings.merge_policy,
         "merge_method": settings.merge_method,
         "base_branch": settings.base_branch,
+        "remote_url": settings.remote_url,
         "allowed_merge_policies": list(ALLOWED_MERGE_POLICIES),
         "allowed_merge_methods": list(ALLOWED_MERGE_METHODS),
         "merge_policy_refusals": settings.merge_policy_refusals,

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Settings test suite for sub-navigation, card-scoped settings, refusal contracts, and about platform panel.
  */
 
@@ -65,6 +65,7 @@ function renderSettings(initialEntry = "/settings") {
     merge_policy: "never",
     merge_method: "squash",
     base_branch: "main",
+    remote_url: null,
   })
 
   return render(

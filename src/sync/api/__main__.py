@@ -23,7 +23,7 @@ from starlette.applications import Starlette
 from sync.api.app import create_app
 from sync.api.auth import configured_api_password, validate_bind_security
 from sync.core.models import RepoContext, RepoSettings
-from sync.dashboard import fleet, graph_views
+from sync.dashboard import fleet, graph_views, setup
 from sync.dashboard.adapters import adapter_inventory
 from sync.dashboard.patch import patch_for_finding
 from sync.dashboard.queries import workflow_state
@@ -161,6 +161,14 @@ def app_factory() -> Starlette:
     def repositories_reader():
         return fleet.repositories(store)
 
+    def setup_reader(*, repo_id: str | None = None):
+        # The sole repository stands in when none is named — the install story is one codebase,
+        # and the checklist is most useful before anybody has learned the query parameter.
+        if repo_id is None:
+            repo_ids = fleet.repositories(store).get("repo_ids", [])
+            repo_id = repo_ids[0] if len(repo_ids) == 1 else None
+        return setup.setup_checklist(store, repo_id=repo_id)
+
     def abandonment_reader():
         return fleet.abandonment_by_change_kind(store)
 
@@ -294,12 +302,18 @@ def app_factory() -> Starlette:
         merge_policy = payload.get("merge_policy", current.merge_policy)
         merge_method = payload.get("merge_method", current.merge_method)
         base_branch = payload.get("base_branch", current.base_branch)
+        # Absent key keeps the stored value; an explicit empty string clears it, because
+        # "disconnect this remote" is an act the screen offers and None is how it is stored.
+        remote_url = payload.get("remote_url", current.remote_url)
+        if isinstance(remote_url, str):
+            remote_url = remote_url.strip() or None
         store.upsert_repo_settings(
             RepoSettings(
                 repo_id=repo_id,
                 merge_policy=merge_policy,
                 merge_method=merge_method,
                 base_branch=base_branch.strip() if isinstance(base_branch, str) and base_branch.strip() else current.base_branch,
+                remote_url=remote_url,
             )
         )
 
@@ -333,6 +347,7 @@ def app_factory() -> Starlette:
         findings_reader=findings_reader,
         settings_reader=settings_reader,
         settings_writer=settings_writer,
+        setup_reader=setup_reader,
         api_password=configured_api_password(),
     )
 

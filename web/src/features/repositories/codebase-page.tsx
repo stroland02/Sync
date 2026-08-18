@@ -131,10 +131,10 @@ function SetupCard({ repoId }: { repoId: string }) {
       </div>
       <div className="flex flex-wrap items-center gap-row">
         <Button asChild variant="outline" size="sm">
-          <Link to="/settings?group=github-connection">Connect to Git</Link>
+          <Link to="/settings?group=setup">Setup checklist</Link>
         </Button>
         <Button asChild variant="outline" size="sm">
-          <Link to="/settings?group=codebases">Manage codebases</Link>
+          <Link to="/settings?group=github-connection">Connect to Git</Link>
         </Button>
         <Button asChild variant="outline" size="sm">
           <Link to="/settings?group=pages">How these pages work</Link>

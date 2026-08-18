@@ -2879,12 +2879,13 @@ class GraphStore:
         refusals_json = json.dumps(settings.merge_policy_refusals)
         self._connect().execute(
             """
-            INSERT INTO repo_settings (repo_id, merge_policy, merge_method, base_branch, merge_policy_refusals, updated_at)
-            VALUES (%s, %s, %s, %s, %s, now())
+            INSERT INTO repo_settings (repo_id, merge_policy, merge_method, base_branch, remote_url, merge_policy_refusals, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, now())
             ON CONFLICT (repo_id) DO UPDATE SET
                merge_policy = EXCLUDED.merge_policy,
                merge_method = EXCLUDED.merge_method,
                base_branch = EXCLUDED.base_branch,
+               remote_url = EXCLUDED.remote_url,
                merge_policy_refusals = EXCLUDED.merge_policy_refusals,
                updated_at = now()
             """,
@@ -2893,6 +2894,7 @@ class GraphStore:
                 settings.merge_policy,
                 settings.merge_method,
                 settings.base_branch,
+                settings.remote_url,
                 refusals_json,
             ],
         )

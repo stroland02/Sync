@@ -22,9 +22,11 @@ import { GithubConnectionSettingsPanel } from "@/features/settings/github-connec
 import { AdaptersSettingsPanel } from "@/features/settings/adapters-settings-panel"
 import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
 import { PagesGuidePanel } from "@/features/settings/pages-guide-panel"
+import { SetupPanel } from "@/features/settings/setup-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
 
 export type SettingsGroup =
+  | "setup"
   | "pull-requests"
   | "codebases"
   | "adapters"
@@ -45,6 +47,14 @@ interface GroupDef {
  * what this deployment watches precedes what it does when it finds something.
  */
 const SETTING_GROUPS: readonly GroupDef[] = [
+  // Setup leads, amending decision 17's order on the owner's 2026-08-18 direction: the
+  // checklist is what makes every group below it configurable, and a fresh install reads
+  // this screen top-down.
+  {
+    id: "setup",
+    label: "Setup",
+    description: "The full loop's prerequisites, probed — and the git remote it addresses",
+  },
   {
     id: "codebases",
     label: "Codebases",
@@ -159,6 +169,9 @@ export function SettingsPage() {
 
         {/* Main Setting Panel */}
         <main className="flex-1 min-w-0 flex flex-col gap-section">
+          {selectedGroup === "setup" && (
+            <SetupPanel repoId={activeRepo} />
+          )}
           {selectedGroup === "pull-requests" && (
             <PullRequestsSettingsPanel repoId={activeRepo} />
           )}

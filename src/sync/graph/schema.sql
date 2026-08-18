@@ -506,14 +506,23 @@ CREATE TABLE IF NOT EXISTS repo_context (
 -- `merge_policy`: 'never' | 'when_checks_pass'. Immediate merge without verification is refused.
 -- `merge_method`: 'squash' | 'merge' | 'rebase'.
 -- `base_branch`: target base branch (default: 'main').
+-- `remote_url`: the git remote the full loop addresses -- `sync run` clones it and `gh api`
+-- reads CI and opens the pull request against it. NULL means never configured, which the setup
+-- checklist reports as the missing step rather than guessing an origin from a local checkout.
 CREATE TABLE IF NOT EXISTS repo_settings (
     repo_id                 TEXT PRIMARY KEY,
     merge_policy            TEXT NOT NULL DEFAULT 'when_checks_pass',
     merge_method            TEXT NOT NULL DEFAULT 'squash',
     base_branch             TEXT NOT NULL DEFAULT 'main',
+    remote_url              TEXT,
     merge_policy_refusals   JSONB NOT NULL DEFAULT '{"immediate": "Refused: violates invariant ''nothing reaches a pull request unverified''"}'::jsonb,
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- The idempotent form for a database created before the column existed. `CREATE TABLE IF NOT
+-- EXISTS` never alters an existing table, so a schema-only addition silently misses every
+-- database that predates it -- this is the one statement that reaches them.
+ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS remote_url TEXT;
 
 -- Grain: one row per attempt (not per adapter).
 --

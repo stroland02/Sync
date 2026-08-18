@@ -63,6 +63,7 @@ DismissalWriter = Callable[..., None]
 # graph-surface questions, and folding them into the surface would ask one abstraction to speak
 # three databases' worth of shape.
 RunsReader = Callable[..., dict[str, Any]]
+SetupReader = Callable[..., dict[str, Any]]
 CorpusReader = Callable[..., dict[str, Any]]
 CorpusHealthReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
@@ -223,6 +224,7 @@ def create_app(
     findings_reader: FindingsReader | None = None,
     settings_reader: SettingsReader | None = None,
     settings_writer: SettingsWriter | None = None,
+    setup_reader: SetupReader | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -480,6 +482,14 @@ def create_app(
             return _not_found("workflow", finding_id)
         return JSONResponse(payload)
 
+    async def setup(request: Request) -> JSONResponse:
+        """The full loop's prerequisites, probed now — each item its own state, no figure over
+        them. Probing on request is the point: a cached verdict about a credential is stale the
+        moment somebody logs in to fix it."""
+        if setup_reader is None:
+            return JSONResponse({"error": "Setup reader not configured"}, status_code=501)
+        return JSONResponse(setup_reader(repo_id=request.query_params.get("repo_id")))
+
     async def runs(request: Request) -> JSONResponse:
         repo_id = request.query_params.get("repo_id")
         limit = _limit_param(request)
@@ -660,6 +670,22 @@ def create_app(
                 {"error": "base_branch must be a non-empty string"},
                 status_code=400,
             )
+        # The same refusal `sync run` makes at the CLI, made where the screen submits: a
+        # filesystem path carries no owner and name for `gh api`, so accepting one here stores
+        # a remote the loop cannot address. Empty clears the setting and is not an error.
+        remote_url = payload.get("remote_url")
+        if remote_url is not None:
+            if not isinstance(remote_url, str):
+                return JSONResponse({"error": "remote_url must be a string"}, status_code=400)
+            candidate = remote_url.strip()
+            if candidate and "://" not in candidate and not candidate.startswith("git@"):
+                return JSONResponse(
+                    {
+                        "error": "remote_url must be a git remote URL (https://... or git@...), "
+                        "not a path — the loop addresses the repository through the forge"
+                    },
+                    status_code=400,
+                )
         try:
             settings_writer(repo_id, payload)
         except ValueError as e:
@@ -685,6 +711,7 @@ def create_app(
         Route("/api/findings/{finding_id}/dismissal", set_dismissal, methods=["POST"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
+        Route("/api/setup", setup, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),
         Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
