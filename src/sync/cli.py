@@ -2379,7 +2379,12 @@ def build_parser() -> argparse.ArgumentParser:
              "credentials",
     )
     index_parser.add_argument("--dsn", default=DEFAULT_DSN)
-    index_parser.add_argument("--cache", default=".cache/specs")
+    index_parser.add_argument(
+        "--cache", default="vendor-cache",
+        help="where staged vendor symbol maps live. Defaults to the baked-in cache the "
+             "repository ships, so a first run resolves a vendor with no network, no `gh` and no "
+             "credential -- `run` stages into `.cache/specs` instead, because it fetches",
+    )
     index_parser.set_defaults(func=index_repository)
 
     ingest_parser = sub.add_parser(
