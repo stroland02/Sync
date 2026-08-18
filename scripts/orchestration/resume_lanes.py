@@ -176,7 +176,15 @@ def reset_seconds(notice: str, now: int | None = None) -> int | None:
     try:
         zone = ZoneInfo(zone_name)
     except (ZoneInfoNotFoundError, ValueError):
-        # An unknown zone is an absence, not a reason to substitute the machine's own.
+        # An unknown zone is an absence, not a reason to substitute the machine's own. But a zone
+        # this interpreter cannot resolve *at all* is an environment fault rather than a bad
+        # notice, and swallowing it silently holds a lane forever -- so it is raised.
+        if not timezone_database_available():
+            raise SystemExit(
+                f"cannot resolve the timezone {zone_name!r}: this interpreter has no IANA "
+                "database. Run the sweep with `uv run python scripts/orchestration/resume_lanes.py` "
+                "-- the project environment carries `tzdata` and the system interpreter does not."
+            )
         return None
     hour = int(hour) % 12 + (12 if half.lower() == "p" else 0)
     moment = datetime.fromtimestamp(now if now is not None else time.time(), zone)
@@ -198,6 +206,24 @@ def reset_seconds(notice: str, now: int | None = None) -> int | None:
 
 # No agent CLI here publishes a limit window longer than about five hours. A reset computed to be
 # further out than this came from rolling a past wall clock forward, which means it already lifted.
+def timezone_database_available() -> bool:
+    """Whether this interpreter can resolve a named IANA zone.
+
+    Windows ships no IANA database, so `zoneinfo` needs the `tzdata` package. The project
+    environment has it and the system interpreter does not, which made this script behave
+    differently depending on which `python` ran it -- and say nothing, because the failure was a
+    caught `ZoneInfoNotFoundError` returning `None`, and a `None` window is a hold with no deadline.
+    Two lanes were held indefinitely on a reset ten minutes away.
+
+    **An environment that cannot answer must say so rather than answer wrongly.**
+    """
+    try:
+        ZoneInfo("America/New_York")
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
+
+
 LONGEST_PLAUSIBLE_WINDOW_SECONDS = 6 * 3600
 
 HOLD_CLOCK = Path(__file__).resolve().parent / "hold_clock.json"
