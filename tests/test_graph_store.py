@@ -11,6 +11,8 @@ from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
+SEEN = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
+
 
 @pytest.fixture()
 def store():
