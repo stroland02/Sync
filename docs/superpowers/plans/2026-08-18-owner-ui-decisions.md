@@ -448,3 +448,42 @@ offers `Send test` — it never accepts the value and never displays it.** This 
 already given for `.sync/context.md`: *show it, say where it comes from, never write it.* The
 screen states that difference rather than hiding it, because it is a better answer than the
 reference's, not a missing feature.
+
+## Round ten: decisions 53-56, the style contract. Owner-selected 2026-08-18
+
+**Stated influences: Radix, shadcn/ui, and Vercel's Geist — dark-first, high-density, keyboard
+accessible.** These are conventions of the form and `interface-originality.md` permits learning them
+from anything. What follows are token values, and `DESIGN.md` is the contract: **every one of these
+lands there with its arithmetic, or it does not land.**
+
+**53. Surfaces separate by a 1px border and nothing else.** Panels and cards share the page
+background; a divider is a rule, not a gap. **No shadow anywhere except true overlays** — drawer,
+command palette, popover. **Rejected: raised backgrounds**, and **rejected: border plus a step.**
+
+This is the flattest of the three and the densest, and it suits a console whose screens are mostly
+tables and facts rather than objects.
+
+**54. The system font stack, with monospace for identifiers.** No webfont, no build step, no network
+cost. Monospace is reserved for things that are code or an id — file paths with line numbers,
+operation names, run ids, vendor slugs. **Rejected: self-hosted Geist**, and **rejected: Inter with
+JetBrains Mono.**
+
+**Monospace is doing semantic work here, not decorative work.** If a value is monospace it is
+something you could search for or paste; that rule is worth keeping when somebody is tempted to
+monospace a number.
+
+**55. The focus ring is always visible, and keyboard navigation is tab order only.** No arrow-key
+grid behaviour inside tables.
+
+**The consequence, and it is reversible.** Radix's default is `:focus-visible`, which hides the ring
+from mouse users precisely because a ring left behind after a click reads as noise. Choosing
+always-visible trades that for never being invisible to somebody who needs it. **If the rings feel
+loud in use, the fix is `:focus-visible` and it is a one-token change** — recorded here so it is a
+decision to revisit rather than a bug to report.
+
+**56. 6px radius, 32px control height, 32px table rows** — shadcn's proportions. About 28 rows at
+1080p. **Rejected: 4px/28px** as too tight, **rejected: 8px/36px** as too roomy.
+
+**This binds decision 40.** Dense tables at 50 rows per page now means 32px rows, and
+`--spacing-row` already names 8px — the guards that failed on `main` tonight exist to keep exactly
+these values in one place. **No screen spells 32px raw.**
