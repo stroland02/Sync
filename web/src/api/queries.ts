@@ -21,8 +21,10 @@ import {
   fetchRepositoryObserved,
   fetchRuns,
   fetchVendorChanges,
+  fetchVendorOperations,
   fetchVendorFindings,
   fetchWorkflow,
+  fetchRepositoryGraph,
 } from "@/api/client"
 import type {
   BindingSurfaceParams,
@@ -81,6 +83,13 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
         { limit, offset, repoId: params.repoId, severity, path, order },
         signal,
       ),
+  })
+}
+
+export function useVendorOperations(vendorId: string, repoId: string | null) {
+  return useQuery({
+    queryKey: ["vendors", vendorId, "operations", repoId],
+    queryFn: ({ signal }) => fetchVendorOperations(vendorId, repoId, signal),
   })
 }
 
@@ -251,6 +260,17 @@ export function useRepositoryCoverage(repoId: string) {
   return useQuery({
     queryKey: ["repositories", repoId, "coverage"],
     queryFn: ({ signal }) => fetchRepositoryCoverage(repoId, signal),
+  })
+}
+
+/**
+ * This repository's call sites and the vendors they reach. Not polled, for the same reason
+ * `useRepositoryCoverage` is not: the index moves when a pass runs, not on a timer.
+ */
+export function useRepositoryGraph(repoId: string) {
+  return useQuery({
+    queryKey: ["repositories", repoId, "graph"],
+    queryFn: ({ signal }) => fetchRepositoryGraph(repoId, signal),
   })
 }
 

@@ -162,6 +162,25 @@ def _fake_coverage_reader(repo_id: str) -> dict[str, Any]:
     return {"repo_id": repo_id, "by_vendor": {}, "total_call_sites": 0}
 
 
+def _fake_graph_reader(repo_id: str) -> dict[str, Any] | None:
+    return {
+        "repo_id": repo_id,
+        "vendors": [],
+        "bindings": [],
+        "total_bindings": 0,
+        "truncated": False,
+    }
+
+
+def _fake_vendor_operations_reader(vendor_id: str, *, repo_id=None) -> dict[str, Any]:
+    return {
+        "vendor_id": vendor_id,
+        "repo_id": repo_id,
+        "telemetry_attached_at": None,
+        "operations": [],
+    }
+
+
 def _fake_observed_reader(
     repo_id: str,
     *,
@@ -285,7 +304,9 @@ def _build_app(
     abandonment_reader=_fake_abandonment_reader,
     binding_reader=_fake_binding_reader,
     coverage_reader=_fake_coverage_reader,
+    graph_reader=_fake_graph_reader,
     observed_reader=_fake_observed_reader,
+    vendor_operations_reader=_fake_vendor_operations_reader,
     detector_reader=_fake_detector_reader,
     adapters_reader=_fake_adapters_reader,
     severity_reader=_fake_severity_reader,
@@ -317,7 +338,9 @@ def _build_app(
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
+        graph_reader=graph_reader,
         observed_reader=observed_reader,
+        vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
         severity_reader=severity_reader,
@@ -1518,6 +1541,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
+    def vendor_operations_reader(vendor_id: str, *, repo_id=None):
+        return _fake_vendor_operations_reader(vendor_id, repo_id=repo_id)
+
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
@@ -1528,7 +1554,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
+        graph_reader=_fake_graph_reader,
         observed_reader=observed_reader,
+        vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=_fake_adapters_reader,
         severity_reader=severity_reader,
@@ -1735,6 +1763,12 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   rather than a page of records.
 # - `/api/repos/{repo_id:path}/context` answers one repository's context row -- one body, one
 #   source, one timestamp. There is nothing here that grows with usage the way a page does.
+# - `/api/vendors/{vendor_id}/operations` is one entry per distinct operation this codebase calls
+#   on one vendor, bounded by that vendor's operation surface rather than by traffic: calling the
+#   same operation from a thousand places is one row with a count of a thousand, not a thousand
+#   rows. Its consumer renders the whole distribution, and a page of a distribution is a
+#   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
+#   unpaginated deliberately.
 _NOT_COLLECTIONS = {
     "/api/overview",
     "/api/findings/{finding_id}",
@@ -1751,8 +1785,14 @@ _NOT_COLLECTIONS = {
     # whose length is a property of the configuration file.
     "/api/adapters",
     "/api/repos/{repo_id:path}/context",
+    "/api/vendors/{vendor_id}/operations",
     "/api/repositories/{repo_id:path}/settings",
     "/api/repos/{repo_id:path}/settings",
+    # One picture of one repository, bounded by the route itself and reporting `truncated`
+    # beside the total it was bounded against. A limit/offset cursor over a graph would page
+    # the edges out of a drawing whose whole job is showing the shape they make.
+    "/api/repositories/{repo_id:path}/graph",
+    "/api/repositories/{repo_id}/graph",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -2381,3 +2421,92 @@ def test_settings_route_post_rejects_invalid_method():
     assert resp.status_code == 400
     data = resp.json()
     assert "Invalid merge_method" in data["error"]
+
+
+class TestRepositoryGraphRoute:
+    """`GET /api/repositories/{repo_id}/graph` -- the picture the Overview draws.
+
+    Registered under both the plain and the `:path` converter, like `coverage` beside it: a
+    repository id carries a slash (`org/name`) and the default converter never matches one.
+    `B147` is exactly that defect left in place on another route, so the pair is written here
+    from the start rather than filed.
+    """
+
+    def test_it_answers_the_scope_it_was_asked_for(self):
+        client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+
+        response = client.get("/api/repositories/r1/graph")
+
+        assert response.status_code == 200
+        assert response.json()["repo_id"] == "r1"
+
+    def test_a_repository_id_holding_a_slash_reaches_the_route(self):
+        client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+
+        # The defect `B147` names: the default path converter stops at a slash, so every
+        # `org/name` repository -- which is every repository GitHub hosts -- answered 404.
+        response = client.get("/api/repositories/org/name/graph")
+
+        assert response.status_code == 200
+        assert response.json()["repo_id"] == "org/name"
+
+    def test_a_repository_the_index_never_held_is_a_404_rather_than_an_empty_graph(self):
+        client = TestClient(
+            _build_app(
+                surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+                graph_reader=lambda repo_id: None,
+            )
+        )
+
+        # An empty graph is a claim: this repository was indexed and calls nothing. A repository
+        # nobody indexed cannot support it, and the two are the absence-versus-zero distinction
+        # this console argues about.
+        response = client.get("/api/repositories/ghost/graph")
+
+        assert response.status_code == 404
+
+
+def test_vendor_operations_route_answers_exposure_for_a_vendor():
+    """Decision 29's opening answer: which operations this codebase calls on one vendor."""
+    payload = {
+        "vendor_id": "stripe",
+        "repo_id": None,
+        "telemetry_attached_at": None,
+        "operations": [
+            {
+                "operation_id": "PostCharges",
+                "call_site_count": 4,
+                "repository_count": 2,
+                "binding_rung": "static",
+                "observed": None,
+            }
+        ],
+    }
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        vendor_operations_reader=lambda vendor_id, **_: payload,
+    )
+
+    response = TestClient(app).get("/api/vendors/stripe/operations")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_vendor_operations_route_passes_the_repository_scope_through():
+    """The scope composes with the vendor rather than replacing it. Dropping it would put a
+    fleet-wide exposure count under one repository's heading."""
+    seen: list[dict[str, Any]] = []
+
+    def reader(vendor_id: str, *, repo_id=None):
+        seen.append({"vendor_id": vendor_id, "repo_id": repo_id})
+        return _fake_vendor_operations_reader(vendor_id, repo_id=repo_id)
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        vendor_operations_reader=reader,
+    )
+
+    TestClient(app).get("/api/vendors/stripe/operations?repo_id=org%2Fpayments")
+
+    assert seen == [{"vendor_id": "stripe", "repo_id": "org/payments"}]

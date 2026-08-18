@@ -741,3 +741,126 @@ def vendor_change_volume(store: GraphStore, vendor_id: str) -> dict:
         "newest_change_at": newest_at.isoformat() if newest_at else None,
         "oldest_change_at": oldest_at.isoformat() if oldest_at else None,
     }
+
+
+def repository_graph(store: GraphStore, repo_id: str, *, limit: int | None = None) -> dict:
+    """This repository's call sites and the vendors they reach: the graph the Overview draws.
+
+    Owner decision 2 puts the dependency graph beside the fact tiles on the first screen, which
+    makes it not optional. `DependencyCanvas` already draws one; what did not exist was a scoped
+    read answering the whole graph at once. The console cannot know which operations to ask about
+    before it has the graph naming them, so composing this from the per-operation route would be
+    a round trip per node to draw one picture.
+
+    **Every binding carries its rung, and here that rung is always `static`.** A call site is what
+    the static index found; nothing about it rests on a resolution or a correlation step. A
+    stronger rung for the same operation is a fact about this repository's telemetry and belongs
+    to `observed_telemetry`, never blended into an edge drawn here.
+
+    `last_indexed` is repeated from `index_coverage` rather than recomputed, and it is staleness
+    rather than a promise of currency: a repository scanned three weeks ago reports the same value
+    every day until another pass moves it. No age is derived, because a duration computed at
+    response time goes wrong the moment the payload is cached and the timestamp it came from does
+    not.
+
+    **A bound is declared rather than applied quietly.** `total_bindings` counts what exists and
+    `truncated` says whether the drawn set is all of it, so a console holding a partial graph can
+    say so. A graph silently missing edges misreports a codebase's exposure, which is the one
+    thing this picture is for.
+    """
+    coverage = index_coverage(store, repo_id)
+    by_vendor = coverage["by_vendor"]
+    last_indexed = coverage["last_indexed"]
+
+    sites = store.call_sites_for_repository(repo_id, limit=limit)
+    total = store.call_sites_for_repository_count(repo_id)
+
+    bindings = [
+        {
+            "vendor_id": site.vendor_id,
+            "operation_id": site.operation_id,
+            "path": site.path,
+            "line": site.line,
+            "symbol": site.symbol,
+            "rung": "static",
+        }
+        for site in sites
+    ]
+
+    vendors = [
+        {
+            "vendor_id": vendor_id,
+            "indexed_call_sites": by_vendor[vendor_id],
+            "last_indexed": last_indexed.get(vendor_id),
+        }
+        for vendor_id in sorted(by_vendor)
+    ]
+
+    return {
+        "repo_id": repo_id,
+        "vendors": vendors,
+        "bindings": bindings,
+        "total_bindings": total,
+        "truncated": len(bindings) < total,
+    }
+
+
+def vendor_operation_exposure(
+    store: GraphStore, vendor_id: str, *, repo_id: str | None = None
+) -> dict:
+    """Which of one vendor's operations this codebase calls, and on what evidence.
+
+    Owner decision 29 makes this the vendor page's opening answer: *what does this vendor cost
+    me*, before *what has this vendor done*. Exposure is call sites, so this counts call sites.
+
+    **Every row carries its rung, and the rung is `static` rather than derived.** A call site is
+    what the static index found -- `CLAUDE.md` requires the rung on every binding and on every
+    artifact derived from one, and a row that could not name its rung would be a false positive
+    nobody could attribute. A stronger rung for the same operation is a fact about telemetry and
+    is reported beside it, never blended into it: `observed` is its own key, so a reader can see
+    that the graph found four call sites *and* that traffic confirmed one of them, which is two
+    facts rather than an average of two facts.
+
+    **`observed` is three-valued and the third value is the point.** `True` and `False` are
+    answers telemetry gave. `None` means nothing looked -- either no telemetry is attached to the
+    repository, or the question was asked across every repository at once, where attachment
+    differs per repository and no single answer exists. Collapsing `None` onto `False` would
+    report "we checked and saw no traffic" for an operation nobody ever measured, which is the
+    substitution this console exists to refuse (B157).
+
+    No ratio and no score. Counts, and a rung, and a tri-state.
+    """
+    operations = store.call_sites_by_operation(vendor_id, repo_id=repo_id)
+
+    # Telemetry attaches per repository, so a fleet-wide question has no single attachment to
+    # report and every row's `observed` stays `None`.
+    context = store.repo_context(repo_id) if repo_id is not None else None
+    attached_at = context.telemetry_attached_at if context is not None else None
+
+    observed_operations: set[str] | None = None
+    if repo_id is not None and attached_at is not None:
+        observed_operations = {
+            operation
+            for vendor, operation in store.observed_operation_pairs(repo_id)
+            if vendor == vendor_id
+        }
+
+    return {
+        "vendor_id": vendor_id,
+        "repo_id": repo_id,
+        "telemetry_attached_at": attached_at.isoformat() if attached_at is not None else None,
+        "operations": [
+            {
+                "operation_id": row["operation_id"],
+                "call_site_count": row["call_site_count"],
+                "repository_count": row["repository_count"],
+                "binding_rung": "static",
+                "observed": (
+                    None
+                    if observed_operations is None
+                    else row["operation_id"] in observed_operations
+                ),
+            }
+            for row in operations
+        ],
+    }

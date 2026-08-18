@@ -25,8 +25,10 @@ from sync.dashboard.graph_views import (
     observed_telemetry,
     overview_summary,
     repo_settings,
+    repository_graph,
     severity_rollup,
     vendor_change_volume,
+    vendor_operation_exposure,
     vendor_findings,
 )
 from sync.graph.store import GraphStore
@@ -1449,3 +1451,195 @@ def test_vendor_change_volume_aggregates_timeline_and_kinds(store):
     assert empty_vol["vendor_id"] == "nonexistent"
     assert empty_vol["total_changes"] == 0
     assert empty_vol["timeline"] == []
+
+
+class TestRepositoryGraph:
+    """The dependency graph the Overview draws: this repository's call sites, out to its vendors.
+
+    Owner decision 2 puts this panel beside the fact tiles on the first screen, so it is not
+    optional. `DependencyCanvas` already draws it; what did not exist was one scoped read that
+    answers the whole graph, and fanning the console out per vendor and per operation would issue
+    a query per node to draw one picture.
+    """
+
+    def test_a_repository_with_no_call_sites_draws_no_edges_and_says_so(self, store):
+        assert repository_graph(store, "r1") == {
+            "repo_id": "r1",
+            "vendors": [],
+            "bindings": [],
+            "total_bindings": 0,
+            "truncated": False,
+        }
+
+    def test_every_binding_carries_the_rung_it_came_from(self, store):
+        store.replace_call_sites("r1", [_site()])
+
+        graph = repository_graph(store, "r1")
+
+        # `CLAUDE.md`: every binding carries its rung, and so does every artifact derived from it.
+        # A call site is what the static index found -- nothing here rests on a resolution or a
+        # correlation -- so the rung is `static` and is never blended upward by this view.
+        assert [b["rung"] for b in graph["bindings"]] == ["static"]
+
+    def test_a_binding_names_the_position_a_reader_would_open(self, store):
+        store.replace_call_sites("r1", [_site()])
+
+        binding = repository_graph(store, "r1")["bindings"][0]
+
+        assert binding["vendor_id"] == "stripe"
+        assert binding["operation_id"] == "PostCharges"
+        assert binding["path"] == "src/billing.ts"
+        assert binding["line"] == 42
+        assert binding["symbol"] == "stripe.charges.create"
+
+    def test_a_retracted_call_site_is_not_a_place_this_code_calls_the_vendor(self, store):
+        store.replace_call_sites("r1", [_site()])
+        store.replace_call_sites("r1", [])
+
+        # Retraction is the difference between exposure and history. A position the last index
+        # pass stopped finding is not somewhere this codebase calls the vendor now, and drawing
+        # it would show a reader an edge they cannot act on.
+        assert repository_graph(store, "r1")["bindings"] == []
+
+    def test_another_repository_s_call_sites_are_not_drawn_here(self, store):
+        store.replace_call_sites("r1", [_site()])
+        store.replace_call_sites("r2", [_site(repo_id="r2", path="other/pay.ts")])
+
+        paths = [b["path"] for b in repository_graph(store, "r1")["bindings"]]
+
+        assert paths == ["src/billing.ts"]
+
+    def test_a_vendor_reports_its_call_site_count_and_when_it_was_last_indexed(self, store):
+        store.replace_call_sites("r1", [_site(), _site(line=90, operation_id="GetCharges")])
+
+        vendors = repository_graph(store, "r1")["vendors"]
+
+        assert len(vendors) == 1
+        assert vendors[0]["vendor_id"] == "stripe"
+        assert vendors[0]["indexed_call_sites"] == 2
+        # Staleness, never a promise of currency -- `index_coverage` carries that argument and
+        # this view repeats its fact rather than deriving an age the response would date.
+        assert vendors[0]["last_indexed"] is not None
+
+    def test_the_row_bound_is_declared_rather_than_silently_cutting_the_picture(self, store):
+        store.replace_call_sites("r1", [_site(line=n) for n in range(1, 6)])
+
+        graph = repository_graph(store, "r1", limit=2)
+
+        # A graph quietly missing edges is a graph that lies about a codebase's exposure. The
+        # bound is reported with the total it was applied to, so the console can say the picture
+        # is partial instead of drawing a smaller codebase than the one that exists.
+        assert len(graph["bindings"]) == 2
+        assert graph["total_bindings"] == 5
+        assert graph["truncated"] is True
+
+
+# --- Decision 29: operations you call, with site counts and rungs ---------------------------
+#
+# The vendor page leads with exposure. What it leads with is this: which of a vendor's
+# operations this codebase actually calls, how many places call each, and on what evidence.
+
+
+def test_vendor_operation_exposure_counts_call_sites_per_operation(store):
+    store.upsert_call_site(_site(path="src/a.ts", line=1))
+    store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.upsert_call_site(_site(operation_id="GetCharges", path="src/c.ts", line=3))
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert [(row["operation_id"], row["call_site_count"]) for row in result["operations"]] == [
+        ("PostCharges", 2),
+        ("GetCharges", 1),
+    ]
+
+
+def test_vendor_operation_exposure_orders_by_exposure_then_name(store):
+    """Most-called first, because the screen's question is where the exposure is. Ties break on
+    the operation id so the order is total rather than whatever the planner returned."""
+    store.upsert_call_site(_site(operation_id="B", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(operation_id="A", path="src/b.ts", line=2))
+    store.upsert_call_site(_site(operation_id="C", path="src/c.ts", line=3))
+    store.upsert_call_site(_site(operation_id="C", path="src/d.ts", line=4))
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert [row["operation_id"] for row in result["operations"]] == ["C", "A", "B"]
+
+
+def test_vendor_operation_exposure_narrows_to_one_repository(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+
+    result = vendor_operation_exposure(store, "stripe", repo_id="r1")
+
+    assert result["operations"] == [
+        {
+            "operation_id": "PostCharges",
+            "call_site_count": 1,
+            "repository_count": 1,
+            "binding_rung": "static",
+            "observed": None,
+        }
+    ]
+
+
+def test_vendor_operation_exposure_reports_how_many_repositories_call_an_operation(store):
+    store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(repo_id="r2", path="src/b.ts", line=2))
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["repository_count"] == 2
+
+
+def test_vendor_operation_exposure_carries_the_static_rung_on_every_row(store):
+    """A call site is what the static index found. The rung is a column rather than a join, and
+    an exposure row that could not name one would be unattributable."""
+    store.upsert_call_site(_site())
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["binding_rung"] == "static"
+
+
+def test_vendor_operation_exposure_excludes_a_retracted_call_site(store):
+    """A call the last index pass stopped finding is not current exposure."""
+    store.upsert_call_site(_site(path="src/a.ts", line=1))
+    store.upsert_call_site(_site(path="src/b.ts", line=2))
+    store.replace_call_sites("r1", [_site(path="src/a.ts", line=1)])
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["call_site_count"] == 1
+
+
+def test_vendor_operation_exposure_on_a_vendor_nobody_calls_is_empty(store):
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"] == []
+
+
+def test_vendor_operation_exposure_reports_observed_as_never_measured_without_a_repository(store):
+    """Telemetry attaches per repository. Asked across every repository, whether an operation was
+    observed has no single answer, and `None` says so rather than defaulting to `False`."""
+    store.upsert_call_site(_site())
+
+    result = vendor_operation_exposure(store, "stripe")
+
+    assert result["operations"][0]["observed"] is None
+    assert result["telemetry_attached_at"] is None
+
+
+def test_vendor_operation_exposure_separates_never_measured_from_not_observed(store):
+    """B157's distinction, on this screen. With telemetry attached, an operation no span named is
+    a measured `False`. Without it, every operation is `None` -- nothing looked."""
+    store.upsert_call_site(_site(operation_id="PostCharges", path="src/a.ts", line=1))
+    store.upsert_call_site(_site(operation_id="GetCharges", path="src/b.ts", line=2))
+    store.mark_telemetry_attached("r1", SEEN)
+    store.record_observed_call(_observed_call(operation_id="PostCharges"))
+
+    result = vendor_operation_exposure(store, "stripe", repo_id="r1")
+
+    observed = {row["operation_id"]: row["observed"] for row in result["operations"]}
+    assert observed == {"PostCharges": True, "GetCharges": False}
+    assert result["telemetry_attached_at"] == SEEN.isoformat()

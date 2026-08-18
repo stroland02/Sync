@@ -27,9 +27,11 @@ import type {
   RepositoriesResponse,
   RunsPage,
   VendorChangeRow,
+  VendorOperationsResponse,
   FindingOrder,
   VendorFindingsPage,
   WorkflowState,
+  RepositoryGraphResponse,
 } from "@/api/types"
 
 /** Matches `DEFAULT_LIMIT` in `sync.mcp.tools`, so a page here is a page there. */
@@ -175,6 +177,18 @@ export function fetchVendorChanges(
   return getJson<Page<VendorChangeRow>>(path, signal)
 }
 
+export function fetchVendorOperations(
+  vendorId: string,
+  repoId: string | null,
+  signal?: AbortSignal,
+): Promise<VendorOperationsResponse> {
+  const path = `/api/vendors/${encodeURIComponent(vendorId)}/operations`
+  return getJson<VendorOperationsResponse>(
+    repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`,
+    signal,
+  )
+}
+
 export function fetchFinding(
   findingId: string,
   signal?: AbortSignal,
@@ -285,6 +299,17 @@ export function fetchRepositoryCoverage(
 ): Promise<IndexCoverageResponse> {
   return getJson<IndexCoverageResponse>(
     `/api/repositories/${encodeURIComponent(repoId)}/coverage`,
+    signal,
+  )
+}
+
+/** This repository's call sites and the vendors they reach -- the Overview's dependency graph. */
+export function fetchRepositoryGraph(
+  repoId: string,
+  signal?: AbortSignal,
+): Promise<RepositoryGraphResponse> {
+  return getJson<RepositoryGraphResponse>(
+    `/api/repositories/${encodeURIComponent(repoId)}/graph`,
     signal,
   )
 }

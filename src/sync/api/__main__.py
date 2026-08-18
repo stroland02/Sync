@@ -33,6 +33,10 @@ from sync.obs.log import configure as configure_logging
 # The port `web/vite.config.ts` proxies `/api` to. Named rather than inlined so
 # tests/test_api_routes.py can bind the two together instead of asking them to agree by hand.
 DEFAULT_PORT = 8787
+# How many edges one graph response draws. A codebase with thousands of call sites would
+# otherwise send every one of them to a canvas that cannot render them legibly anyway, and the
+# payload says `truncated` beside the total so a partial picture is stated rather than implied.
+GRAPH_BINDING_LIMIT = 2000
 
 # INFO rather than the stdlib's WARNING default: the module loggers beneath this transport
 # call `log.info`, and a quieter default would leave them exactly as unreachable as before
@@ -155,6 +159,12 @@ def app_factory() -> Starlette:
     def coverage_reader(repo_id: str):
         return graph_views.index_coverage(store, repo_id)
 
+    def graph_reader(repo_id: str):
+        return graph_views.repository_graph(store, repo_id, limit=GRAPH_BINDING_LIMIT)
+
+    def vendor_operations_reader(vendor_id: str, *, repo_id: str | None = None):
+        return graph_views.vendor_operation_exposure(store, vendor_id, repo_id=repo_id)
+
     def observed_reader(
         repo_id: str,
         *,
@@ -257,7 +267,9 @@ def app_factory() -> Starlette:
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
         coverage_reader=coverage_reader,
+        graph_reader=graph_reader,
         observed_reader=observed_reader,
+        vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
         severity_reader=severity_reader,
