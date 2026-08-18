@@ -42,14 +42,19 @@ const MINIMUM_UV = "0.5.0"
  * because it needs the CLI, the plugin, and nothing else -- it does not touch the daemon, so a
  * stopped daemon is diagnosed by the next check rather than confused with a missing install.
  */
-export function dockerDiagnosis(cliProbe, daemonProbe) {
+export function dockerDiagnosis(cliProbe, daemonProbe, platform = process.platform) {
   if (cliProbe.error || cliProbe.status !== 0) {
+    const install = dockerInstallCommand(platform)
     return {
       ok: false,
       message:
         "Docker is required and was not found.\n\n" +
-        "  Install Docker Desktop: https://docs.docker.com/get-started/get-docker/\n\n" +
-        "It is the only prerequisite. Everything else -- Python, uv, Node, Postgres -- ships\n" +
+        "  Install Docker Desktop: https://docs.docker.com/get-started/get-docker/\n" +
+        `  Or from this terminal:  ${install.command}\n` +
+        (install.runnable
+          ? "                          (--install-docker, or `npm run install-docker`, runs it for you)\n"
+          : "                          (printed rather than run by --install-docker: review it first)\n") +
+        "\nIt is the only prerequisite. Everything else -- Python, uv, Node, Postgres -- ships\n" +
         "inside the image and is never installed on your machine.",
     }
   }
@@ -63,6 +68,38 @@ export function dockerDiagnosis(cliProbe, daemonProbe) {
     }
   }
   return { ok: true }
+}
+
+/**
+ * The command that installs Docker on this platform, and whether the doorbell may run it.
+ *
+ * Measured on the first fresh-clone run anybody did: the refusal said Docker was missing and
+ * left the reader to a browser, when the terminal they were already in could have said
+ * `winget install`. Linux is deliberately `runnable: false` -- the convenience script is
+ * remote code, and piping it into `sh` unread is a different product decision than the one
+ * made here, so it is printed for the reader to run themselves. Elevation is not requested
+ * either way; the OS prompts for it, which is the consent step staying with the person.
+ */
+export function dockerInstallCommand(platform) {
+  if (platform === "win32") {
+    return {
+      command: "winget install -e --id Docker.DockerDesktop",
+      runnable: true,
+      note: "Windows asks for elevation. Start Docker Desktop once after it finishes and wait for Running.",
+    }
+  }
+  if (platform === "darwin") {
+    return {
+      command: "brew install --cask docker",
+      runnable: true,
+      note: "Open Docker.app once after it finishes so the daemon starts.",
+    }
+  }
+  return {
+    command: "curl -fsSL https://get.docker.com | sh",
+    runnable: false,
+    note: "Review the script before running it, or use your distribution's own docker packages.",
+  }
 }
 
 /**
@@ -210,6 +247,23 @@ function main() {
   // Docker made it unrunnable exactly where it mattered -- found on such a machine, not theorised.
   if (process.argv.includes("--check")) {
     runCheck()
+    return
+  }
+
+  if (process.argv.includes("--install-docker")) {
+    const install = dockerInstallCommand(process.platform)
+    if (!install.runnable) {
+      process.stdout.write(`\nRun this yourself, after reading it:\n\n  ${install.command}\n\n${install.note}\n\n`)
+      return
+    }
+    process.stdout.write(`\nRunning: ${install.command}\n${install.note}\n\n`)
+    const [installer, ...installerArgs] = install.command.split(" ")
+    const installChild = spawn(installer, installerArgs, { stdio: "inherit", shell: false })
+    installChild.on("error", () => {
+      process.stderr.write(`\n${installer} is not available here. Install Docker Desktop instead:\nhttps://docs.docker.com/get-started/get-docker/\n\n`)
+      process.exit(1)
+    })
+    installChild.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 1)))
     return
   }
 

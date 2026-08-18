@@ -37,6 +37,11 @@ vendor ships a breaking change  →  Sync finds every call site that depends on 
 
 ## Run it
 
+**Every command on this page runs in an ordinary terminal** — Command Prompt, PowerShell, or a
+shell. None of it needs a coding agent, and none of it carries a prefix: if you met a command
+here inside an agent conversation, whatever punctuation the agent's own prompt uses (`!`, `/`)
+belongs to the agent, not to the command.
+
 **Three ways in. Two of them work today, and the third is written down because it is where this
 is going.** Every one of them ends at the same console on
 **http://127.0.0.1:4173**, signed in with the password the log prints — `sync-local-demo` unless you

@@ -310,7 +310,7 @@ def test_the_pnpm_commands_hand_over_to_things_that_exist():
     manifest = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
     scripts = manifest.get("scripts", {})
 
-    for name in ("start", "down", "check"):
+    for name in ("start", "down", "check", "install-docker"):
         assert name in scripts, f"`pnpm {name}` does not exist"
         assert "sync-up.mjs" in scripts[name], (
             f"`pnpm {name}` must hand over to the doorbell rather than reimplement it"
@@ -324,6 +324,72 @@ def test_the_pnpm_commands_hand_over_to_things_that_exist():
         "`pnpm dev` must hand over to the from-source bring-up rather than reimplement it"
     )
     assert (REPO_ROOT / "scripts" / "dev_up.py").is_file()
+
+
+@pytest.mark.parametrize(
+    "platform, fragment, runnable",
+    [
+        ("win32", "winget", True),
+        ("darwin", "brew", True),
+        ("linux", "get.docker.com", False),
+    ],
+)
+def test_each_platform_gets_its_own_docker_install_command(platform, fragment, runnable):
+    """`CI-W452`, measured on the first fresh-clone run anybody did: the refusal said Docker
+    was missing and left the reader to a browser. A terminal that can say `winget install`
+    should say it.
+
+    Linux is deliberately not runnable: the convenience script is remote code, and a doorbell
+    that pipes it into `sh` unread is a different product decision than the one made here. It
+    is printed for the reader to run themselves.
+    """
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
+
+    script = (
+        f"import {{ dockerInstallCommand }} from {DOORBELL.as_uri()!r};"
+        f"console.log(JSON.stringify(dockerInstallCommand({platform!r})));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert fragment in verdict["command"]
+    assert verdict["runnable"] is runnable
+
+
+def test_the_missing_docker_refusal_prints_the_install_command_for_this_platform():
+    """The refusal and the installer must agree, and the reader gets both: the URL for a
+    person who wants to see what they are installing, the command for one who already knows."""
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
+
+    script = (
+        f"import {{ dockerDiagnosis, dockerInstallCommand }} from {DOORBELL.as_uri()!r};"
+        "const d = dockerDiagnosis({status: 1}, {status: 0}, 'win32');"
+        "const i = dockerInstallCommand('win32');"
+        "console.log(JSON.stringify({message: d.message, command: i.command}));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["command"] in verdict["message"], (
+        "the refusal names Docker as missing without printing the command that installs it"
+    )
+    assert "--install-docker" in verdict["message"], (
+        "the refusal must name the flag that runs the install, or nobody discovers it"
+    )
 
 
 @pytest.mark.parametrize("source_tree_present, expected_ok", [(True, True), (False, False)])
