@@ -157,6 +157,13 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     it** -- which is the same omission the paragraph above records, caught by the same guard, one
     author later. That is twice now, so the guard is earning its place rather than merely
     existing.
+
+    The eighteenth is `tests/test_embedded_postgres.py`, added by `CI-W445`, and it is the
+    absent-toolchain shape rather than the absent-console one: it executes the installer's own
+    JavaScript through `node`, for the same reason `test_container_install.py` does -- asserting
+    that a phrase appears in the file would pass on a source that never reaches the branch
+    printing it. **Raised in the same change that added the skip**, which is the pairing this
+    baseline exists to force and which the two paragraphs above record being missed twice.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -164,7 +171,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 17, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 18, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 
