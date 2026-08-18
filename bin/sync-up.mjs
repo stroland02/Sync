@@ -598,7 +598,12 @@ async function runNoAdmin() {
     process.stdout.write("Seeding the schema and a fixture to look at.\n")
     mustRun("Seeding the console", "uv", ["run", "python", "scripts/seed_console.py"], { cwd: REPO_ROOT })
   } else {
-    process.stdout.write("The existing database is kept exactly as it is. Nothing was seeded.\n")
+    process.stdout.write("The existing database rows are kept exactly as they are. Nothing was seeded.\n")
+    // The rows are the adopter's; the schema is the code's. A checkout that just pulled
+    // today's main can adopt a database created before today's tables existed, and the first
+    // fresh clone after run_heartbeat landed proved it: every precondition green except the
+    // schema. Converged here the same way the settings are -- idempotently, rows untouched.
+    mustRun("Holding the database to the shipped schema", "uv", ["run", "python", "scripts/apply_schema.py"], { cwd: REPO_ROOT })
   }
 
   // Settings, not data: rows are never touched here. Idempotent by construction, so an

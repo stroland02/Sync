@@ -98,11 +98,13 @@ def check_schema() -> Check:
     except Exception as exc:  # noqa: BLE001
         return Check("schema", MISSING, f"cannot be read: {exc}", "docker compose up -d")
     if missing:
+        # apply_schema, not seed_console: an adopted database's rows are somebody's data, and
+        # the seeding script would write fixture rows into them to fix a schema-only drift.
         return Check(
             "schema",
             MISSING,
             f"{len(missing)} table(s) absent, including {missing[0]}",
-            "uv run python scripts/seed_console.py",
+            "uv run python scripts/apply_schema.py",
         )
     return Check("schema", OK, "every table the schema declares is present")
 
