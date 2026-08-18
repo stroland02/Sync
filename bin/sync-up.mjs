@@ -3,10 +3,11 @@
  * The doorbell. `npx` is not the product and cannot be.
  *
  * Sync is Python and TypeScript over Postgres. npm delivers a Node program and nothing else, so a
- * wrapper that claimed to install a Python runtime and a database would fail in front of the
- * person being shown it -- which is the one place it must not. **The container is the artifact;
- * this is the thing you type.** All it does is check the single prerequisite, then hand over to
- * `docker compose`, which is where every real step lives.
+ * wrapper that claimed to be the product would fail in front of the person being shown it --
+ * which is the one place it must not. **The container is the artifact; this is the thing you
+ * type.** It checks the machine, takes the route that can work -- the container where Docker
+ * answers, the user-space install where it cannot (`startRoute`) -- and hands over to the one
+ * that owns the real steps.
  *
  * It deliberately does not reimplement any of that. `docker/entrypoint.sh` waits for the
  * database, applies the schema, starts the API and waits for it to answer before serving the
@@ -86,6 +87,43 @@ export function dockerDiagnosis(cliProbe, daemonProbe, platform = process.platfo
     }
   }
   return { ok: true }
+}
+
+/**
+ * Which bring-up the plain command takes, decided rather than asked.
+ *
+ * Owner's ruling, 2026-08-18: everything is set from `npm start`, and the person never runs a
+ * Docker chore. A serving daemon keeps the container path, because the container is the
+ * artifact. An unusable Docker on a platform that has the user-space route falls through to it
+ * automatically -- carrying the Docker diagnosis, so a reader who wanted the container knows
+ * what to start before trying again. Only a platform with neither route left gets a refusal.
+ */
+export function startRoute(docker, noAdmin) {
+  if (docker.ok) return { route: "docker" }
+  if (noAdmin.ok) {
+    return {
+      route: "no-admin",
+      message:
+        "Docker is not usable here, so the user-space route is taken instead: an embedded\n" +
+        "Postgres, a pinned Python, and the console -- no Docker at all.\n\n" +
+        "If the container is what you wanted, this is what Docker said:\n\n" +
+        docker.message,
+    }
+  }
+  return { route: "stop", message: docker.message }
+}
+
+/**
+ * The console's dependency tree, decided the same way as the venv and the cluster: a verdict,
+ * then the install only when the tree is missing. Before this, `dev_up.py` refused on an
+ * absent `web/node_modules` and named the command -- a correct refusal that was still a
+ * defect in the one command, by the owner's own bar: after it, nothing is left to figure out.
+ */
+export function consoleDependenciesVerdict(present) {
+  if (present) {
+    return { action: "keep", message: "The console dependencies are already installed. Nothing was fetched." }
+  }
+  return { action: "install", message: "The console dependencies are absent (web/node_modules). Installing them once." }
 }
 
 /**
@@ -494,6 +532,19 @@ async function runNoAdmin() {
   }
 
   writeInstallRecord(lockDigest)
+
+  const web = consoleDependenciesVerdict(existsSync(join(REPO_ROOT, "web", "node_modules")))
+  process.stdout.write(`${web.message}\n`)
+  if (web.action === "install") {
+    mustRun("Installing the console dependencies", "npm", ["install", "--prefix", "web"], {
+      cwd: REPO_ROOT,
+      // npm is npm.cmd on Windows, and Node refuses to spawn a .cmd without a shell
+      // (CVE-2024-27980); the no-admin path is Windows-only today, so this is the rule
+      // here rather than the edge.
+      shell: process.platform === "win32",
+    })
+  }
+
   process.stdout.write(`\nIn short: ${summarise({ postgres: cluster, cache })}.\n`)
   process.stdout.write("Handing over to the dev bring-up, which starts the API and the console.\n\n")
   const child = spawn("uv", ["run", "python", "scripts/dev_up.py"], { cwd: REPO_ROOT, stdio: "inherit", shell: false })
@@ -549,12 +600,31 @@ function main() {
   }
 
   const diagnosis = dockerDiagnosis(probe(["compose", "version"]), probe(["info"]))
-  if (!diagnosis.ok) {
-    process.stderr.write(`\n${diagnosis.message}\n\n`)
+  const route = startRoute(diagnosis, noAdminSupport(process.platform))
+  if (route.route === "stop") {
+    process.stderr.write(`\n${route.message}\n\n`)
     process.exit(1)
   }
 
   const down = process.argv.includes("down")
+
+  if (route.route === "no-admin") {
+    if (down) {
+      if (clusterServing()) {
+        mustRun("Stopping the embedded Postgres", pgBin("pg_ctl"), ["stop", "-D", PG_DATA, "-m", "fast", "-w"])
+        process.stdout.write("\nThe embedded Postgres is stopped. Its data stays; the next start adopts it.\n")
+      } else {
+        process.stdout.write("\nNothing is serving on the user-space route. There is nothing to bring down.\n")
+      }
+      return
+    }
+    process.stdout.write(`\n${route.message}\n`)
+    runNoAdmin().catch((error) => {
+      process.stderr.write(`\nThe no-admin install stopped: ${error.message}\n`)
+      process.exit(1)
+    })
+    return
+  }
   const args = down
     ? ["compose", "-f", COMPOSE_FILE, "down", "-v"]
     : ["compose", "-f", COMPOSE_FILE, "up", "--build"]

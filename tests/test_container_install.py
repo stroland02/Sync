@@ -213,6 +213,82 @@ def test_a_missing_docker_and_a_stopped_docker_are_told_apart(cli_status, daemon
         )
 
 
+@pytest.mark.parametrize(
+    "docker_ok, no_admin_ok, expected_route",
+    [
+        (True, True, "docker"),
+        (True, False, "docker"),
+        (False, True, "no-admin"),
+        (False, False, "stop"),
+    ],
+)
+@conftest.requires_node
+def test_plain_start_routes_instead_of_refusing(docker_ok, no_admin_ok, expected_route):
+    """The owner's ruling, 2026-08-18: everything is set from `npm start` -- the command
+    decides, the person never runs Docker chores. A serving daemon keeps the container path,
+    because the container is the artifact. An unusable Docker on a platform with the
+    user-space route falls through to it automatically, stating the Docker reason so a
+    reader who wanted the container knows what to start and try again. Only a platform with
+    neither gets a refusal. Before this, the fresh-clone `npm start` printed a Docker chore
+    on the one machine Docker can never run on.
+    """
+    node = _node()
+    docker = '{ok: true}' if docker_ok else '{ok: false, message: "the docker reason"}'
+    support = '{ok: true}' if no_admin_ok else '{ok: false, message: "windows only"}'
+    script = (
+        f"import {{ startRoute }} from {DOORBELL.as_uri()!r};"
+        f"console.log(JSON.stringify(startRoute({docker}, {support})));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["route"] == expected_route
+    if expected_route == "no-admin":
+        assert "the docker reason" in verdict["message"], (
+            "the fall-through must carry the Docker diagnosis, so a reader who wanted the "
+            "container knows what to fix rather than wondering why the route changed"
+        )
+    if expected_route == "stop":
+        assert "the docker reason" in verdict["message"], (
+            "a refusal that hides the diagnosis strands the reader"
+        )
+
+
+@pytest.mark.parametrize(
+    "present, expected_action",
+    [(True, "keep"), (False, "install")],
+)
+@conftest.requires_node
+def test_the_no_admin_path_installs_the_console_dependencies(present, expected_action):
+    """The last assembly step a fresh clone still asked a person to do: `dev_up.py` refuses
+    on an absent `web/node_modules` and names `npm install --prefix web` -- a correct
+    refusal that is still a defect in the one command, by the owner's own bar (*after this
+    one command, is there anything a person still has to figure out?*). The no-admin flow
+    now decides it the same way it decides the venv and the cluster: a verdict, then the
+    install only when the tree is missing.
+    """
+    node = _node()
+    script = (
+        f"import {{ consoleDependenciesVerdict }} from {DOORBELL.as_uri()!r};"
+        f"console.log(JSON.stringify(consoleDependenciesVerdict({str(present).lower()})));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["action"] == expected_action
+    assert verdict["message"], "every verdict says what it decided; silence reads as a hang"
+
+
 @pytest.mark.parametrize("cli_status, daemon_status", [(1, 0), (0, 1)])
 @conftest.requires_node
 def test_every_docker_refusal_offers_the_no_admin_route(cli_status, daemon_status):
