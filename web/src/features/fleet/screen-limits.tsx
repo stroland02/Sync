@@ -11,7 +11,7 @@ const LIMITS: readonly { headline: string; detail: string }[] = [
   {
     headline: "A repository the index never indexed is invisible.",
     detail:
-      "It has no row in the repository list below — the same absence as a repository " +
+      "It has no row in the codebase list in Settings — the same absence as a repository " +
       "nobody ever configured. Nothing in this data tells the two apart.",
   },
   {
