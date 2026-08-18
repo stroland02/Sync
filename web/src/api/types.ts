@@ -798,3 +798,35 @@ export interface VendorOperationsResponse {
   telemetry_attached_at: string | null
   operations: VendorOperationExposure[]
 }
+
+/**
+ * One `(change_kind, tier)` pair that has been attempted, from `GET /api/corpus/abandonment`.
+ *
+ * **The grain is one repair attempt, not one finding.** A finding retried three times is three
+ * attempts and one finding, which is why the counts come in pairs and neither is a bare `count`.
+ * A query that counts findings by counting attempts is wrong, and wrong quietly.
+ *
+ * No ratio is served. A change kind abandoning three of four attempts arrives as `4` and `3`;
+ * the reader can divide, and the payload does not hand back a percentage that reads as a score.
+ */
+export interface AbandonmentGroup {
+  change_kind: string
+  tier: number
+  attempt_count: number
+  distinct_finding_count: number
+  abandoned_attempt_count: number
+  abandoned_distinct_finding_count: number
+  /**
+   * `abandon_reason_code` tallied within this group, over abandoned attempts only.
+   *
+   * Keys are the closed vocabulary `sync.remediate.state.AbandonReasonCode` declares. **The key
+   * `"null"` is not one of them**: it is a row recorded before the column existed, and it is a
+   * different fact from `unclassified`, which is a real member meaning a run reached the
+   * fallback. A group with no abandonment is `{}`.
+   */
+  abandon_reason_codes: Record<string, number>
+}
+
+export interface AbandonmentResponse {
+  groups: AbandonmentGroup[]
+}
