@@ -124,13 +124,32 @@ try {
           main.textContent
         )
       })()
-      const paragraphs = [...main.querySelectorAll("p")].map((p) => p.textContent.trim())
-      return { failed, total: paragraphs.reduce((n, t) => n + t.length, 0), paragraphs }
+      // **Visible and collapsed are counted apart, and conflating them was a real defect.**
+      // This counted every <p> under main, including paragraphs inside a closed <details>. A screen
+      // that puts detail behind a disclosure therefore measured as carrying prose a reader cannot
+      // see -- on the remediation screen, 827 of 3921 characters were inside collapsed disclosures.
+      // The ratio that number feeds is being used across five lanes to decide what to cut, so an
+      // inflated figure is not a cosmetic error: it argues for deleting visible sentences to pay
+      // for hidden ones.
+      const collapsed = (el) => el.closest("details:not([open])") !== null
+      const all = [...main.querySelectorAll("p")]
+      const shown = all.filter((p) => !collapsed(p)).map((p) => p.textContent.trim())
+      const hidden = all.filter(collapsed).map((p) => p.textContent.trim())
+      const sum = (list) => list.reduce((n, s) => n + s.length, 0)
+      return {
+        failed,
+        total: sum(shown),
+        totalIncludingCollapsed: sum(shown) + sum(hidden),
+        collapsedTotal: sum(hidden),
+        paragraphs: shown,
+        collapsedParagraphs: hidden,
+      }
     })()`,
     returnByValue: true,
   })
 
-  const { failed, total, paragraphs } = result.result.value
+  const { failed, total, totalIncludingCollapsed, collapsedTotal, paragraphs, collapsedParagraphs } =
+    result.result.value
   // A failed panel writes its own prose. Measuring that and calling it console prose is the defect
   // this script exists to avoid, so it refuses rather than reporting a number that looks fine.
   if (failed) {
@@ -141,7 +160,11 @@ try {
   }
 
   console.log(`route: ${route}`)
-  console.log(`paragraphs: ${paragraphs.length}, total characters: ${total}\n`)
+  console.log(`paragraphs: ${paragraphs.length} visible, total characters: ${total}`)
+  console.log(
+    `collapsed behind a disclosure: ${collapsedParagraphs.length} paragraphs, ${collapsedTotal} characters — a reader sees none of it until they open one`
+  )
+  console.log(`total including collapsed: ${totalIncludingCollapsed}\n`)
   paragraphs.forEach((text, index) => {
     console.log(`--- [${index}] ${text.length} chars`)
     console.log(text)
