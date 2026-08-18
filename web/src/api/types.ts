@@ -125,6 +125,21 @@ export interface OverviewResponse extends Provenance {
   total_findings_bound: number
   total_findings_bound_reached: boolean
   severity_counts: Tally
+  /**
+   * Open findings tallied by the rung their binding was established at — dashboard 2's source.
+   *
+   * **Every rung in `BINDING_SOURCES` is present, including at nought.** A rung missing from the
+   * object and a rung at zero are different claims, and a stacked bar cannot tell them apart, so
+   * the whole closed vocabulary is always reported.
+   *
+   * **Unbounded, unlike `total_findings` beside it.** A distribution derived from a bounded page
+   * is the distribution of whichever rows the ordering reached rather than of the population, so
+   * this is never truncated even when `total_findings_bound_reached` is true.
+   *
+   * Not derived from `binding_source`, and it does not derive it: that field is the one rung
+   * every open finding shares, or `null` when they disagree, which is a different fact.
+   */
+  bindings_by_rung: Record<BindingSource, number>
 }
 
 /**

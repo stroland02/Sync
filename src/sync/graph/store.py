@@ -1217,6 +1217,34 @@ class GraphStore:
         n = row["n"]
         return n, n >= bound
 
+    def open_findings_rung_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
+        """Every open finding, tallied by the rung its binding was established at -- one
+        `GROUP BY`, never a loop over findings.
+
+        Deliberately unbounded, for the reason `open_findings_vendor_counts` is: a distribution
+        derived from a bounded page is the distribution of whichever rows the ordering reached,
+        not of the population, and a bounded total is honest where a bounded breakdown presented
+        as the breakdown is not. The rung vocabulary is closed and tiny, so this returns at most
+        five rows at any scale the bounded total is protecting against.
+
+        Only rungs that occur are returned. The caller fills the rest of the vocabulary in at
+        nought, because a rung absent from a dict and a rung at nought are different claims and
+        this query cannot make the second one.
+        """
+        predicate, parameters = _open_findings_predicate(repo_id=repo_id)
+        rows = self._connect().execute(
+            f"""
+            SELECT finding.binding_rung AS rung, count(*) AS n
+              FROM finding
+              JOIN call_site ON call_site.id = finding.call_site_id
+             WHERE {predicate}
+             GROUP BY finding.binding_rung
+             ORDER BY finding.binding_rung
+            """,
+            parameters,
+        ).fetchall()
+        return {row["rung"]: int(row["n"]) for row in rows}
+
     def open_findings_vendor_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
         """Every open finding, tallied by vendor -- one `GROUP BY`, never a loop over findings.
 

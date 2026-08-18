@@ -8,7 +8,7 @@ the plugin SDK rests on: a third party writing an adapter depends on
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field
 
@@ -69,6 +69,12 @@ cost. `unattributed` on a row written after the column shipped would still be a 
 written that way -- `GraphStore.insert_finding` refuses one, which puts the check at a boundary
 `CLAUDE.md` names rather than on the published model.
 """
+
+# The vocabulary at runtime, derived from the type rather than restated beside it. A screen
+# stacking one segment per rung needs the whole closed set -- a rung absent from a tally and a
+# rung at nought are different claims -- and a second hand-written tuple is the kind of duplicate
+# that disagrees with the type the first time a rung is added.
+FINDING_RUNGS: tuple[str, ...] = get_args(BindingRung) + (UNATTRIBUTED,)
 
 
 def _now() -> datetime:
