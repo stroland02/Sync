@@ -319,6 +319,30 @@ def wait_for_api(process, url: str = API_URL, timeout: float = API_READY_TIMEOUT
     return False, f"did not answer {url} within {timeout:.0f}s"
 
 
+def _api_environment() -> dict[str, str]:
+    """The API's environment, with the console's credential taken out of it.
+
+    `B187`, met a second time and in a second place. `sync.api.auth.configured_api_password` falls
+    back to `SYNC_CONSOLE_PASSWORD` when `SYNC_API_PASSWORD` is unset, so merely *having* the
+    console's credential in the environment makes the API demand it -- while
+    `web/scripts/serve-console.mjs` strips `authorization` before proxying, deliberately, because
+    the console's shared credential is not the API's. The two are individually reasonable and
+    together they serve a console whose every panel is 401.
+
+    Measured here: with `SYNC_CONSOLE_PASSWORD` exported, `GET /api/repositories` answered 401 and
+    the console rendered with nothing in it. The container hit exactly this and fixed it the same
+    way; this is the local dev loop's half of the same defect, which is why it is worth fixing
+    rather than working around at the shell.
+
+    The API needs no credential here for the same reason it needs none in the container: it binds
+    loopback and is not published. The console's own gate is the boundary, and it sits in front of
+    both the console and the proxied API.
+    """
+    environment = dict(os.environ)
+    environment.pop("SYNC_CONSOLE_PASSWORD", None)
+    return environment
+
+
 def start_loop(*, start_api=None, start_console=None, wait_ready=None) -> int:
     """Start the API, wait until it serves, and only then start the console.
 
@@ -329,7 +353,9 @@ def start_loop(*, start_api=None, start_console=None, wait_ready=None) -> int:
     where it was being refused.
     """
     start_api = start_api or (
-        lambda: subprocess.Popen([sys.executable, "-m", "sync.api"], cwd=REPO_ROOT)
+        lambda: subprocess.Popen(
+            [sys.executable, "-m", "sync.api"], cwd=REPO_ROOT, env=_api_environment()
+        )
     )
     start_console = start_console or (
         lambda: subprocess.run(

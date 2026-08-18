@@ -73,14 +73,12 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
   )
 
   const reposQuery = useRepositories()
-  const repos = reposQuery.data?.repositories ?? []
-  const [selectedRepoId, setSelectedRepoId] = useState<string>(
-    repos[0]?.repo_id ?? "stroland02/Sync"
-  )
+  const repos = reposQuery.data?.repo_ids ?? []
+  const [selectedRepoId, setSelectedRepoId] = useState<string>(repos[0] ?? "stroland02/Sync")
 
   // Keep selectedRepoId in sync with loaded repositories if unset
-  if (repos.length > 0 && selectedRepoId === "stroland02/Sync" && !repos.some((r) => r.repo_id === selectedRepoId)) {
-    setSelectedRepoId(repos[0].repo_id)
+  if (repos.length > 0 && selectedRepoId === "stroland02/Sync" && !repos.includes(selectedRepoId)) {
+    setSelectedRepoId(repos[0])
   }
 
   function handleSelectGroup(group: SettingsGroup) {
@@ -114,9 +112,9 @@ export function SettingsPage({ question = DEFAULT_QUESTION }: SettingsPageProps)
                 {repos.length === 0 ? (
                   <SelectItem value={activeRepo}>{activeRepo}</SelectItem>
                 ) : (
-                  repos.map((r) => (
-                    <SelectItem key={r.repo_id} value={r.repo_id} className="font-mono text-meta">
-                      {r.repo_id}
+                  repos.map((repoId) => (
+                    <SelectItem key={repoId} value={repoId} className="font-mono text-meta">
+                      {repoId}
                     </SelectItem>
                   ))
                 )}

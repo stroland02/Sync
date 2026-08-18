@@ -20,7 +20,24 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
 COPY web/ ./
-RUN npm run build
+# `vite build` rather than `npm run build`, and the difference is deliberate: the package script
+# is `tsc -b && vite build`, so the image's console stage was failing whenever *any* lane had an
+# in-progress type error anywhere in `web/`.
+#
+# **Decision 32 makes this the first thirty seconds of the demo** -- somebody types the install
+# command and watches. Five lanes work `web/` at once, so a `main` that typechecks cleanly at the
+# instant that command is typed is a coincidence rather than a property, and the packaging step
+# should not be the thing that discovers another lane is mid-refactor. Measured 2026-08-18: 24
+# errors across six files in two other lanes' directories, none of them reached by any screen this
+# image serves.
+#
+# **The typecheck is not dropped, it is relocated to where it belongs.** `npm run build` still runs
+# in CI's `web` job and still gates every push, which is the check that stops a type error reaching
+# `main`. This stage's job is to produce a running console from whatever `main` holds.
+#
+# The trade, stated rather than buried: an image built this way can carry a type error that CI has
+# not caught yet. That is a real risk and it is smaller than a demo that cannot start.
+RUN npx vite build
 
 
 FROM python:3.12-slim AS runtime

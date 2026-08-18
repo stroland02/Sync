@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts import dev_up
+
 from scripts.dev_up import (
     MISSING,
     OK,
@@ -361,3 +363,31 @@ def test_a_free_port_is_reported_ok() -> None:
 
     assert port_is_free(free) is True
     assert check_api_port(free).status == OK
+
+
+def test_the_api_is_started_without_the_console_credential(monkeypatch):
+    """`B187`, met a second time, in the local dev loop rather than in the container.
+
+    `sync.api.auth.configured_api_password` falls back to `SYNC_CONSOLE_PASSWORD` when
+    `SYNC_API_PASSWORD` is unset, so merely having the console's credential in the environment
+    makes the API demand one -- and `web/scripts/serve-console.mjs` strips `authorization` before
+    proxying, on purpose. Together they serve a fully rendered console whose every panel is 401.
+
+    Measured before this was written: with `SYNC_CONSOLE_PASSWORD` exported,
+    `GET /api/repositories` answered `401` and the console showed nothing. The container met the
+    same defect and fixed it the same way; a test exists here because it has now appeared twice
+    and neither place could have caught the other.
+    """
+    monkeypatch.setenv("SYNC_CONSOLE_PASSWORD", "a-console-credential")
+    monkeypatch.setenv("SYNC_API_PORT", "8801")
+
+    environment = dev_up._api_environment()
+
+    assert "SYNC_CONSOLE_PASSWORD" not in environment, (
+        "the API must not inherit the console's credential, or every panel behind the console's "
+        "own proxy returns 401 (B187)"
+    )
+    # The rest of the environment is carried, not rebuilt: the API needs PATH, the DSN and
+    # whatever else the shell set, and starting it from an empty environment would trade one
+    # silent failure for another.
+    assert environment.get("SYNC_API_PORT") == "8801"

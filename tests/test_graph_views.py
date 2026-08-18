@@ -26,6 +26,7 @@ from sync.dashboard.graph_views import (
     overview_summary,
     repo_settings,
     severity_rollup,
+    vendor_change_volume,
     vendor_findings,
 )
 from sync.graph.store import GraphStore
@@ -1373,3 +1374,78 @@ def test_upsert_repo_settings_refuses_invalid_merge_method(store):
                 merge_policy_refusals={},
             )
         )
+
+
+def test_vendor_change_volume_aggregates_timeline_and_kinds(store):
+    c1 = VendorChange(
+        id="c1",
+        vendor_id="stripe",
+        kind="breaking",
+        severity="breaking",
+        operation_id="PostCharges",
+        path_ptr="/v1/charges",
+        from_version="v1",
+        to_version="v2",
+        source="oasdiff",
+        detected_at=datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc),
+    )
+    c2 = VendorChange(
+        id="c2",
+        vendor_id="stripe",
+        kind="parameter_removed",
+        severity="warning",
+        operation_id="PostCharges",
+        path_ptr="/v1/charges",
+        from_version="v2",
+        to_version="v3",
+        source="oasdiff",
+        detected_at=datetime(2026, 6, 20, 14, 0, tzinfo=timezone.utc),
+    )
+    c3 = VendorChange(
+        id="c3",
+        vendor_id="stripe",
+        kind="breaking",
+        severity="breaking",
+        operation_id="GetCharges",
+        path_ptr="/v1/charges",
+        from_version="v3",
+        to_version="v4",
+        source="oasdiff",
+        detected_at=datetime(2026, 7, 5, 9, 0, tzinfo=timezone.utc),
+    )
+    c4 = VendorChange(
+        id="c4",
+        vendor_id="openai",
+        kind="endpoint_superseded",
+        severity="deprecation",
+        operation_id="CreateCompletion",
+        path_ptr="/v1/completions",
+        from_version="v1",
+        to_version="v2",
+        source="oasdiff",
+        detected_at=datetime(2026, 7, 10, 12, 0, tzinfo=timezone.utc),
+    )
+
+    store.upsert_vendor_change(c1)
+    store.upsert_vendor_change(c2)
+    store.upsert_vendor_change(c3)
+    store.upsert_vendor_change(c4)
+
+    stripe_vol = vendor_change_volume(store, "stripe")
+    assert stripe_vol["vendor_id"] == "stripe"
+    assert stripe_vol["total_changes"] == 3
+    assert stripe_vol["by_kind"] == {"breaking": 2, "parameter_removed": 1}
+    assert stripe_vol["by_severity"] == {"breaking": 2, "warning": 1}
+    assert len(stripe_vol["timeline"]) == 1
+    assert stripe_vol["timeline"][0]["count"] == 3
+    assert stripe_vol["timeline"][0]["by_kind"] == {"breaking": 2, "parameter_removed": 1}
+
+    openai_vol = vendor_change_volume(store, "openai")
+    assert openai_vol["vendor_id"] == "openai"
+    assert openai_vol["total_changes"] == 1
+    assert openai_vol["by_kind"] == {"endpoint_superseded": 1}
+
+    empty_vol = vendor_change_volume(store, "nonexistent")
+    assert empty_vol["vendor_id"] == "nonexistent"
+    assert empty_vol["total_changes"] == 0
+    assert empty_vol["timeline"] == []
