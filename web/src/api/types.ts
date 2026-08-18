@@ -140,6 +140,35 @@ export interface OverviewResponse extends Provenance {
    * every open finding shares, or `null` when they disagree, which is a different fact.
    */
   bindings_by_rung: Record<BindingSource, number>
+  /**
+   * The last index pass over this repository, or `null` when it has never been indexed.
+   *
+   * **`null` is never-indexed, and it is not a pass that found nothing** — that is a `completed`
+   * row with `call_sites` of 0. Decision 41 needs this on the Overview because a toast may
+   * announce "Index finished, 1,204 call sites" but must never be the only place the fact lives.
+   *
+   * `null` on the fleet scope too: a pass belongs to one repository, and promoting one
+   * repository's pass to stand for all of them is the attribution this console refuses.
+   */
+  last_index_run: IndexRunSummary | null
+}
+
+/** One index pass, as the Overview reads it. */
+export interface IndexRunSummary {
+  started_at: string | null
+  /** `null` while the pass is still going. Not the same as a pass that failed. */
+  finished_at: string | null
+  /**
+   * `null` while in flight — the fourth state beside completed, failed and absent. A reader
+   * meeting a stale `null` here knows the pass never reached a terminal state, which is
+   * different from one that reached `failed`.
+   */
+  outcome: "completed" | "failed" | "abandoned" | null
+  /**
+   * What the pass wrote. `null` unless it completed: a partial count is not a smaller count, and
+   * a number here would be read as the size of the codebase.
+   */
+  call_sites: number | null
 }
 
 /**

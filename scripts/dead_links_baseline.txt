@@ -121,4 +121,3 @@ src/sync/graph/store.py:GraphStore.dismissal_reason_counts
 # when it says how long ago the index last ran and what it found. Delete this line in the
 # commit that puts that on screen.
 src/sync/graph/store.py:GraphStore.index_run_count
-src/sync/graph/store.py:GraphStore.latest_index_run

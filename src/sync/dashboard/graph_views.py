@@ -511,6 +511,30 @@ def severity_rollup(
 OPEN_FINDING_COUNT_BOUND = 1000
 
 
+def _index_run_row(run: dict | None) -> dict | None:
+    """The last index pass, as the console reads it, or `None` when there has never been one.
+
+    `None` is never-indexed and it is not the same fact as a pass that ran and found nothing --
+    that is a completed row with `call_sites` of nought. Every other field is passed through
+    rather than derived: `outcome` is `None` while the pass is in flight, which is a fourth state
+    beside completed, failed and absent, and `call_sites` stays `None` with it because a partial
+    count is not a smaller count.
+
+    No age is computed here, for the reason `index_coverage` gives: a duration derived at response
+    time goes wrong the moment the payload is cached, while the timestamp it came from does not.
+    """
+    if run is None:
+        return None
+    started = run["started_at"]
+    finished = run["finished_at"]
+    return {
+        "started_at": started.isoformat() if started is not None else None,
+        "finished_at": finished.isoformat() if finished is not None else None,
+        "outcome": run["outcome"],
+        "call_sites": run["call_sites"],
+    }
+
+
 def overview_summary(
     store: GraphStore, *, repo_id: str | None = None, bound: int = OPEN_FINDING_COUNT_BOUND
 ) -> dict:
@@ -574,6 +598,10 @@ def overview_summary(
     total, bound_reached = store.open_findings_count_bounded(bound, repo_id=repo_id)
     vendor_counts = store.open_findings_vendor_counts(repo_id=repo_id)
     rung_counts = store.open_findings_rung_counts(repo_id=repo_id)
+    # An index pass belongs to one repository, so the fleet scope has none to report rather than
+    # some repository's pass promoted to stand for all of them -- which is the false attribution
+    # `codebases-panel` made when it printed one fleet total under every card.
+    last_index_run = store.latest_index_run(repo_id) if repo_id is not None else None
     summary = store.open_findings_summary(repo_id=repo_id)
     indexed_at = summary["indexed_at"]
     payload = {
@@ -589,6 +617,7 @@ def overview_summary(
         "feed_fetched_at": None,
         "binding_source": summary["binding_rung"],
         "bindings_by_rung": {rung: rung_counts.get(rung, 0) for rung in FINDING_RUNGS},
+        "last_index_run": _index_run_row(last_index_run),
         "context_savings": total * _TOKENS_PER_AVOIDED_READ,
         "context_savings_bound_reached": bound_reached,
     }

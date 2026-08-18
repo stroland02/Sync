@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import json
 from pathlib import Path
 
@@ -366,3 +367,106 @@ def test_the_fallback_adapter_reads_the_verb_from_the_action():
 
     assert adapter.operation_for_symbol("stripe.charges.retrieve").http_method == "GET"
     assert adapter.operation_for_symbol("stripe.charges.cancel").http_method == "POST"
+
+
+def test_an_explicitly_staged_per_vendor_cache_is_found(tmp_path, staged_cache):
+    """The real adapter must load from a cache staged the way this repository stages one.
+
+    `_load_or_create_vendor_adapter` looked only at the directory it was handed, while
+    `_load_stripe` reads `<cache_dir>/symbols.json` and every caller stages
+    `<cache_dir>/<vendor>/symbols.json` -- which is the layout the function's own discovery branch
+    already expects when no directory is given. So the staged map was never found, `load_vendor`
+    raised `FileNotFoundError`, and the code fell through to `prepare_vendor`, which **fetches the
+    specification over the network**. On a runner with no network that times out and the silent
+    fallback takes over, returning invented operation ids; on a fast connection it succeeds and
+    the tests pass. That is the whole of the local-versus-CI difference.
+    """
+    import sync.index.codebase as codebase
+    from sync.index.codebase import _FallbackIndexingAdapter, _load_or_create_vendor_adapter
+
+    # The network is the escape hatch that hid this: with it available `prepare_vendor` fetches
+    # the specification and the test passes for the wrong reason. Closed here, so the only route
+    # to a real adapter is the staged cache -- which is the thing under test.
+    def _no_network(*args, **kwargs):
+        raise AssertionError("the indexer reached the network to resolve a vendor")
+
+    original = codebase.prepare_vendor
+    codebase.prepare_vendor = _no_network
+    try:
+        adapter = _load_or_create_vendor_adapter("stripe", staged_cache)
+    finally:
+        codebase.prepare_vendor = original
+
+    assert not isinstance(adapter, _FallbackIndexingAdapter), (
+        "fell back to the fabricating adapter instead of loading the staged cache"
+    )
+
+
+def test_the_real_adapter_answers_with_the_operation_the_spec_names(tmp_path, staged_cache):
+    """And the reason the fallback must never stand in silently: it invents ids.
+
+    The staged spec names `PostCharges`; the fallback would answer `CreateCharges`, which is an
+    operation no vendor has. A finding built on it would open a pull request against an operation
+    that does not exist -- worse than the crash it replaced, because it looks like an answer.
+    """
+    import sync.index.codebase as codebase
+    from sync.index.codebase import _load_or_create_vendor_adapter
+
+    def _no_network(*args, **kwargs):
+        raise AssertionError("the indexer reached the network to resolve a vendor")
+
+    original = codebase.prepare_vendor
+    codebase.prepare_vendor = _no_network
+    try:
+        adapter = _load_or_create_vendor_adapter("stripe", staged_cache)
+    finally:
+        codebase.prepare_vendor = original
+    ref = adapter.operation_for_symbol("stripe.charges.create")
+
+    assert ref is not None
+    assert ref.operation_id == "PostCharges"
+
+
+def test_falling_back_says_why_rather_than_swallowing_the_reason(tmp_path, caplog):
+    """Two nested bare `except Exception: pass` turned every load failure into a silent
+    substitution, which is why no reason was ever reported and why this took a night to find.
+
+    The fallback fabricates operation ids, so choosing it is a decision worth a line in the log
+    naming both causes -- the load failure and the prepare failure. Loud first; then one run
+    names the real problem instead of a week of bisecting.
+    """
+    import sync.index.codebase as codebase
+    from sync.index.codebase import _FallbackIndexingAdapter, _load_or_create_vendor_adapter
+
+    empty = tmp_path / "empty-cache"
+    empty.mkdir()
+
+    def _no_network(*args, **kwargs):
+        raise RuntimeError("network refused")
+
+    original = codebase.prepare_vendor
+    codebase.prepare_vendor = _no_network
+    try:
+        with caplog.at_level(logging.WARNING):
+            adapter = _load_or_create_vendor_adapter("stripe", empty)
+    finally:
+        codebase.prepare_vendor = original
+
+    assert isinstance(adapter, _FallbackIndexingAdapter)
+    text = caplog.text
+    assert "stripe" in text
+    # Both causes, because either alone leaves the reader guessing which half failed.
+    assert "network refused" in text
+    assert "fallback" in text.lower()
+
+
+def test_a_relative_cache_path_is_resolved_rather_than_left_to_the_working_directory(tmp_path):
+    """`.cache/specs` resolves against the process's current directory, so which adapter loads
+    depended on where the process happened to stand -- the order-dependence that made this look
+    environmental. The candidates are absolute now, so the answer does not move with the CWD."""
+    from sync.index.codebase import _cache_candidates
+
+    candidates = _cache_candidates("stripe", None)
+
+    assert candidates, "discovery must offer somewhere to look"
+    assert all(c.is_absolute() for c in candidates), [str(c) for c in candidates]
