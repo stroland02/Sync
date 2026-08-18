@@ -1,5 +1,5 @@
 /**
- * Settings test suite for sub-navigation, card-scoped settings, and refusal contracts.
+ * Settings test suite for sub-navigation, card-scoped settings, refusal contracts, and about platform panel.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -70,12 +70,13 @@ function renderSettings(initialEntry = "/settings") {
 }
 
 describe("SettingsPage sub-navigation and setting cards", () => {
-  it("renders the left sub-navigation with all four setting groups", () => {
+  it("renders the left sub-navigation with all five setting groups", () => {
     renderSettings()
     expect(screen.getByRole("button", { name: /Pull requests/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /Codebases/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /Adapters/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /GitHub Connection/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /About Sync/i })).toBeTruthy()
   })
 
   it("renders Pull requests settings with merge policy, method, branch cards and refusal notice", async () => {
@@ -116,5 +117,17 @@ describe("SettingsPage sub-navigation and setting cards", () => {
 
     expect(await screen.findByText("Registered Adapters & Vendor Feeds")).toBeTruthy()
     expect(screen.getByText("stripe")).toBeTruthy()
+  })
+
+  it("renders About Sync group with platform documentation and explanations", async () => {
+    renderSettings()
+    const aboutBtn = screen.getByRole("button", { name: /About Sync/i })
+    fireEvent.click(aboutBtn)
+
+    expect(await screen.findByText("About Sync & Platform Concepts")).toBeTruthy()
+    expect(screen.getByText("Provenance Rungs")).toBeTruthy()
+    expect(screen.getByText("Adapter Tiers")).toBeTruthy()
+    expect(screen.getByText("Abandoned Runs as Data")).toBeTruthy()
+    expect(screen.getByText("Verification Gates")).toBeTruthy()
   })
 })
