@@ -107,6 +107,26 @@ it.** So, highest first:
 scoped) and page headers (answer: removed). A lane finding a new conflict records it here rather than
 resolving it silently.
 
+**Third conflict, recorded by Lane C, `CI-W378` — the pull request screen's approval bar.**
+`screens/08-pull-request.png` draws a full-width bar under the header offering **Abandon**,
+**Request changes** and **Approve**, with the sentence that approval is a standing instruction and
+Sync merges the moment CI reports green. It is the most prominent element on that screen.
+
+**Sync cannot honour any of the three.** The API is read-only by guarantee, enforced by
+`tests/test_api_routes.py::test_no_route_reaches_past_the_read_surface`. Three buttons that do
+nothing is the smaller problem; the sentence beside them claims Sync merges on a standing
+instruction, which is a capability claim the product does not have.
+
+**Resolved the mock's way losing**, on authority 2 rather than 3: `CLAUDE.md` governs what may be
+claimed, and `.claude/rules/interface-originality.md` refuses "any claim their screen makes that our
+data cannot support" regardless of how good the reference is. The evidence bundle's layout was ported
+(`CI-W375`); the bar was not built.
+
+**What would retire this conflict:** a write surface. Decisions 23-24 select *tier 0 runs free, agent
+tiers ask first*, which needs a control that starts a run — so the console is getting an action
+surface, and when it exists this bar is buildable and should be revisited. Until then the refusal
+stands and it is a product fact rather than an omission.
+
 ## Round three — eight more, and one revises a round-two answer
 
 **21. A finding's drawer opens on the code, call site highlighted.** *Consequence:* the drawer needs
