@@ -37,7 +37,8 @@ vendor ships a breaking change  →  Sync finds every call site that depends on 
 
 ## Run it
 
-**Three ways in, and all three are supported.** Every one of them ends at the same console on
+**Three ways in. Two of them work today, and the third is written down because it is where this
+is going.** Every one of them ends at the same console on
 **http://127.0.0.1:4173**, signed in with the password the log prints — `sync-local-demo` unless you
 exported `SYNC_CONSOLE_PASSWORD` first.
 
@@ -47,10 +48,16 @@ exported `SYNC_CONSOLE_PASSWORD` first.
 npx @superloglabs/sync
 ```
 
-`bin/sync-up.mjs` checks the one prerequisite and hands over to `docker compose`. It deliberately
-reimplements none of the real steps: npm delivers a Node program, and a wrapper claiming to install
-Python and a database would fail in front of the person being shown it. **Not yet verified from a
-published package** — if it does not resolve, use the checkout below, which is the same work.
+**This does not work yet, and the reason is one line in our own manifest.** `@superloglabs/sync`
+is not published — the registry answers 404, and `package.json` carries `"private": true`, so
+`npm publish` refuses. That is a decision nobody has taken rather than a step nobody has got to.
+**Use [2. From a checkout](#2-from-a-checkout--one-prerequisite-and-it-is-docker) instead; it is
+the same work and it runs today.**
+
+The program itself is real and is what publishing would ship: `bin/sync-up.mjs` checks the one
+prerequisite and hands over to `docker compose`. It deliberately reimplements none of the real
+steps — npm delivers a Node program, and a wrapper claiming to install Python and a database
+would fail in front of the person being shown it.
 
 ### 2. From a checkout — one prerequisite, and it is Docker
 
@@ -114,9 +121,10 @@ sits.
 - **The one-command form exists and is `npx @superloglabs/sync`.** `bin/sync-up.mjs` checks the
   single prerequisite and hands over to exactly the `docker compose` invocation above — it
   deliberately reimplements none of it, because npm delivers a Node program and a wrapper claiming
-  to install Python and a database would fail in front of the person being shown it. What has not
-  been verified is the published path: whether that command resolves for somebody who is not
-  already in this checkout.
+  to install Python and a database would fail in front of the person being shown it. **The
+  published path has now been measured and it does not exist**: the registry answers 404 and
+  `package.json` marks the package private, so `npm publish` refuses. Publishing it is a decision
+  and a credential, not a task.
 
 To stop it, and to remove its database with it:
 
