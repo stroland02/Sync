@@ -38,6 +38,7 @@ import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { FactTile } from "@/components/fact-tile"
+import { CodebaseFactsBand } from "@/features/fleet/codebase-facts"
 import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
 import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
@@ -78,6 +79,14 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
         question={question}
         trail={<Breadcrumbs trail={[{ label: "Overview" }]} />}
       />
+
+      {/* The top band: what is true about the codebase this screen is about. The owner's ruling of
+          2026-08-18 is that the Overview *is* the selected codebase and selection is chrome — so
+          the facts about that one codebase lead, and the directory of codebases below is what a
+          reader chose from rather than what the screen is about. The route, the hierarchy and
+          `GRAPH_LEVELS` are untouched: that amendment is the specification's and has not landed,
+          and `.claude/rules/console-hierarchy.md` makes the ordering the whole rule. */}
+      <CodebaseFactsBand />
 
       {/* Filter Tabs & Scope Description */}
       <ControlBar>

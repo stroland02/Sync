@@ -33,6 +33,9 @@ vi.mock("@/api/queries", async (importOriginal) => ({
   useRuns: () => settled({ items: [], total: 0 }),
   useDetectors: () => settled({ detectors: [] }),
   useCorpus: () => settled({ attempts: 0, distinct_findings: 0 }),
+  useRepositoryCoverage: () =>
+    settled({ repo_id: "org/one", by_vendor: { stripe: 4 }, last_indexed: {}, total_call_sites: 4 }),
+  useChangeUnits: () => settled({ items: [], total: 0, next_offset: null }),
 }))
 
 const { fetchOverview } = vi.hoisted(() => ({ fetchOverview: vi.fn() }))
@@ -41,14 +44,14 @@ vi.mock("@/api/client", async (importOriginal) => ({
   fetchOverview,
 }))
 
-function renderOverview() {
+function renderOverview(entry = "/") {
   fetchOverview.mockImplementation(({ repoId }: { repoId?: string }) =>
     Promise.resolve({ repo_id: repoId ?? null, vendors: [], total_findings: 0 } as unknown as OverviewResponse)
   )
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={[entry]}>
         <FleetPage />
       </MemoryRouter>
     </QueryClientProvider>
@@ -112,6 +115,35 @@ describe("the overview screen", () => {
     // arrangement itself is measured in Chrome; what is held here is the structural precondition
     // without which "beside" cannot be true at any viewport.
     expect(band!.childElementCount).toBe(2)
+  })
+
+  it("leads with the codebase fact band, because the Overview is a dashboard for one codebase", () => {
+    const { container } = renderOverview("/?repo_id=org%2Fone")
+
+    const band = container.querySelector("[aria-label='Codebase facts']")
+    expect(band).not.toBeNull()
+    expect(band?.textContent).toContain("org/one")
+
+    // The band is above the repository list. The list is still on this screen — removing it is the
+    // owner's ruling and is sequenced after the specification amendment — but the codebase this
+    // screen is about comes first, not the directory of codebases it was chosen from.
+    const table = container.querySelector("table")
+    expect(table).not.toBeNull()
+    expect(
+      band!.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeGreaterThan(0)
+  })
+
+  it("names no codebase, and states no figure, when the address selects none", () => {
+    const { container } = renderOverview()
+
+    const band = container.querySelector("[aria-label='Codebase facts']")
+    expect(band).not.toBeNull()
+    // Two repositories are indexed and the address names neither. Picking one would be the console
+    // deciding what the operator is looking at, and rendering fleet-wide figures under a
+    // codebase's name would be a false claim about that codebase.
+    expect(band?.textContent).toContain("No codebase is selected")
+    expect(band?.textContent).not.toContain("Call sites indexed")
   })
 
   it("still says the repository list is the thing absence is measured against", () => {

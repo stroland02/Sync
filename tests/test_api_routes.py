@@ -96,11 +96,13 @@ def _web_source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _fake_runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+def _fake_runs_reader(
+    *, repo_id: str | None = None, limit: int = 50, offset: int = 0
+) -> dict[str, Any]:
     return {"items": [], "total": 0, "next_offset": None}
 
 
-def _fake_corpus_reader() -> dict[str, Any]:
+def _fake_corpus_reader(*, repo_id: str | None = None) -> dict[str, Any]:
     return {
         "attempts": 0,
         "distinct_findings": 0,
@@ -125,7 +127,7 @@ def _fake_corpus_health_reader() -> dict[str, Any]:
 
 
 def _fake_repositories_reader() -> dict[str, Any]:
-    return {"repo_ids": []}
+    return {"repo_ids": ["r1"]}
 
 
 def _fake_abandonment_reader() -> dict[str, Any]:
@@ -212,11 +214,49 @@ def _fake_vendor_findings_reader(
     }
 
 
+def _fake_findings_reader(
+    *,
+    repo_id=None,
+    vendor_id=None,
+    severity=None,
+    path=None,
+    order=None,
+    limit=DEFAULT_LIMIT,
+    offset=0,
+) -> dict[str, Any]:
+    return {
+        **_EMPTY_PAGE,
+        "repo_id": repo_id,
+        "vendor_id": vendor_id,
+        "indexed_at": None,
+        "feed_fetched_at": None,
+        "binding_source": None,
+        "context_savings": 0,
+    }
+
+
 def _fake_context_reader(repo_id: str) -> dict[str, Any]:
     return {"repo_id": repo_id, "body": "", "source": None, "updated_at": None}
 
 
 def _fake_context_writer(repo_id: str, body: str) -> None:
+    pass
+
+
+def _fake_settings_reader(repo_id: str) -> dict[str, Any]:
+    return {
+        "repo_id": repo_id,
+        "merge_policy": "when_checks_pass",
+        "merge_method": "squash",
+        "base_branch": "main",
+        "allowed_merge_policies": ["never", "when_checks_pass"],
+        "allowed_merge_methods": ["squash", "merge", "rebase"],
+        "merge_policy_refusals": {"immediate": "Refused: violates invariant 'nothing reaches a pull request unverified'"},
+        "updated_at": None,
+    }
+
+
+def _fake_settings_writer(repo_id: str, payload: dict[str, Any]) -> None:
     pass
 
 
@@ -254,6 +294,9 @@ def _build_app(
     change_units_reader=_fake_change_units_reader,
     context_reader=_fake_context_reader,
     context_writer=_fake_context_writer,
+    findings_reader=None,
+    settings_reader=_fake_settings_reader,
+    settings_writer=_fake_settings_writer,
     api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
@@ -283,6 +326,9 @@ def _build_app(
         change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
+        findings_reader=findings_reader,
+        settings_reader=settings_reader,
+        settings_writer=settings_writer,
         api_password=api_password,
     )
 
@@ -462,6 +508,29 @@ def test_the_vendor_route_hands_the_ordering_to_the_reader():
     assert calls[0]["order"] == "severity"
 
 
+def test_the_findings_route_forwards_repo_id_and_filters():
+    calls: list[dict[str, Any]] = []
+
+    def reader(**kwargs):
+        calls.append(kwargs)
+        return _fake_findings_reader(**kwargs)
+
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            findings_reader=reader,
+        )
+    )
+
+    client.get("/api/findings?repo_id=github.com/acme/storefront&severity=breaking")
+    assert calls[0]["repo_id"] == "github.com/acme/storefront"
+    assert calls[0]["severity"] == "breaking"
+
+    client.get("/api/repositories/github.com/acme/storefront/findings?order=severity")
+    assert calls[1]["repo_id"] == "github.com/acme/storefront"
+    assert calls[1]["order"] == "severity"
+
+
 def test_the_vendor_route_defaults_the_ordering_when_the_url_names_none():
     reader, calls = _recording_vendor_findings_reader()
     client = TestClient(
@@ -574,7 +643,7 @@ def test_runs_route_a_negative_offset_is_floored():
 
     client.get("/api/runs?offset=-3")
 
-    assert calls == [{"limit": DEFAULT_LIMIT, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": DEFAULT_LIMIT, "offset": 0}]
 
 
 def test_vendor_route_returns_empty_page_for_unknown_vendor():
@@ -745,7 +814,7 @@ def test_runs_route_returns_the_readers_payload_unaltered():
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        runs_reader=lambda *, limit, offset: payload,
+        runs_reader=lambda *, limit, offset, **_: payload,
     )
     client = TestClient(app)
 
@@ -765,7 +834,7 @@ def test_corpus_route_returns_the_readers_payload_unaltered():
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        corpus_reader=lambda: payload,
+        corpus_reader=lambda **_: payload,
     )
     client = TestClient(app)
 
@@ -790,10 +859,10 @@ def test_repositories_route_returns_the_readers_payload_unaltered():
 
 
 def _recording_runs_reader():
-    calls: list[dict[str, int]] = []
+    calls: list[dict[str, Any]] = []
 
-    def reader(*, limit: int, offset: int) -> dict[str, Any]:
-        calls.append({"limit": limit, "offset": offset})
+    def reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
     return reader, calls
@@ -806,7 +875,17 @@ def test_runs_route_passes_limit_and_offset_to_its_reader():
 
     client.get("/api/runs?limit=7&offset=3")
 
-    assert calls == [{"limit": 7, "offset": 3}]
+    assert calls == [{"repo_id": None, "limit": 7, "offset": 3}]
+
+
+def test_runs_route_passes_repo_id_to_its_reader():
+    reader, calls = _recording_runs_reader()
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), runs_reader=reader)
+    client = TestClient(app)
+
+    client.get("/api/runs?repo_id=github.com/acme/storefront&limit=10&offset=0")
+
+    assert calls == [{"repo_id": "github.com/acme/storefront", "limit": 10, "offset": 0}]
 
 
 def test_runs_route_limit_above_the_ceiling_is_clamped():
@@ -816,7 +895,7 @@ def test_runs_route_limit_above_the_ceiling_is_clamped():
 
     client.get(f"/api/runs?limit={_MAX_LIMIT * 1000}")
 
-    assert calls == [{"limit": _MAX_LIMIT, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": _MAX_LIMIT, "offset": 0}]
 
 
 def test_runs_route_a_limit_under_the_ceiling_passes_through_untouched():
@@ -826,7 +905,7 @@ def test_runs_route_a_limit_under_the_ceiling_passes_through_untouched():
 
     client.get("/api/runs?limit=9")
 
-    assert calls == [{"limit": 9, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": 9, "offset": 0}]
 
 
 def test_runs_route_a_negative_limit_is_floored():
@@ -836,7 +915,7 @@ def test_runs_route_a_negative_limit_is_floored():
 
     client.get("/api/runs?limit=-1")
 
-    assert calls == [{"limit": 1, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": 1, "offset": 0}]
 
 
 def test_runs_route_a_zero_limit_is_floored():
@@ -846,22 +925,37 @@ def test_runs_route_a_zero_limit_is_floored():
 
     client.get("/api/runs?limit=0")
 
-    assert calls == [{"limit": 1, "offset": 0}]
+    assert calls == [{"repo_id": None, "limit": 1, "offset": 0}]
 
 
-def test_corpus_route_reaches_its_reader_exactly_once_with_no_arguments():
-    calls: list[None] = []
+def test_corpus_route_passes_repo_id_to_its_reader():
+    calls: list[dict[str, Any]] = []
 
-    def corpus_reader():
-        calls.append(None)
-        return _fake_corpus_reader()
+    def corpus_reader(*, repo_id: str | None = None):
+        calls.append({"repo_id": repo_id})
+        return _fake_corpus_reader(repo_id=repo_id)
+
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
+    client = TestClient(app)
+
+    client.get("/api/corpus?repo_id=github.com/acme/storefront")
+
+    assert calls == [{"repo_id": "github.com/acme/storefront"}]
+
+
+def test_corpus_route_reaches_its_reader_with_none_when_unscoped():
+    calls: list[dict[str, Any]] = []
+
+    def corpus_reader(*, repo_id: str | None = None):
+        calls.append({"repo_id": repo_id})
+        return _fake_corpus_reader(repo_id=repo_id)
 
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
     client = TestClient(app)
 
     client.get("/api/corpus")
 
-    assert calls == [None]
+    assert calls == [{"repo_id": None}]
 
 
 def test_repositories_route_reaches_its_reader_exactly_once_with_no_arguments():
@@ -1048,6 +1142,7 @@ def test_coverage_route_returns_the_readers_payload_unaltered():
     payload = {"repo_id": "r1", "by_vendor": {"stripe": 3}, "total_call_sites": 3}
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: {"repo_ids": ["r1"]},
         coverage_reader=lambda repo_id: payload,
     )
     client = TestClient(app)
@@ -1058,6 +1153,49 @@ def test_coverage_route_returns_the_readers_payload_unaltered():
     assert response.json() == payload
 
 
+def test_coverage_and_observed_routes_return_404_for_unknown_repository():
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        coverage_reader=lambda r: None if r == "nonexistent-repo" else _fake_coverage_reader(r),
+        observed_reader=lambda r, **_: None if r == "nonexistent-repo" else _fake_observed_reader(r),
+    )
+    client = TestClient(app)
+
+    cov_res = client.get("/api/repositories/nonexistent-repo/coverage")
+    assert cov_res.status_code == 404
+    assert cov_res.json() == {"error": "repository not found", "identifier": "nonexistent-repo"}
+
+    obs_res = client.get("/api/repositories/nonexistent-repo/observed")
+    assert obs_res.status_code == 404
+    assert obs_res.json() == {"error": "repository not found", "identifier": "nonexistent-repo"}
+
+
+def test_coverage_and_observed_routes_handle_slashed_repo_id_for_known_repo():
+    repo_id = "github.com/acme/storefront"
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: {"repo_ids": [repo_id]},
+        coverage_reader=lambda r: {"repo_id": r, "by_vendor": {}, "last_indexed": {}, "total_call_sites": 0},
+        observed_reader=lambda r, **_: {
+            "repo_id": r,
+            "calls": dict(_EMPTY_PAGE),
+            "shapes": dict(_EMPTY_PAGE),
+            "error_windows": dict(_EMPTY_PAGE),
+        },
+    )
+    client = TestClient(app)
+
+    cov_res = client.get(f"/api/repositories/{repo_id}/coverage")
+    assert cov_res.status_code == 200
+    assert cov_res.json()["repo_id"] == repo_id
+    assert cov_res.json()["total_call_sites"] == 0
+
+    obs_res = client.get(f"/api/repositories/{repo_id}/observed")
+    assert obs_res.status_code == 200
+    assert obs_res.json()["repo_id"] == repo_id
+    assert obs_res.json()["calls"]["total"] == 0
+
+
 def test_coverage_route_passes_the_path_repo_id_to_its_reader():
     calls: list[str] = []
 
@@ -1065,7 +1203,11 @@ def test_coverage_route_passes_the_path_repo_id_to_its_reader():
         calls.append(repo_id)
         return _fake_coverage_reader(repo_id)
 
-    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), coverage_reader=reader)
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        repositories_reader=lambda: {"repo_ids": ["r1"]},
+        coverage_reader=reader,
+    )
     client = TestClient(app)
 
     client.get("/api/repositories/r1/coverage")
@@ -1324,13 +1466,13 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         workflow_reads.append(finding_id)
         return {"nodes": [], "outcome": None, "abandon_reason": None}
 
-    def runs_reader(*, limit: int, offset: int):
-        runs_reads.append({"limit": limit, "offset": offset})
+    def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+        runs_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
-    def corpus_reader():
-        corpus_reads.append(None)
-        return _fake_corpus_reader()
+    def corpus_reader(*, repo_id: str | None = None):
+        corpus_reads.append({"repo_id": repo_id})
+        return _fake_corpus_reader(repo_id=repo_id)
 
     def corpus_health_reader():
         corpus_health_reads.append(None)
@@ -1544,6 +1686,9 @@ _LIMIT_OFFSET_COLLECTIONS = {
     # graph's own data rather than with anything fixed in code or configuration.
     "/api/vendors/{vendor_id}",
     "/api/vendors/{vendor_id}/changes",
+    "/api/findings",
+    "/api/repositories/{repo_id:path}/findings",
+    "/api/repos/{repo_id:path}/findings",
     # Every remediation run across the fleet -- grows with usage, unboundedly.
     "/api/runs",
     # Every open finding grouped into a change unit (`sync.dashboard.fleet.change_units`) --
@@ -1563,6 +1708,7 @@ _LIMIT_OFFSET_COLLECTIONS = {
 # either is unaccounted for.
 _MULTI_CURSOR_COLLECTIONS = {
     "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",
+    "/api/repositories/{repo_id:path}/observed",
     "/api/repositories/{repo_id}/observed",
 }
 
@@ -1580,14 +1726,14 @@ _MULTI_CURSOR_COLLECTIONS = {
 # - `/api/findings/{finding_id}` and `/api/workflows/{finding_id}` each answer one resource. A
 #   finding's list-valued fields (`args_keys`, `response_fields_read`, `known_changes`) describe
 #   that one finding, not a page of findings.
-# - `/api/corpus` and `/api/repositories/{repo_id}/coverage` are aggregate counts grouped into
+# - `/api/corpus` and `/api/repositories/{repo_id:path}/coverage` are aggregate counts grouped into
 #   dicts (`by_terminal_status`, `by_vendor`, ...), not lists of records -- there is nothing to
 #   page through.
 # - `/api/corpus/abandonment` is the same shape one level deeper: `groups` is one entry per
 #   `(change_kind, tier)` pair actually attempted, bounded by the vocabulary of change kinds and
 #   tiers rather than growing with usage the way `/api/runs` does, so it is an aggregate list
 #   rather than a page of records.
-# - `/api/repos/{repo_id}/context` answers one repository's context row -- one body, one
+# - `/api/repos/{repo_id:path}/context` answers one repository's context row -- one body, one
 #   source, one timestamp. There is nothing here that grows with usage the way a page does.
 _NOT_COLLECTIONS = {
     "/api/overview",
@@ -1597,6 +1743,7 @@ _NOT_COLLECTIONS = {
     "/api/corpus/health",
     "/api/corpus/abandonment",
     "/api/repositories",
+    "/api/repositories/{repo_id:path}/coverage",
     "/api/repositories/{repo_id}/coverage",
     "/api/detectors",
     # Bounded by what the deployment registers plus what the graph has history for -- a number an
@@ -1604,6 +1751,8 @@ _NOT_COLLECTIONS = {
     # whose length is a property of the configuration file.
     "/api/adapters",
     "/api/repos/{repo_id:path}/context",
+    "/api/repositories/{repo_id:path}/settings",
+    "/api/repos/{repo_id:path}/settings",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -1710,7 +1859,9 @@ def test_every_collection_route_accepts_limit_and_offset():
             "next_offset": consumed if consumed < len(items) else None,
         }
 
-    def runs_reader(*, limit: int, offset: int) -> dict[str, Any]:
+    def runs_reader(
+        *, repo_id: str | None = None, limit: int = 50, offset: int = 0
+    ) -> dict[str, Any]:
         return _paged(run_items, limit, offset)
 
     def vendor_findings_reader(vendor_id: str, *, limit: int, offset: int, **_) -> dict[str, Any]:
@@ -1906,6 +2057,11 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/corpus/abandonment",  # M12-W196: aggregate and route only, panel not yet scheduled
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
+    "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
+    "/api/repositories/{param}/findings",
+    "/api/repos/{param}/findings",
+    "/api/repositories/{param}/settings",
+    "/api/repos/{param}/settings",
 }
 
 
@@ -2125,7 +2281,21 @@ def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch)
     the same treatment and a checkpointer fixture to hang it on.
     """
     dsn = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
-    GraphStore(dsn).apply_schema()
+    store = GraphStore(dsn)
+    store.apply_schema()
+    store.upsert_call_site(
+        CallSite(
+            repo_id="r1",
+            path="src/billing.ts",
+            line=10,
+            col=1,
+            symbol="stripe.charges.create",
+            sdk_version="1.0.0",
+            content_hash="h1",
+            vendor_id="stripe",
+            operation_id="PostCharges",
+        )
+    )
     monkeypatch.setenv("SYNC_GRAPH_DSN", dsn)
     monkeypatch.delenv("SYNC_CHECKPOINTER_DSN", raising=False)
     monkeypatch.delenv("SYNC_API_RELOAD", raising=False)
@@ -2146,5 +2316,68 @@ def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch)
         "/api/detectors?repo_id=r1",
         "/api/corpus",
         "/api/corpus/health",
+        "/api/findings",
+        "/api/findings?repo_id=r1",
+        "/api/repositories/r1/findings",
+        "/api/repos/r1/findings",
+        "/api/repositories/r1/settings",
+        "/api/repos/r1/settings",
     ):
         assert client.get(path).status_code == 200, path
+
+
+def test_settings_route_get_returns_settings():
+    client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+    resp = client.get("/api/repositories/github.com/acme/storefront/settings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["repo_id"] == "github.com/acme/storefront"
+    assert data["merge_policy"] == "when_checks_pass"
+    assert data["merge_method"] == "squash"
+
+
+def test_settings_route_post_updates_settings():
+    written = []
+
+    def writer(repo_id: str, payload: dict):
+        written.append((repo_id, payload))
+
+    client = TestClient(
+        _build_app(
+            surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+            settings_writer=writer,
+        )
+    )
+
+    resp = client.post(
+        "/api/repositories/github.com/acme/storefront/settings",
+        json={"merge_policy": "never", "merge_method": "rebase", "base_branch": "main"},
+    )
+    assert resp.status_code == 200
+    assert written == [("github.com/acme/storefront", {"merge_policy": "never", "merge_method": "rebase", "base_branch": "main"})]
+
+
+def test_settings_route_post_refuses_immediate_merge_policy():
+    client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+
+    resp = client.post(
+        "/api/repositories/github.com/acme/storefront/settings",
+        json={"merge_policy": "immediate"},
+    )
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "refused" in data["error"].lower()
+    assert "refusal_reason" in data
+    assert data["allowed_merge_policies"] == ["never", "when_checks_pass"]
+
+
+def test_settings_route_post_rejects_invalid_method():
+    client = TestClient(_build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)))
+
+    resp = client.post(
+        "/api/repositories/github.com/acme/storefront/settings",
+        json={"merge_method": "invalid-method"},
+    )
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "Invalid merge_method" in data["error"]

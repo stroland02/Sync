@@ -493,10 +493,26 @@ CREATE TABLE IF NOT EXISTS observed_error_window (
 -- No foreign key to `call_site`. Context may precede an index, and a repository Sync has never
 -- indexed is one an operator may still describe.
 CREATE TABLE IF NOT EXISTS repo_context (
-    repo_id     TEXT PRIMARY KEY,
-    body        TEXT NOT NULL,
-    source      TEXT NOT NULL,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    repo_id                TEXT PRIMARY KEY,
+    body                   TEXT NOT NULL,
+    source                 TEXT NOT NULL,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    telemetry_attached_at  TIMESTAMPTZ
+);
+
+-- Grain: one row per repository.
+--
+-- Automation and merge settings for agent-opened pull requests against this repository.
+-- `merge_policy`: 'never' | 'when_checks_pass'. Immediate merge without verification is refused.
+-- `merge_method`: 'squash' | 'merge' | 'rebase'.
+-- `base_branch`: target base branch (default: 'main').
+CREATE TABLE IF NOT EXISTS repo_settings (
+    repo_id                 TEXT PRIMARY KEY,
+    merge_policy            TEXT NOT NULL DEFAULT 'when_checks_pass',
+    merge_method            TEXT NOT NULL DEFAULT 'squash',
+    base_branch             TEXT NOT NULL DEFAULT 'main',
+    merge_policy_refusals   JSONB NOT NULL DEFAULT '{"immediate": "Refused: violates invariant ''nothing reaches a pull request unverified''"}'::jsonb,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Grain: one row per attempt (not per adapter).

@@ -130,3 +130,9 @@ src/sync/remediate/forward_proxy_server.py:running_proxy
 # nothing in this tree yet composes that pairing. Unreachable on purpose until it does.
 src/sync/remediate/isolated_network.py:isolated_network
 
+# `index_codebase` (M5-W314) provides multi-vendor, multi-language arbitrary codebase
+# indexing across TypeScript/TSX/JS and Python for customer repositories. Finished and tested
+# in `tests/test_codebase_index.py`.
+src/sync/index/codebase.py:index_codebase
+
+

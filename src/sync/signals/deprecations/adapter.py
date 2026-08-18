@@ -79,7 +79,9 @@ OPENAI = DeprecationSource(
     # deprecated models unindexed -- the finding raised, and no call site to attach it to.
     prefixes=(
         "gpt-", "chatgpt-", "o1", "o3", "o4",
-        "text-", "davinci", "babbage", "curie", "ada",
+        "text-davinci", "text-curie", "text-babbage", "text-ada",
+        "text-embedding-", "text-search-", "text-similarity-", "text-moderation-",
+        "davinci", "babbage", "curie", "ada",
         "code-", "codex-", "ft-",
         "dall-e", "whisper", "tts-", "sora-", "omni-",
     ),

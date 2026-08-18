@@ -25,8 +25,18 @@ export default defineConfig({
     // One file, and it only fills in `matchMedia`, which jsdom does not implement and the vendored
     // sidebar calls on mount. Its own docstring carries why the stub answers the way it does.
     setupFiles: ["./src/test-setup.ts"],
-    // The suite is pure functions and small component mounts; a run that needs a longer
-    // default is a test reaching for something this scope does not cover.
-    testTimeout: 5_000,
+    // Raised from 5s on 2026-08-18, and the reason is a real cost rather than flake.
+    //
+    // The chassis got heavier. `M14-W366` made the sidebar render every destination on every route
+    // instead of one area's run, and `M14-W377` added a codebase fact band, a rung panel and a
+    // dependency canvas that mount with it. Several tests loop over every route rendering the whole
+    // frame, so their cost is routes x frame, and the frame roughly tripled. They pass in ~10s alone
+    // and tipped over 5s only under a loaded parallel run -- the banner loop reached 17s while three
+    // agent workflows were running against the same worktree.
+    //
+    // This is a budget, not a fix. If a test needs more than this it is doing something this scope
+    // does not cover; if the whole suite creeps toward it, the frame is the thing to look at rather
+    // than this number.
+    testTimeout: 20_000,
   },
 })

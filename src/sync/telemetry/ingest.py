@@ -114,6 +114,9 @@ def ingest_payload(
             )
         )
 
+    if hasattr(store, "mark_telemetry_attached"):
+        store.mark_telemetry_attached(repo_id)
+
     spans_read = sum(len(spans) for spans in grouped.values())
     return IngestReport(
         spans_read=spans_read,

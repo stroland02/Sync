@@ -443,6 +443,36 @@ class PythonAdapter:
                 if stripped and not stripped.startswith("-"):
                     requirements.append(stripped)
 
+        if self._distribution is None or not any(self._requirement_name(item) == self._distribution for item in requirements):
+            skip = {".venv", "venv", "site-packages", "__pycache__", ".tox", "build", "dist", ".git", ".cache"}
+            for p in root.rglob("pyproject.toml"):
+                if p == pyproject:
+                    continue
+                if any(part in skip for part in p.relative_to(root).parts[:-1]):
+                    continue
+                try:
+                    data = tomllib.loads(p.read_text(encoding=_MANIFEST_ENCODING))
+                    project = data.get("project")
+                    if isinstance(project, dict):
+                        declared = project.get("dependencies")
+                        if isinstance(declared, list):
+                            requirements += [item for item in declared if isinstance(item, str)]
+                except Exception:
+                    pass
+
+            for p in root.rglob("requirements.txt"):
+                if p == text_manifest:
+                    continue
+                if any(part in skip for part in p.relative_to(root).parts[:-1]):
+                    continue
+                try:
+                    for line in p.read_text(encoding=_MANIFEST_ENCODING).splitlines():
+                        stripped = line.split("#", 1)[0].strip()
+                        if stripped and not stripped.startswith("-"):
+                            requirements.append(stripped)
+                except Exception:
+                    pass
+
         return requirements, unreadable
 
     def _requirement_lines(self, repo: RepoRef) -> list[str]:
@@ -508,8 +538,11 @@ class PythonAdapter:
 
     def _source_files(self, repo: RepoRef) -> list[Path]:
         root = Path(repo.local_path)
-        skip = {".venv", "venv", "site-packages", "__pycache__", ".tox", "build", "dist"}
-        return [p for p in root.rglob("*.py") if not skip & set(p.parts)]
+        skip = {".venv", "venv", "site-packages", "__pycache__", ".tox", "build", "dist", ".git", ".cache"}
+        return [
+            p for p in root.rglob("*.py")
+            if p.is_file() and not (skip & set(p.relative_to(root).parts[:-1]))
+        ]
 
     def _readable_sources(self, repo: RepoRef) -> Iterator[tuple[Path, bytes]]:
         """Every source file that is UTF-8, with its bytes, naming the ones that are not.

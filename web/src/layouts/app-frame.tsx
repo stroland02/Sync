@@ -8,7 +8,6 @@ import {
   FolderTree,
   GitPullRequest,
   Layers,
-  PanelLeft,
   Plug,
   Radar,
   Radio,
@@ -23,10 +22,10 @@ import { ErrorSurface } from "@/components/error-surface"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { ScopeTrail } from "@/layouts/scope-switchers"
 import {
-  SIDEBAR_WIDTH_EXPANDED,
-  SIDEBAR_WIDTH_MINIMISED,
-  readMinimised,
-  writeMinimised,
+  SIDEBAR_WIDTH,
+  railState,
+  readPinned,
+  sidebarState,
 } from "@/layouts/sidebar-collapse"
 import {
   DESTINATIONS,
@@ -42,7 +41,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -102,7 +100,7 @@ function DestinationRow({
         <SidebarMenuButton
           asChild
           isActive={current}
-          className="hover:bg-transparent hover:text-foreground-lighter"
+          className="h-7 text-body hover:bg-transparent hover:text-foreground-lighter"
         >
           <span
             data-destination={route.path}
@@ -119,7 +117,7 @@ function DestinationRow({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={current}>
+      <SidebarMenuButton asChild isActive={current} className="h-7 text-body">
         <Link
           to={href}
           data-destination={route.path}
@@ -172,12 +170,9 @@ function LevelGroup({
   if (routes.length === 0) return null
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel className="furniture text-meta text-ink-muted">
-        <span className={minimised ? "sr-only" : undefined}>{level}</span>
-      </SidebarGroupLabel>
+    <SidebarGroup className="px-row py-0">
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-0">
           {routes.map((route) => (
             <DestinationRow
               key={route.path}
@@ -204,7 +199,7 @@ function LevelGroup({
  */
 function GroupHeading({ label, minimised }: { label: string; minimised: boolean }) {
   return (
-    <p className="furniture flex h-6 items-center px-row pt-field text-meta text-ink-muted">
+    <p className="furniture flex h-5 items-center px-row text-meta text-ink-muted">
       <span className={minimised ? "sr-only" : undefined}>{label}</span>
     </p>
   )
@@ -224,129 +219,202 @@ function GroupHeading({ label, minimised }: { label: string; minimised: boolean 
  * would have made five of six areas unreachable — a navigation regression that no route test would
  * catch, because the routes still exist. Every area is a group here for that reason, and
  * `app-frame.test.tsx` asserts the reachability directly.
+ *
+ * **It loads as a rail and reveals itself under a pointer or a focus**, which the owner asked for
+ * by name. The width is derived from three inputs rather than stored as one, and the stored one is
+ * the pin: a reader who wants it held open says so and it stays. Reachability is unchanged at
+ * either width — minimising changes density, not navigation — and the reveal is an overlay, so the
+ * content column never moves under a pointer that was only passing through.
  */
 function AppSidebar({ pathname }: { pathname: string }) {
   const bound = boundParams(pathname)
-  const [minimised, setMinimised] = useState(readMinimised)
+  // The pin is a stored preference with no control any more: the owner removed the button because
+  // hovering is the mechanism, and two ways to open one panel is what made this hard to reason
+  // about. It is still read, so a reader who set it before this change is not overruled by it, and
+  // nothing in the frame can set it. If it is still unset by anything a week from now it should go.
+  const pinned = readPinned()
+  const [pointerInside, setPointerInside] = useState(false)
+  const [focusInside, setFocusInside] = useState(false)
+  const reserve = useRef<HTMLDivElement>(null)
 
-  function toggle() {
-    setMinimised((was) => {
-      writeMinimised(!was)
-      return !was
-    })
-  }
+  /**
+   * The reveal, wired to native events rather than to React's synthetic ones.
+   *
+   * `pointerenter`/`pointerleave` and `focusin`/`focusout` are the four the browser actually fires
+   * for "the pointer is over this box" and "something inside it holds focus". React reconstructs
+   * the first pair from `pointerover`/`pointerout` and the second pair is what its `onFocus` is
+   * already built on, so going to the DOM costs one effect and removes a layer of simulation from
+   * the one interaction a reader performs on every pointer move.
+   *
+   * **`focusout` carries `relatedTarget`, and ignoring it is a bug rather than a simplification.**
+   * Focus moving from one row to the next fires `focusout` before `focusin`, so an unconditional
+   * collapse would shut the panel and reopen it on every arrow key.
+   */
+  useEffect(() => {
+    const node = reserve.current
+    if (node === null) return
+
+    const enter = () => setPointerInside(true)
+    const leave = () => setPointerInside(false)
+    const focusIn = () => setFocusInside(true)
+    const focusOut = (event: FocusEvent) => {
+      if (event.relatedTarget instanceof Node && node.contains(event.relatedTarget)) return
+      setFocusInside(false)
+    }
+
+    node.addEventListener("pointerenter", enter)
+    node.addEventListener("pointerleave", leave)
+    node.addEventListener("focusin", focusIn)
+    node.addEventListener("focusout", focusOut)
+    return () => {
+      node.removeEventListener("pointerenter", enter)
+      node.removeEventListener("pointerleave", leave)
+      node.removeEventListener("focusin", focusIn)
+      node.removeEventListener("focusout", focusOut)
+    }
+  }, [])
+
+  const state = sidebarState({ pinned, pointerInside, focusInside })
+  const rail = railState({ pinned, pointerInside, focusInside })
+  const minimised = state === "minimised"
+
 
   return (
-    <Sidebar
-      collapsible="none"
-      style={{ width: minimised ? SIDEBAR_WIDTH_MINIMISED : SIDEBAR_WIDTH_EXPANDED }}
-      data-state={minimised ? "minimised" : "expanded"}
-      className="sticky top-0 h-svh shrink-0 overflow-hidden border-r border-line bg-sidebar"
+    // The box the content column gives up, and it is exactly the width the panel draws.
+    //
+    // **The panel does not overlay.** It did until the owner looked at the running console and
+    // ruled against it: revealing over the page hid the heading, the leading column of every table
+    // and the repository names under an opaque 240px panel laid over a page that had reserved 48px.
+    // The argument for the overlay was that reflowing the column under a reader is worse than
+    // covering it. Having seen both, the owner's answer is that it is not -- the sidebar pushes the
+    // page and nothing is ever obscured.
+    <div
+      ref={reserve}
+      data-sidebar-reserve={rail}
+      style={{ width: SIDEBAR_WIDTH[rail] }}
+      className="sticky top-0 z-40 h-svh shrink-0"
     >
-      <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
-        <SidebarHeader className="gap-field px-row py-section">
-          <div className="flex h-6 items-center gap-field pb-field border-b border-line mb-field">
-            <span className="font-semibold text-emphasis tracking-tight text-foreground">sync</span>
-            <span
-              className={
-                minimised
-                  ? "sr-only"
-                  : "ml-auto font-mono text-meta uppercase tracking-wider text-muted-foreground"
-              }
-            >
-              console
-            </span>
-          </div>
-          {/* An explicit control, never a hover and never a viewport read. `M7-W171` deleted a
-              `collapsed` state initialised from `window.innerWidth` once at mount with no resize
-              listener, so an operator's choice did not survive a resize. This one persists. */}
-          <button
-            type="button"
-            onClick={toggle}
-            aria-expanded={!minimised}
-            title={minimised ? "Expand the sidebar" : "Minimise the sidebar"}
-            className="flex h-6 items-center gap-field rounded-control px-field text-meta text-ink-muted hover:bg-surface-subtle hover:text-foreground"
-          >
-            <PanelLeft aria-hidden="true" className="size-4 text-graphics" />
-            <span className="sr-only">
-              {minimised ? "Expand the sidebar" : "Minimise the sidebar"}
-            </span>
-          </button>
-        </SidebarHeader>
-        <SidebarContent>
-          {REGIONS.map((region) => (
-            <div key={region.id} className="flex flex-col">
-              <GroupHeading label={region.label} minimised={minimised} />
-              {levelsIn(region.id).map((level) => (
-                <LevelGroup
-                  key={level}
-                  level={level}
-                  region={region.id}
-                  pathname={pathname}
-                  bound={bound}
-                  minimised={minimised}
-                />
-              ))}
+      <Sidebar
+        collapsible="none"
+        style={{ width: SIDEBAR_WIDTH[state] }}
+        data-state={state}
+        className="absolute inset-y-0 left-0 overflow-hidden border-r border-line bg-sidebar"
+      >
+        <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
+          <SidebarHeader className="gap-0 px-row py-row">
+            {/* One top row carrying the wordmark and the panel control together — owner review item
+                4. It used to float below the header as its own row, which cost a row of height and
+                put a chassis control inside the destination list. */}
+            <div className="flex h-6 items-center gap-field border-b border-line pb-field">
+              <span
+                className={
+                  minimised
+                    ? "sr-only"
+                    : "font-semibold text-emphasis tracking-tight text-foreground"
+                }
+              >
+                sync
+              </span>
+              <span
+                className={
+                  minimised
+                    ? "sr-only"
+                    : "font-mono text-meta uppercase tracking-wider text-muted-foreground"
+                }
+              >
+                console
+              </span>
             </div>
-          ))}
+          </SidebarHeader>
+          {/* No scrollbar — owner review item 3, and the compaction above is what makes it honest
+              rather than a concealment. The list measures under the viewport at the console's
+              1440×900 reference size, so at that size there is nothing to scroll and the chrome is
+              absent because it is not needed. Below it the region still scrolls, silently: a clipped
+              destination is unreachable and no route test would catch it, which is a worse fault
+              than a scrollbar the owner did not want. */}
+          <SidebarContent className="gap-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {REGIONS.map((region) => (
+              <div key={region.id} className="flex flex-col">
+                <GroupHeading label={region.label} minimised={minimised} />
+                {levelsIn(region.id).map((level) => (
+                  <LevelGroup
+                    key={level}
+                    level={level}
+                    region={region.id}
+                    pathname={pathname}
+                    bound={bound}
+                    minimised={minimised}
+                  />
+                ))}
+              </div>
+            ))}
 
-          {/* `DESTINATIONS` is a separate registry from `ROUTES` and its entries sit at no graph
-              level, so `LevelGroup` — which filters `ROUTES` by level — renders none of them. The
-              rail carried Settings in a hard-coded slot; deleting the rail without this group would
-              have removed the only way to reach it, while every routing test stayed green because
-              the route still exists. */}
-          <div className="flex flex-col">
-            <GroupHeading label="Deployment" minimised={minimised} />
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {DESTINATIONS.map((entry) => (
-                    <SidebarMenuItem key={entry.path}>
-                      <SidebarMenuButton asChild isActive={pathname === entry.path}>
-                        <NavLink to={entry.path} title={SETTINGS_NOTE} aria-label={entry.label}>
-                          <Settings aria-hidden="true" className="size-4 text-graphics" />
-                          <span className={minimised ? "sr-only" : "text-body"}>{entry.label}</span>
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </div>
-        </SidebarContent>
-        {/* The footer carries a protected sentence, so hiding it at the narrow width is a decision
-            rather than a layout convenience. `.claude/rules/console-surface.md` forbids collapsing
-            a protected sentence behind a disclosure; `sr-only` here is not that. The sentence stays
-            in the document and in the accessibility tree, the sidebar defaults to EXPANDED so it is
-            visible to anyone who has not chosen otherwise, and it returns the moment the operator
-            expands. What it must not do is render as prose in a 48px column, where it would wrap to
-            a dozen lines and push the whole footer off screen — which is how a qualification
-            actually gets lost. */}
-        <div
-          className={
-            minimised
-              ? "sr-only"
-              : "mt-auto flex flex-col gap-field border-t border-line px-row py-field"
-          }
-        >
-          <p className="text-meta text-ink-muted leading-snug">
-            Nine graph levels, six areas. An area groups a run of levels — it is not a level itself.
-          </p>
-          {/* Whose data this is, which nothing on screen said until a console could be served
-              somewhere a partner reaches it. The sentence claims only what this console can
-              actually know: it reads one graph and filters nothing per viewer. It deliberately
-              does not name a deployment — no route serves an identifier for one, and inventing a
-              label here would be the console asserting something nothing computed, on the screen
-              furniture rather than in a figure. */}
-          <p className="text-meta text-ink-muted leading-snug">
-            Every screen here reads one deployment's graph, and nothing is filtered per viewer — a
-            repository you do not recognise is one this deployment was configured to watch, not
-            another customer's.
-          </p>
-        </div>
-      </nav>
-    </Sidebar>
+            {/* `DESTINATIONS` is a separate registry from `ROUTES` and its entries sit at no graph
+                level, so `LevelGroup` — which filters `ROUTES` by level — renders none of them. The
+                rail carried Settings in a hard-coded slot; deleting the rail without this group would
+                have removed the only way to reach it, while every routing test stayed green because
+                the route still exists. */}
+            <div className="flex flex-col">
+              <GroupHeading label="Deployment" minimised={minimised} />
+              <SidebarGroup className="px-row py-0">
+                <SidebarGroupContent>
+                  <SidebarMenu className="gap-0">
+                    {DESTINATIONS.map((entry) => (
+                      <SidebarMenuItem key={entry.path}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={pathname === entry.path}
+                          className="h-7 text-body"
+                        >
+                          <NavLink to={entry.path} title={SETTINGS_NOTE} aria-label={entry.label}>
+                            <Settings aria-hidden="true" className="size-4 text-graphics" />
+                            <span className={minimised ? "sr-only" : "text-body"}>{entry.label}</span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </div>
+          </SidebarContent>
+        </nav>
+      </Sidebar>
+    </div>
+  )
+}
+
+/**
+ * The two qualifications the chassis carries, and why they are no longer in the sidebar.
+ *
+ * Both are protected sentences (`.claude/rules/console-surface.md`), and they sat in the sidebar
+ * footer under an argument that said so explicitly: hiding them at the narrow width was defensible
+ * *because the sidebar defaulted to expanded*, so a reader who had chosen nothing saw them.
+ * **Hover-expand takes that premise away.** An unpinned rail is the default now, and a sentence
+ * that appears only when a pointer enters a 48px column is behind a disclosure whatever it is
+ * called — which is the one thing that rule forbids doing to these.
+ *
+ * So they moved out rather than being restyled again. Nothing gates them here: no state, no
+ * pointer, no control. Word for word as they were.
+ */
+function ChassisQualifications() {
+  return (
+    <footer className="mt-auto flex flex-col gap-field border-t border-line px-frame py-section">
+      <p className="text-meta text-ink-muted leading-snug">
+        Nine graph levels, six areas. An area groups a run of levels — it is not a level itself.
+      </p>
+      {/* Whose data this is, which nothing on screen said until a console could be served
+          somewhere a partner reaches it. The sentence claims only what this console can
+          actually know: it reads one graph and filters nothing per viewer. It deliberately
+          does not name a deployment — no route serves an identifier for one, and inventing a
+          label here would be the console asserting something nothing computed, on the screen
+          furniture rather than in a figure. */}
+      <p className="text-meta text-ink-muted leading-snug">
+        Every screen here reads one deployment's graph, and nothing is filtered per viewer — a
+        repository you do not recognise is one this deployment was configured to watch, not another
+        customer's.
+      </p>
+    </footer>
   )
 }
 
@@ -417,6 +485,8 @@ export function AppFrame() {
           <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col gap-8 p-frame outline-none">
             <Outlet />
           </main>
+
+          <ChassisQualifications />
         </div>
       </SidebarProvider>
     </CommandPaletteProvider>

@@ -26,6 +26,7 @@
 import type { ReactNode } from "react"
 
 import { Absent, Formatted } from "@/components/status"
+import { CodeBlock } from "@/features/workflows/code-block"
 import { orAbsent } from "@/lib/format"
 import { asHttpUrl } from "@/lib/url"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
@@ -207,11 +208,12 @@ function Flag({ field, value }: { field: Field; value: unknown }) {
 }
 
 /**
- * A multi-line value, kept multi-line.
+ * A multi-line value, kept multi-line and addressed where the tool addressed it.
  *
  * `tsc` output is line-per-diagnostic and unreadable folded into a paragraph, so the block
- * preserves its newlines and scrolls in its own box rather than widening the page. The box is the
- * card `BlockField` puts around it; this renders the text and the two kinds of nothing.
+ * preserves its lines and hands them to `CodeBlock`, which lifts each line's `file:line` anchor out
+ * beside its message and collapses a long span behind a control that states the full count. The box
+ * is the card `BlockField` puts around it; this renders the text and the two kinds of nothing.
  */
 function Block({ value }: { value: unknown }) {
   // Null is tested before stringifying, not after. `JSON.stringify(null)` is the string
@@ -225,11 +227,7 @@ function Block({ value }: { value: unknown }) {
   if (rendered === undefined || rendered === "") {
     return <Absent />
   }
-  return (
-    <pre className="max-h-72 overflow-auto font-mono text-meta whitespace-pre-wrap">
-      {rendered}
-    </pre>
-  )
+  return <CodeBlock text={rendered} />
 }
 
 function languageLabel(key: string): string {
