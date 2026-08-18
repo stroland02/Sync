@@ -10,6 +10,7 @@ const overview = (over: Partial<OverviewResponse>): OverviewResponse => ({
   total_findings_bound: 0,
   total_findings_bound_reached: true,
   severity_counts: {},
+  bindings_by_rung: { static: 0, resolved: 0, observed: 0, unresolved: 0, unattributed: 0 },
   indexed_at: null,
   feed_fetched_at: null,
   binding_source: null,
