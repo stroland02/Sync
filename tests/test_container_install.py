@@ -213,6 +213,37 @@ def test_a_missing_docker_and_a_stopped_docker_are_told_apart(cli_status, daemon
         )
 
 
+@pytest.mark.parametrize("cli_status, daemon_status", [(1, 0), (0, 1)])
+@conftest.requires_node
+def test_every_docker_refusal_offers_the_no_admin_route(cli_status, daemon_status):
+    """`CI-W453`'s rationale binds both refusals, not one: the reader most likely to meet a
+    Docker refusal is exactly the reader without admin rights, and on such a machine "start
+    Docker Desktop and wait" is an instruction that can never complete, not a fix. The
+    stopped-daemon branch shipped without the offer, and the first fresh-clone `npm start`
+    on this machine dead-ended on it -- told to start a Desktop that elevation forbids,
+    never told the user-space route exists.
+    """
+    node = _node()
+    script = (
+        f"import {{ dockerDiagnosis }} from {DOORBELL.as_uri()!r};"
+        f"const r = dockerDiagnosis({{status: {cli_status}}}, {{status: {daemon_status}}});"
+        "console.log(JSON.stringify(r));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["ok"] is False
+    assert "no-admin" in verdict["message"], (
+        "a Docker refusal that does not name the no-admin route strands exactly the reader "
+        f"it exists for: {verdict['message']!r}"
+    )
+
+
 # -- `--check`: what this machine needs, before anything is fetched -----------------------
 #
 # `CI-W445` and `CI-W446` decided both install lifecycles and nothing called either, which by

@@ -79,7 +79,10 @@ export function dockerDiagnosis(cliProbe, daemonProbe, platform = process.platfo
       message:
         "Docker is installed but its daemon is not answering.\n\n" +
         "  Start Docker Desktop and wait for it to report Running, then try again.\n\n" +
-        "This is the ordinary case on a machine that has just booted.",
+        "This is the ordinary case on a machine that has just booted.\n\n" +
+        "If Docker Desktop cannot run here -- no admin rights closes every container runtime\n" +
+        "on Windows -- `npm run no-admin` (or --no-admin) runs everything in user space\n" +
+        "instead: an embedded Postgres, a pinned Python, and the console. No Docker at all.",
     }
   }
   return { ok: true }
