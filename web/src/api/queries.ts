@@ -20,6 +20,7 @@ import {
   fetchRepositoryCoverage,
   fetchRepositoryObserved,
   fetchRuns,
+  fetchAbandonment,
   fetchVendorChanges,
   fetchVendorOperations,
   fetchVendorFindings,
@@ -83,6 +84,13 @@ export function useVendorFindings(vendorId: string, params: VendorFindingsParams
         { limit, offset, repoId: params.repoId, severity, path, order },
         signal,
       ),
+  })
+}
+
+export function useAbandonment() {
+  return useQuery({
+    queryKey: ["corpus", "abandonment"],
+    queryFn: ({ signal }) => fetchAbandonment(signal),
   })
 }
 

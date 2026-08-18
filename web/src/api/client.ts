@@ -26,6 +26,7 @@ import type {
   Page,
   RepositoriesResponse,
   RunsPage,
+  AbandonmentResponse,
   VendorChangeRow,
   VendorOperationsResponse,
   FindingOrder,
@@ -175,6 +176,10 @@ export function fetchVendorChanges(
     params,
   )
   return getJson<Page<VendorChangeRow>>(path, signal)
+}
+
+export function fetchAbandonment(signal?: AbortSignal): Promise<AbandonmentResponse> {
+  return getJson<AbandonmentResponse>("/api/corpus/abandonment", signal)
 }
 
 export function fetchVendorOperations(

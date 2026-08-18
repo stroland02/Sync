@@ -331,6 +331,12 @@ function FindingDetailPage({
 
   return (
     <DetailGrid
+      /* Content left, rail right, which is what `screens/06-finding.png` draws. This screen
+         shipped inverted on `M7-W178`'s argument that a detail has one subject so the facts
+         come first, and the settled authority order resolves the disagreement rather than my
+         taste: the mock is authority 3 for layout, a port's own reasoning is 4, and no
+         decision covers which side a rail sits on. One prop, so it reverses in one line. */
+      railSide="end"
       header={
         <PageHeader
           trail={<Breadcrumbs trail={trail} />}

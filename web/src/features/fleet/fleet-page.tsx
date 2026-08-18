@@ -37,19 +37,54 @@
  * longer holds would be a true sentence with a dead pointer, which is the quiet half of the defect.
  */
 
+import { useLocation } from "react-router"
+
+import { useRepositories } from "@/api/queries"
 import { FactTile } from "@/components/fact-tile"
-import { CodebaseFactsBand } from "@/features/fleet/codebase-facts"
+import { CodebaseFactsBand, resolveCodebaseScope } from "@/features/fleet/codebase-facts"
+import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
 import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { PageHeader } from "@/layouts/page-header"
+import { scopeFromLocation } from "@/layouts/scope-switchers"
 
+// The screen's stated question, which changed when the codebase listing left it. It described
+// "all code repositories monitored by Sync" while this screen answered that; it now answers what
+// is true about the one workspace already chosen, and says so.
 const DEFAULT_QUESTION =
-  "All code repositories monitored by Sync, their attached API vendors, and active migrations."
+  "What the index, the vendors and the detectors currently say about this workspace."
 
 export interface FleetPageProps {
   readonly question?: string
+}
+
+/**
+ * The graph draws one codebase, so it draws nothing until the address names one.
+ *
+ * The band beside it resolves the same six scopes and says which it landed on. Picking a
+ * repository here because exactly one exists would be fine; picking one because several do would
+ * be the console deciding what the operator is looking at, which is the claim the band refuses in
+ * words and this panel refuses by not drawing.
+ */
+function OverviewGraphRegion() {
+  const { pathname, search } = useLocation()
+  const repositories = useRepositories()
+  const scope = resolveCodebaseScope(
+    scopeFromLocation(pathname, search).repoId,
+    repositories.data?.repo_ids
+  )
+
+  if (scope.kind === "selected" || scope.kind === "only") {
+    return <OverviewGraphPanel repoId={scope.repoId} />
+  }
+  return (
+    <p className="text-meta text-muted-foreground">
+      No codebase is selected, so there is no dependency graph to draw. The graph is one
+      codebase's call sites out to its vendors; drawn across several it would show a shape no
+      repository has.
+    </p>
+  )
 }
 
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
@@ -63,11 +98,14 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           No page-level action. "Review proposed patch" pointed at whichever run happened to be the
           newest with an opened pull request, which reads as *the* patch when there are nine change
           units. It belongs on the change-unit row it acts on, beside that row's own standing. */}
-      <PageHeader
-        title="Overview"
-        question={question}
-        trail={<Breadcrumbs trail={[{ label: "Overview" }]} />}
-      />
+      {/* Answer 7 removes the page header; the question it carried is kept as one dense line,
+          because a screen that does not say what it is answering is the black box this console
+          exists to replace. Recorded conflict: the mock draws a header here and answer 20 rules
+          for the answer. */}
+      <div className="flex flex-col gap-field">
+        <Breadcrumbs trail={[{ label: "Overview" }]} />
+        <p className="text-meta text-muted-foreground">{question}</p>
+      </div>
 
       {/* The top band: what is true about the codebase this screen is about. The owner's ruling of
           2026-08-18 is that the Overview *is* the selected codebase and selection is chrome — so
@@ -75,7 +113,10 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           reader chose from rather than what the screen is about. The route, the hierarchy and
           `GRAPH_LEVELS` are untouched: that amendment is the specification's and has not landed,
           and `.claude/rules/console-hierarchy.md` makes the ordering the whole rule. */}
-      <CodebaseFactsBand />
+      <div className="grid gap-section xl:grid-cols-2">
+        <CodebaseFactsBand />
+        <OverviewGraphRegion />
+      </div>
 
       {/* 4-card metric strip */}
       <FleetFacts />

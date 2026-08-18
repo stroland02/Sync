@@ -41,8 +41,13 @@ Grouped bars: tier 0/1/2 against outcome. Shows the routing cascade working. Cur
 **it will be sparse and must say so** rather than looking broken.
 
 ### 6. Abandon reasons — Runs
-A ranked bar over the closed `abandon_reason` vocabulary. `B128`'s whole argument was that a reason
-must be aggregatable; this is the aggregation, and it is where routing learns.
+A ranked bar over the closed `abandon_reason_code` vocabulary. `B128`'s whole argument was that a
+reason must be aggregatable; this is the aggregation, and it is where routing learns.
+
+**Corrected 2026-08-18 (`CI-W392`).** This needed no API work. `/api/corpus/abandonment` already
+existed, `sync.dashboard.fleet.abandonment_by_change_kind` already grouped it, and
+`GraphStore.migration_outcome_abandon_reasons_by_kind` already aggregated on the closed vocabulary
+rather than on `abandon_reason`'s free text. Only the chart was missing.
 
 ### 7. Observed-call volume per operation — Signals
 Sparkline per operation. Only meaningful where telemetry is attached, so **the empty state must say
@@ -53,7 +58,14 @@ Not a chart: a single dated fact with its age. **Included because staleness is t
 dashboard hides best** — a beautiful graph of month-old data is worse than no graph.
 
 ### 9. Adapter coverage by tier — Settings/Adapters
-`coded`, `configured`, `generated` per vendor. Shows the plugin story is real rather than claimed.
+`coded`, `generated`, `mcp` per vendor, with `unregistered` held apart because it is the absence of
+coverage rather than a kind of it. Shows the plugin story is real rather than claimed.
+
+**Corrected 2026-08-18 (`CI-W382`).** This row said `coded / configured / generated`. Nothing emits
+`configured`: `sync/signals/registry.py` constructs the first three and `sync/dashboard/adapters.py`
+adds `unregistered`. `vendor-card.tsx` already carried the drift as a documented hazard — a screen
+inventing a tier is the same defect as a screen inventing a number — so the payload's vocabulary is
+what shipped.
 
 ## What is deliberately not on this list
 
@@ -74,8 +86,11 @@ dashboard hides best** — a beautiful graph of month-old data is worse than no 
 | 8 | `indexed_at`, already on `/api/overview` |
 | 9 | the adapter registry |
 
-**Two of these need API work before the chart can exist** — 4 and 6 have no route. Lane G owns both
-the dashboards and the API, which is why this is one lane's plan rather than two.
+**Corrected 2026-08-18 (`CI-W392`): neither 4 nor 6 needed API work.** This paragraph claimed both
+had no route. 6 had `/api/corpus/abandonment` already; 4 is derived client-side from the vendor
+changes the page already fetches. The lane that owns the dashboards owns the API too, which is why
+this is one lane's plan rather than two — but that ownership was the reason to check, not a licence
+to assume.
 
 ## Component
 
