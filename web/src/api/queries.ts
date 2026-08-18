@@ -26,6 +26,7 @@ import {
   fetchVendorChanges,
   fetchVendorOperations,
   fetchVendorFindings,
+  fetchPatch,
   fetchWorkflow,
   fetchRepositoryGraph,
 } from "@/api/client"
@@ -163,6 +164,20 @@ export function isRunTerminal(state: WorkflowState | undefined): boolean {
  * run begins after the page opens is not discovered on its own — the view offers an
  * explicit re-ask for that case rather than paying for it continuously.
  */
+/**
+ * The patch for one finding.
+ *
+ * No polling. A diff does not change while a reader looks at it: the patch node writes once
+ * per generation, and a run that produces a second one is a second generation with its own
+ * page. The workflow beside it polls because its verdicts do move.
+ */
+export function usePatch(findingId: string) {
+  return useQuery({
+    queryKey: ["findings", findingId, "patch"],
+    queryFn: ({ signal }) => fetchPatch(findingId, signal),
+  })
+}
+
 export function useWorkflow(findingId: string) {
   return useQuery({
     queryKey: ["findings", findingId, "workflow"],

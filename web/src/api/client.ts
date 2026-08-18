@@ -33,6 +33,7 @@ import type {
   VendorOperationsResponse,
   FindingOrder,
   VendorFindingsPage,
+  PatchResponse,
   WorkflowState,
   RepositoryGraphResponse,
 } from "@/api/types"
@@ -242,6 +243,20 @@ export function fetchWorkflow(
   signal?: AbortSignal,
 ): Promise<WorkflowState> {
   return getJson<WorkflowState>(`/api/workflows/${encodeURIComponent(findingId)}`, signal)
+}
+
+/**
+ * The patch a run produced, with the branch and repository it was pushed to.
+ *
+ * A 404 here means no run exists for the finding at all. A run that produced no patch is a
+ * 200 carrying the reason, because deciding against a patch is an answer rather than a
+ * missing page -- and the reason is what a reviewer opened the screen to read.
+ */
+export function fetchPatch(findingId: string, signal?: AbortSignal): Promise<PatchResponse> {
+  return getJson<PatchResponse>(
+    `/api/findings/${encodeURIComponent(findingId)}/patch`,
+    signal,
+  )
 }
 
 /** Every run the checkpointer holds, newest first — one row per thread, not per finding. */
