@@ -51,6 +51,13 @@ WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 # and is served; customer source is not, and stays blocked on the threat-model ruling.
 PatchReader = Callable[[str], Optional[dict[str, Any]]]
 
+# Whether a finding stands dismissed, and how many times somebody has changed their mind.
+DismissalReader = Callable[[str], dict[str, Any]]
+# Dismiss with a reason from the closed vocabulary, or restore by passing `reason=None`. The
+# vocabulary is NOT restated here: `record_dismissal` owns it and raises naming it, and a
+# second copy in the transport is the fact written twice that would disagree first.
+DismissalWriter = Callable[..., None]
+
 # The fleet roll-ups read the checkpointer and the graph store directly, outside `GraphSurface`
 # -- same reasoning as `WorkflowReader`: a run, a repair record and a repo_id roll-up are not
 # graph-surface questions, and folding them into the surface would ask one abstraction to speak
@@ -203,6 +210,8 @@ def create_app(
     findings_over_time_reader: FindingsOverTimeReader,
     events_reader: EventsReader,
     patch_reader: PatchReader,
+    dismissal_reader: DismissalReader,
+    dismissal_writer: DismissalWriter,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -369,6 +378,12 @@ def create_app(
                 # Two newlines end an SSE frame; one separates its fields. Written as
                 # escapes rather than a multi-line literal so the framing cannot be
                 # reformatted away by an editor that trims trailing whitespace.
+                if event["kind"] == "heartbeat":
+                    # A comment line. It reaches no handler and carries no fact -- it exists
+                    # so a proxy does not close an idle connection and make silence look
+                    # like a drop.
+                    yield ": heartbeat\n\n"
+                    continue
                 frame = "event: " + event["kind"] + "\n"
                 frame += "data: " + json.dumps(event) + "\n\n"
                 yield frame
@@ -395,6 +410,51 @@ def create_app(
             vendor_id, repo_id=request.query_params.get("repo_id")
         )
         return JSONResponse(payload)
+
+    async def get_dismissal(request: Request) -> JSONResponse:
+        """Whether this finding stands dismissed right now, and how often that has flipped."""
+        return JSONResponse(dismissal_reader(request.path_params["finding_id"]))
+
+    async def set_dismissal(request: Request) -> JSONResponse:
+        """Dismiss a finding with a reason, or restore it by sending `reason: null`.
+
+        **This writes a row, never a column.** A finding dismissed and later restored has two
+        rows and the current state is the latest, which is the only arrangement in which the
+        console can show that somebody changed their mind.
+
+        `actor` is required and this route will not invent one. The column exists so a reader
+        can ask *who decided*, and a console behind a single shared password cannot answer
+        that from its credentials -- so the caller says who, or the write is refused. Filling
+        it with a constant would satisfy the schema and destroy the column's only purpose.
+
+        The reason is validated by `record_dismissal`, which owns the vocabulary and raises
+        naming it. Re-checking it here would put the closed set in two places.
+        """
+        finding_id = request.path_params["finding_id"]
+        try:
+            payload = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "body must be JSON"}, status_code=400)
+        if not isinstance(payload, dict):
+            return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
+
+        actor = payload.get("actor")
+        if not isinstance(actor, str) or not actor.strip():
+            return JSONResponse(
+                {
+                    "error": (
+                        "actor is required: a dismissal nobody can be attributed to is not "
+                        "reviewable, and this console cannot infer who you are"
+                    )
+                },
+                status_code=400,
+            )
+
+        try:
+            dismissal_writer(finding_id, reason=payload.get("reason"), actor=actor.strip())
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse(dismissal_reader(finding_id))
 
     async def finding_patch(request: Request) -> JSONResponse:
         """The diff a run wrote, and the branch it went to, in one answer.
@@ -615,6 +675,8 @@ def create_app(
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
+        Route("/api/findings/{finding_id}/dismissal", get_dismissal, methods=["GET"]),
+        Route("/api/findings/{finding_id}/dismissal", set_dismissal, methods=["POST"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),

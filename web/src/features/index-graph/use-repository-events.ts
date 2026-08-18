@@ -1,11 +1,15 @@
 /**
  * The indexing stream, as the console sees it (decisions 76 and 78).
  *
- * **Three states, kept apart deliberately.** Connected and quiet, connected and arriving, and
- * dropped. Decision 76 requires a dropped stream to be rendered rather than hidden, and a drop can
- * only be rendered if it is distinguishable from silence — which is what the server's named
- * heartbeat buys and what this hook exists to preserve. A hook that reported "no events lately"
- * for both would put the console back where the payload started.
+ * **Two states, and silence is not one of them.** Live or dropped. The server's heartbeat is an
+ * SSE comment rather than an event — revised deliberately, because a typed `heartbeat` would put
+ * something on the wire corresponding to nothing that happened. A comment never reaches a
+ * handler, so this hook cannot observe it and does not try: it keeps the connection warm through
+ * a proxy, and a real drop still surfaces because a closed connection raises `onerror`.
+ *
+ * The consequence worth naming: an idle index and a healthy one look the same here, and that is
+ * correct. Neither is a drop, and reporting a difference this hook cannot observe would be the
+ * invention the comment exists to avoid.
  *
  * **A heartbeat never moves a domain count.** It asserts that the stream is alive and nothing
  * else; counting it would be the console inventing work that did not happen.
@@ -41,12 +45,6 @@ export function useRepositoryEvents(repoId: string): RepositoryEvents {
 
     source.addEventListener("call_site.indexed", () => {
       setIndexedCount((count) => count + 1)
-      setStatus("live")
-    })
-
-    // Named rather than a comment, so the console can tell alive-and-quiet from gone. It carries
-    // no domain fact and moves no count.
-    source.addEventListener("heartbeat", () => {
       setStatus("live")
     })
 

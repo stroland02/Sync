@@ -1123,6 +1123,20 @@ _WHOLE_STAGE_CATCH_ALL = (
 # A read sits under these two, so they are the blind spot rather than an instance of it being
 # harmless. Both say so where they sit. The docstring above carries what is known about each.
 _GUARDS_A_READ = (
+    # `set_dismissal` catches ValueError twice and they are not the same clause, so the
+    # decision is recorded for both here rather than left for the next reader to re-derive.
+    #
+    # The first guards `await request.json()`, which IS a read and CAN produce undecodable
+    # bytes: a client may post anything, and `json.loads` decodes UTF-8 before it parses, so
+    # invalid bytes arrive as `UnicodeDecodeError` -- a `ValueError` subclass. Subsuming it is
+    # deliberate. A body that is not valid UTF-8 is a malformed body, and `body must be JSON`
+    # is the true answer to both; a separate handler would say the same sentence in more words.
+    # This is a system boundary, which is where CLAUDE.md says to validate.
+    #
+    # The second guards `dismissal_writer`, which decodes nothing -- `record_dismissal` raises
+    # `ValueError` on a reason outside the closed vocabulary, from a string already in memory.
+    # It needs no decode handler and could never produce one.
+    "sync/api/app.py::create_app.set_dismissal::ValueError",
     "sync/api/app.py::create_app.set_repo_context::ValueError",
     "sync/api/app.py::create_app.set_settings::ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",

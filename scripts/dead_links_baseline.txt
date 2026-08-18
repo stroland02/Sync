@@ -110,9 +110,6 @@ src/sync/index/codebase.py:index_codebase
 # follows. These four are finished and tested against a real database and reached by nothing
 # yet. What retires them is the POST route on a finding plus the findings table filtering
 # dismissed rows out by default; delete these lines in the commit that wires it.
-src/sync/graph/store.py:GraphStore.record_dismissal
-src/sync/graph/store.py:GraphStore.dismissal_state
-src/sync/graph/store.py:GraphStore.dismissal_history_count
 src/sync/graph/store.py:GraphStore.dismissal_reason_counts
 
 # Decision 76's event bus, added 2026-08-18. Built ahead of the `GET /api/events` route that

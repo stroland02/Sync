@@ -82,6 +82,38 @@ Checked rather than assumed, so nobody spends a unit on it:
 - **The gates are real.** `pytest`, `lint-imports`, the encoding lint, the design-token guards, the
   conflict-marker guard, the API/type contract test and the register check all run and all bite.
 
+## The four gates, measured 2026-08-18 rather than asserted
+
+`uv run python scripts/beta_gates.py --run-suite`. **0 of 4 met, 2 cannot be told from here.**
+
+| Gate | Verdict | What it is waiting on |
+|---|---|---|
+| 1 — the loop closes | **NOT MET** | 3 real attempts in the corpus, **0 with a pull request that went green**. `B7` has never passed. Resume-on-review-comment is built. |
+| 2 — the evidence exists | **CANNOT TELL** | 0 of 5 quality axes have samples. Unmeasured is absence, not zero, so there is nothing here to pass or fail yet. 0 pull requests opened. |
+| 3 — the console tells the truth | **CANNOT TELL** | The last signature is `2026-08-18T03:15`; the console changed at `10:16`. **The signature describes a tree that is no longer here**, so the screens need walking again and signing with the date they were walked. |
+| 4 — the containment story is true | **NOT MET** | No unbaselined dead links, no sandbox primitive baselined unreachable. The suite reported **13 failures against 4,206 passes**. |
+
+### Gate 4's failures are mostly not what they look like
+
+**Measured, because "13 failed" and "the product is broken" are different claims and the gate
+cannot tell them apart.** Three were run in isolation:
+
+- `test_codebase_index::test_index_codebase_on_arbitrary_python_repo` — **passes alone.**
+- `tests/test_sandbox_host_copy.py` — **passes alone.**
+- `test_rehearse_boundary::test_rehearsal_fixture_has_zero_remotes` — **fails alone too.**
+
+So the suite holds at least two distinct problems wearing one number: **genuine failures**, and
+**tests that pass individually and fail together**, which is interference through shared state
+rather than broken product code. The Docker-dependent sandbox tests belong to `B97`, which the
+backlog already names as Gate 4's blocker and which is Lane A's.
+
+**Why this matters for beta rather than being a tidy-up.** A gate that says `NOT MET` for two
+unrelated reasons cannot tell you which one to fix, and the interference is the cheaper of the two
+by a wide margin. Separating them is what turns Gate 4 from a wall into a list.
+
+**What it does not change:** Gate 4 is honestly `NOT MET` either way. Nothing here argues for
+moving it.
+
 ## The risk this scope is really about
 
 The first-run experience is the product's argument in miniature. **A new user who runs one command

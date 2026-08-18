@@ -339,6 +339,8 @@ def _build_app(
     surface: GraphSurface,
     workflow_reader=lambda finding_id: None,
     patch_reader=lambda finding_id: None,
+    dismissal_reader=lambda finding_id: {"dismissed": False, "reason": None, "actor": None, "history_count": 0},
+    dismissal_writer=lambda finding_id, *, reason, actor: None,
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
     corpus_health_reader=_fake_corpus_health_reader,
@@ -377,6 +379,8 @@ def _build_app(
         surface=surface,
         workflow_reader=workflow_reader,
         patch_reader=patch_reader,
+        dismissal_reader=dismissal_reader,
+        dismissal_writer=dismissal_writer,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
@@ -1603,6 +1607,8 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         surface=surface,
         workflow_reader=workflow_reader,
         patch_reader=lambda finding_id: None,
+        dismissal_reader=lambda finding_id: {"dismissed": False, "reason": None, "actor": None, "history_count": 0},
+        dismissal_writer=lambda finding_id, *, reason, actor: None,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
@@ -1829,6 +1835,10 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
 #   unpaginated deliberately.
 _NOT_COLLECTIONS = {
+    # One finding's standing, not a page of dismissals. The history is a count on the
+    # payload rather than a list to page through -- what a reader needs is whether somebody
+    # changed their mind, not every time they did.
+    "/api/findings/{finding_id}/dismissal",
     # One run's diff, not a page of them. The finding names the run, and a diff has no
     # second half to fetch.
     "/api/findings/{finding_id}/patch",
@@ -2169,6 +2179,9 @@ def _normalized(path: str) -> str:
 # it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
+    # The write path exists; decision 45's console half -- dismissed findings staying listed
+    # and filtered out by default -- is a separate item.
+    "/api/findings/{param}/dismissal",
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
@@ -2695,15 +2708,19 @@ def test_each_event_is_framed_with_its_type_so_a_client_can_dispatch_on_it():
     assert '"path":"src/a.ts"' in body.replace(" ", "")
 
 
-def test_the_heartbeat_is_a_named_event_so_silence_is_not_a_drop():
-    """Owner-selected over an SSE comment. It carries no domain fact, and it is named so nobody
-    mistakes it for one -- what it asserts is that the stream is alive, nothing more."""
+def test_the_heartbeat_is_a_comment_so_it_reaches_no_handler():
+    """Revised from a typed event, and the objection that decided it was mine: an event named
+    `heartbeat` puts something on the wire corresponding to nothing that happened, which is the
+    property decision 84 says an event should have. A comment keeps the connection warm through a
+    proxy and never reaches a message handler, so the transport stays alive and the event
+    vocabulary stays honest."""
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
 
     with TestClient(app) as client:
         body = client.get("/api/repositories/r1/events").text
 
-    assert "event: heartbeat" in body
+    assert ": heartbeat" in body
+    assert "event: heartbeat" not in body
 
 
 def test_the_events_route_is_scoped_by_the_path_and_not_a_query_string():

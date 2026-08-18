@@ -124,6 +124,18 @@ def app_factory() -> Starlette:
     def patch_reader(finding_id: str):
         return patch_for_finding(checkpointer_dsn, finding_id)
 
+    def dismissal_reader(finding_id: str):
+        """The current standing plus how many times it has flipped.
+
+        Both in one payload because a screen that shows *dismissed* without showing that it
+        has been dismissed and restored twice is telling a true fact in a misleading way.
+        """
+        state = store.dismissal_state(finding_id)
+        return {**state, "history_count": store.dismissal_history_count(finding_id)}
+
+    def dismissal_writer(finding_id: str, *, reason, actor: str) -> None:
+        store.record_dismissal(finding_id, reason=reason, actor=actor)
+
     def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
         return fleet.runs(
             checkpointer_dsn, repo_id=repo_id, store=store, limit=limit, offset=offset
@@ -284,6 +296,8 @@ def app_factory() -> Starlette:
         surface=surface,
         workflow_reader=workflow_reader,
         patch_reader=patch_reader,
+        dismissal_reader=dismissal_reader,
+        dismissal_writer=dismissal_writer,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
