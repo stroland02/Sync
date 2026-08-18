@@ -82,6 +82,35 @@ describe("ObservedVolumeCard", () => {
     expect(screen.getByText(/absence of a measurement rather than a measurement of nothing/)).toBeTruthy()
   })
 
+  /**
+   * Decision 61: the headers stay, so a reader learns what a row would be from a screen with
+   * none — and on this screen that matters twice over, because the two empty states say
+   * different things and both now say them inside the table they describe.
+   */
+  it("keeps its column headers in both empty states", () => {
+    renderCard([], { attachedAt: null })
+    expect(screen.getByText("Operation")).toBeTruthy()
+    expect(screen.getByText("Rung")).toBeTruthy()
+    cleanup()
+
+    renderCard([])
+    expect(screen.getByText("Operation")).toBeTruthy()
+  })
+
+  it("spans the sentence across exactly as many columns as the header declares", () => {
+    const { container } = renderCard([], { attachedAt: null })
+
+    const headers = container.querySelectorAll("thead th").length
+    expect(container.querySelector("tbody td")?.getAttribute("colspan")).toBe(String(headers))
+  })
+
+  /** Decision 63: moving a sentence into its new home may not shorten it. */
+  it("keeps the whole never-measured sentence", () => {
+    renderCard([], { attachedAt: null })
+
+    expect(screen.getByText(/would look identical, and the two are not the same fact/)).toBeTruthy()
+  })
+
   it("says a measured nought when telemetry is attached and saw nothing", () => {
     renderCard([])
 

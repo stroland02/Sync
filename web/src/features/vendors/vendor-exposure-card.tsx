@@ -32,7 +32,8 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { MetricPanel } from "@/components/metric-panel"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { ErrorState, LoadingState } from "@/components/states"
+import { TableEmptyState } from "@/components/table-empty"
 import { Badge } from "@/vendor/supabase/ui/badge"
 
 /** What `observed` says on screen, including the case where nothing looked. */
@@ -86,13 +87,7 @@ export function VendorExposureCard({
         </>
       }
     >
-      {operations.length === 0 ? (
-        <EmptyState
-          headline={`This codebase does not call ${vendorId}.`}
-          detail="The index found no current call site naming this vendor. A call the last pass stopped finding is not counted here, so a vendor this codebase used to call reads the same as one it never did."
-        />
-      ) : (
-        <Table>
+      <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Operation</TableHead>
@@ -102,6 +97,13 @@ export function VendorExposureCard({
               <TableHead>Traffic</TableHead>
             </TableRow>
           </TableHeader>
+          {operations.length === 0 ? (
+            <TableEmptyState
+              columns={5}
+              headline={`This codebase does not call ${vendorId}.`}
+              detail="The index found no current call site naming this vendor. A call the last pass stopped finding is not counted here, so a vendor this codebase used to call reads the same as one it never did."
+            />
+          ) : (
           <TableBody>
             {operations.map((operation) => (
               <TableRow key={operation.operation_id}>
@@ -124,8 +126,8 @@ export function VendorExposureCard({
               </TableRow>
             ))}
           </TableBody>
+          )}
         </Table>
-      )}
 
       {operations.length > 0 && (
         <p className="text-meta text-ink-muted leading-relaxed">

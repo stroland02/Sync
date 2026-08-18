@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
-import { EmptyState } from "@/components/states"
+import { TableEmptyState } from "@/components/table-empty"
 import { Formatted } from "@/components/status"
 import type { AdapterRow } from "@/api/types"
 import { formatTimestamp } from "@/lib/format"
@@ -52,19 +52,6 @@ function hasDelivered(adapter: AdapterRow): boolean {
 }
 
 export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
-  if (adapters.length === 0) {
-    return (
-      <EmptyState
-        headline="No adapter is registered, and the graph holds no vendor history"
-        detail={
-          "Both halves of this table are empty, which is a configured state rather than a " +
-          "failure: a deployment registers adapters in its vendor configuration, and a vendor " +
-          "appears here from history only once a scan has written a change against it."
-        }
-      />
-    )
-  }
-
   return (
     <>
       <Table>
@@ -79,6 +66,17 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
           <TableHead>Intake sources</TableHead>
         </TableRow>
       </TableHeader>
+      {adapters.length === 0 ? (
+        <TableEmptyState
+          columns={7}
+          headline="No adapter is registered, and the graph holds no vendor history"
+          detail={
+            "Both halves of this table are empty, which is a configured state rather than a " +
+            "failure: a deployment registers adapters in its vendor configuration, and a vendor " +
+            "appears here from history only once a scan has written a change against it."
+          }
+        />
+      ) : (
       <TableBody>
         {adapters.map((adapter) => (
           <TableRow key={adapter.vendor_id}>
@@ -119,6 +117,7 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
           </TableRow>
         ))}
       </TableBody>
+      )}
       </Table>
 
       <p className="text-meta text-ink-muted leading-relaxed">
