@@ -24,7 +24,6 @@ import { useRepositories } from "@/api/queries"
 import { ErrorSurface } from "@/components/error-surface"
 import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
-import { ScopeTrail } from "@/layouts/scope-switchers"
 import {
   SIDEBAR_WIDTH,
   railState,
@@ -308,11 +307,12 @@ function AppSidebar({ pathname }: { pathname: string }) {
         className="absolute inset-y-0 left-0 overflow-hidden border-r border-line bg-sidebar"
       >
         <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
-          <SidebarHeader className="gap-0 px-row py-row">
-            {/* One top row carrying the wordmark and the panel control together — owner review item
-                4. It used to float below the header as its own row, which cost a row of height and
-                put a chassis control inside the destination list. */}
-            <div className="flex h-6 items-center gap-field border-b border-line pb-field">
+          <SidebarHeader className="gap-0 p-0">
+            {/* The wordmark row is exactly the top bar's height and shares its hairline, so the
+                two borders meet as one continuous line at the sidebar's right edge — the owner
+                measured them out of parallel when this header stacked ad-hoc rows inside its own
+                padding. Everything below the line is content; this row alone is chrome. */}
+            <div className="flex h-12 shrink-0 items-center gap-field border-b border-line px-row">
               <span
                 className={
                   minimised
@@ -332,34 +332,28 @@ function AppSidebar({ pathname }: { pathname: string }) {
                 console
               </span>
             </div>
-            {/* Which codebase this console is working with — the install sets it up beside one,
-                so the chrome names it rather than saying "repository" in the abstract. */}
-            {workspace !== null && (
-              <div className={minimised ? "sr-only" : "flex min-w-0 items-center pt-field"}>
-                <span className="truncate font-mono text-meta text-ink-muted" title={workspace}>
-                  {workspace}
-                </span>
-              </div>
-            )}
-            {/* The environment, top-left by the owner's direction: which deployment this is and
-                which forge credential it runs with. Both are facts the setup probe measured —
-                "local dev" is the only environment this console serves, and the git line says
-                who or says it cannot say, never a guess. */}
+            {/* The environment, top-left by the owner's direction: which codebase, which
+                deployment, which forge credential. One block with its own hairline, never
+                overlapping the rows beneath — each line truncates instead of wrapping. */}
             <div
               className={
-                minimised ? "sr-only" : "flex min-w-0 flex-col gap-field border-b border-line py-field"
+                minimised
+                  ? "sr-only"
+                  : "flex min-w-0 flex-col gap-field border-b border-line px-row py-row"
               }
             >
-              <span className="furniture text-meta text-ink-muted">Environment</span>
+              {workspace !== null && (
+                <span className="min-w-0 truncate font-mono text-meta text-ink" title={workspace}>
+                  {workspace}
+                </span>
+              )}
               <Link
                 to="/settings?group=github-connection"
-                className="flex min-w-0 items-center gap-row text-meta text-ink hover:underline"
+                className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
                 title="Connections — Settings"
               >
-                <span className="shrink-0 text-ink-muted">local dev</span>
-                <span aria-hidden="true" className="text-ink-muted">
-                  ·
-                </span>
+                <span className="shrink-0">local dev</span>
+                <span aria-hidden="true">·</span>
                 <span className="min-w-0 truncate">
                   {setupQuery.isPending
                     ? "git: asking…"
@@ -530,13 +524,15 @@ export function AppFrame() {
         <div className="flex min-w-0 flex-1 flex-col">
           <ErrorSurface />
 
+          {/* The scope trail is removed for now on the owner's direction — it and the sidebar
+              were two navigation systems disagreeing about what "Overview" meant, and the
+              redesign that replaces it starts from the new workflows rather than patching the
+              old trail. The bar keeps its height and hairline so the chassis line stays
+              continuous with the sidebar's wordmark row. */}
           <header
             role="banner"
-            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
+            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-end gap-section border-b border-line bg-background px-section"
           >
-            <div className="flex min-w-0 flex-1 items-center">
-              <ScopeTrail />
-            </div>
             <CommandPaletteTrigger />
           </header>
 

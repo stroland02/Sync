@@ -37,7 +37,7 @@
  * longer holds would be a true sentence with a dead pointer, which is the quiet half of the defect.
  */
 
-import { useLocation } from "react-router"
+import { Navigate, useLocation } from "react-router"
 
 import { useOverview, useRepositories, useRepositoryCoverage } from "@/api/queries"
 import { FactTile } from "@/components/fact-tile"
@@ -51,6 +51,7 @@ import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { scopeFromLocation } from "@/layouts/scope-switchers"
+import { overviewHref } from "@/lib/hrefs"
 
 // The screen's stated question, which changed when the codebase listing left it. It described
 // "all code repositories monitored by Sync" while this screen answered that; it now answers what
@@ -125,6 +126,17 @@ function OverviewGraphRegion() {
 }
 
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
+  // One Overview, not two (owner, 2026-08-18): with exactly one codebase in the graph this
+  // screen and the codebase screen were both answering as "Overview" from two addresses, and
+  // clicking between them read as two different pages. The sole-codebase install lands on the
+  // codebase's own overview; this screen remains the chooser the moment a second repository
+  // exists, because choosing among several is the operator's act.
+  const repositories = useRepositories()
+  const repoIds = repositories.data?.repo_ids ?? []
+  if (repoIds.length === 1) {
+    return <Navigate replace to={overviewHref(repoIds[0])} />
+  }
+
   return (
     <section className="flex flex-col gap-8">
       {/* "Overview", once. This destination was titled "Repositories", labelled "Codebases" in the

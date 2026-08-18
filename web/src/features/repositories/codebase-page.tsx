@@ -63,6 +63,7 @@ import { InfoHint } from "@/components/info-hint"
 import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
+import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { ObservedTelemetryCard } from "@/features/telemetry/observed-telemetry-card"
@@ -115,6 +116,11 @@ export function CodebasePage() {
       {/* Getting started leads, by the owner's direction: the workspace identity and the full
           loop's probed prerequisites are the first thing on the Overview. */}
       <GettingStartedCard repoId={repoId} />
+      {/* The dependency graph — the screen's centrepiece, because it is the thing no
+          competitor can draw: this codebase's actual API surface. It lived on the fleet screen,
+          which the sole-codebase install now skips past, so it moves to the one Overview
+          rather than becoming unreachable. */}
+      <OverviewGraphPanel repoId={repoId} />
       <PageHeaderRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}
       <div className="grid gap-8 xl:grid-cols-2">
