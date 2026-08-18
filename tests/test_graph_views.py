@@ -11,8 +11,10 @@ every other worker's `truncate_all()` and insert against the same rows.
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime, timezone
 
+import psycopg
 import pytest
 
 from sync.core import CallSite, Finding, ObservedCall, ObservedErrorWindow, ObservedShape, RepoSettings, VendorChange
@@ -2125,3 +2127,154 @@ def test_a_payload_too_large_to_notify_degrades_to_a_signal_rather_than_failing(
     assert received["kind"] == "call_site.indexed.unsent"
     assert received["repo_id"] == "r1"
     assert "path" not in received
+
+
+def test_a_new_finding_publishes_an_event_carrying_its_severity_and_rung(store):
+    """Decision 76's second publisher, and what decision 87's new-findings banner needs.
+
+    The severity rides along because 87's banner is a triage prompt -- a reader deciding whether
+    to interrupt what they are doing needs to know whether the arrival was breaking or an
+    addition, and a banner that made them open the table to find out would be a worse interruption
+    than no banner.
+    """
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+
+    with store.subscribe_events("r1") as events:
+        finding_id = store.insert_finding(_finding(sites[0], claim="c1", severity="breaking"))
+
+        received = events.next(timeout=5.0)
+
+    assert received == {
+        "kind": "finding.opened",
+        "repo_id": "r1",
+        "finding_id": finding_id,
+        "vendor_id": "stripe",
+        "severity": "breaking",
+        "binding_rung": "static",
+    }
+
+
+def test_a_finding_event_carries_the_rung_its_claim_rests_on(store):
+    """Every artifact derived from a binding carries the rung, on the wire as on the screen. A
+    banner that could not say what a finding rests on would be asking a reader to act on a claim
+    whose evidence class it had dropped in transit."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+
+    with store.subscribe_events("r1") as events:
+        store.insert_finding(_finding(sites[0], claim="c1", binding_rung="observed"))
+
+        assert events.next(timeout=5.0)["binding_rung"] == "observed"
+
+
+def test_re_running_detect_over_the_same_finding_publishes_nothing_the_second_time(store):
+    """DETECT converges: `insert_finding` is `ON CONFLICT DO NOTHING`, so a re-run writes no row.
+    The event has to follow the write rather than the call, or a second pass would announce
+    findings nobody opened and the banner would cry wolf on every scheduled run."""
+    store.upsert_call_site(_site())
+    sites = store.replace_call_sites("r1", [_site()])
+    store.insert_finding(_finding(sites[0], claim="c1"))
+
+    with store.subscribe_events("r1") as events:
+        store.insert_finding(_finding(sites[0], claim="c1"))
+
+        assert events.next(timeout=2.0) is None
+
+
+# --- The bus where it lies, rather than where it works ----------------------------------------
+#
+# Every defect this transport has had was in the quiet path: a stream that blocked forever on an
+# idle channel looked identical to one that worked, because the tests only ever asserted on
+# events that arrived. These assert the states where a transport reports success and is wrong.
+
+
+def test_a_quiet_channel_returns_none_within_the_timeout_rather_than_blocking(store):
+    """The defect that shipped in CI-W419, as a test that fails by hanging if it returns.
+
+    A stream that cannot say "nothing yet" cannot drive a heartbeat, and without a heartbeat the
+    console cannot tell an idle index from a dead connection -- which decision 76 requires it to
+    render as different things.
+    """
+    with store.subscribe_events("r1") as events:
+        started = time.monotonic()
+        assert events.next(timeout=1.0) is None
+        assert time.monotonic() - started < 5.0
+
+
+def test_a_subscriber_that_arrives_late_misses_what_was_sent_before_it(store):
+    """`NOTIFY` is not queued: a notification sent with nobody listening is gone.
+
+    Asserted rather than worked around, because the console's honest answer is to say what its
+    count is over -- events since it connected -- rather than to imply it watched the whole run.
+    A test that pretended otherwise would be describing a transport we do not have.
+    """
+    store.upsert_call_site(_site(path="src/before.ts"))
+
+    with store.subscribe_events("r1") as events:
+        assert events.next(timeout=1.0) is None
+
+
+def test_a_subscriber_behind_by_several_events_drains_them_in_order(store):
+    """A burst is the normal case for an index run, not the exceptional one. The second shape of
+    this stream dropped everything after the first and the per-call-site test caught it; this
+    holds the property directly rather than as a side effect of counting."""
+    with store.subscribe_events("r1") as events:
+        for index in range(5):
+            store.upsert_call_site(_site(path=f"src/a{index}.ts", line=index + 1))
+
+        drained = [events.next(timeout=5.0) for _ in range(5)]
+
+    assert [event["path"] for event in drained] == [f"src/a{i}.ts" for i in range(5)]
+
+
+def test_two_repositories_indexing_at_once_do_not_cross_streams(store):
+    """One channel carries every repository, so the filter is the only thing keeping a client from
+    seeing another codebase's activity. Interleaved rather than sequential, because a filter that
+    works on a quiet channel can still fail on a busy one."""
+    with store.subscribe_events("r1") as events:
+        store.upsert_call_site(_site(repo_id="r2", path="src/theirs-1.ts"))
+        store.upsert_call_site(_site(repo_id="r1", path="src/mine-1.ts"))
+        store.upsert_call_site(_site(repo_id="r2", path="src/theirs-2.ts"))
+        store.upsert_call_site(_site(repo_id="r1", path="src/mine-2.ts"))
+
+        drained = [events.next(timeout=5.0) for _ in range(2)]
+
+    assert [event["path"] for event in drained] == ["src/mine-1.ts", "src/mine-2.ts"]
+    assert all(event["repo_id"] == "r1" for event in drained)
+
+
+def test_a_closed_connection_ends_the_stream_rather_than_hanging(store):
+    """A dropped connection must surface, because decision 76 makes the console render a drop and
+    it can only do that if the server side stops rather than waiting forever."""
+    with store.subscribe_events("r1") as events:
+        events._connection.close()
+
+        with pytest.raises(psycopg.OperationalError):
+            events.next(timeout=2.0)
+
+
+def test_the_burst_cost_of_per_call_site_events_is_measured_rather_than_assumed(store):
+    """Per-call-site fat events were chosen with their cost stated. This is the cost, measured.
+
+    Recorded so the granularity can be argued with a number rather than a worry. If a real
+    repository ever makes this unacceptable, the fix is a coalescing publisher and this test is
+    what will show it changed.
+    """
+    count = 200
+
+    with store.subscribe_events("r1") as events:
+        started = time.monotonic()
+        for index in range(count):
+            store.upsert_call_site(_site(path=f"src/f{index}.ts", line=index + 1))
+        written = time.monotonic() - started
+
+        drain_started = time.monotonic()
+        drained = [events.next(timeout=10.0) for _ in range(count)]
+        drained_in = time.monotonic() - drain_started
+
+    assert all(event is not None for event in drained)
+    # Generous, and deliberately so: this asserts the shape is linear and unblocked, not a
+    # benchmark that fails on a slow machine. `written`/`drained_in` go in the register.
+    assert drained_in < 30.0
+    print(f"\nburst: {count} events written in {written:.2f}s, drained in {drained_in:.2f}s")

@@ -250,6 +250,20 @@ def test_the_scope_rules_that_stop_the_agent_wandering_survive():
     assert "rather than inventing a placeholder" in lowered
 
 
+def test_the_prompt_says_subagent_dispatch_is_unavailable_and_names_the_search_tools():
+    """B7's own scratch run: the model called the `Agent` tool three times against a change
+    whose field was seven levels deep in the response and named nothing more precise than
+    `data` -- `Agent` is not in `ALLOWED_TOOLS`, tool_gate refused it every time, and rather
+    than falling back to Grep/Glob/Read (which are allowed and could have located the field),
+    the model gave up. `_SCOPE_RULES` already named Read/Grep/Glob as how the agent inspects
+    the repository, but never said plainly that a subagent is not an option -- an omission a
+    model trained to reach for delegation on an ambiguous search will not read as a limit.
+    """
+    lowered = build_patch_prompt(FINDING, RECEIPT_CHANGE, RECEIPT_SITE).lower()
+    assert "no subagent" in lowered or "sub-agent" in lowered or "cannot dispatch" in lowered
+    assert "grep" in lowered and "glob" in lowered
+
+
 def test_the_prompt_tells_the_agent_how_to_make_a_new_file_part_of_the_patch():
     """Some fixes need a file that is not there yet -- an extracted helper, a type
     declaration, a shim. Nothing in the pipeline can tell such a file apart from

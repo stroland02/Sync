@@ -64,6 +64,7 @@ import {
   noPullRequestPhrase,
 } from "@/features/pullrequests/bundle-facts"
 import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
+import { PatchPanel } from "@/features/pullrequests/patch-panel"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -283,6 +284,11 @@ function PullRequest({
 
         {data !== undefined && (
           <>
+            {/* Decision 47: the diff leads. Before this a reviewer could read every verdict
+                about a patch on this screen without ever seeing the patch, and the
+                verification chain that follows it is what makes the verdicts worth reading. */}
+            <PatchPanel findingId={findingId} nodes={data.nodes} />
+
             <RunOutcome
               outcome={data.outcome}
               abandonReason={data.abandon_reason}

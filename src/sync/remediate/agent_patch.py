@@ -93,6 +93,10 @@ Rules:
   typechecker named below. Anything else is refused before it runs, one command at a time, so a
   pipe, a redirection, a substitution or a second command on the same line is refused as well.
   Read, Grep and Glob are how you inspect this repository.
+- There is no subagent here to dispatch a search to. If a change points at a field named in a
+  response body without saying where it sits -- buried inside a nested object, a list, or a union
+  of shapes -- Grep and Glob are how you find it, directly, not by delegating the search. Read the
+  result and edit it yourself.
 - Run `npx tsc --noEmit` once you have made the edit -- after staging anything you added,
   so that it measures the same tree the branch will carry -- and confirm you introduced no
   new errors. That is the whole of what it establishes. It cannot tell you whether the edit
