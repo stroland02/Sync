@@ -107,6 +107,34 @@ it.** So, highest first:
 scoped) and page headers (answer: removed). A lane finding a new conflict records it here rather than
 resolving it silently.
 
+**Fourth conflict, recorded by Lane C, `CI-W384` — nothing exposes the customer's code or the
+patch, and it blocks two decisions rather than a drawing.**
+
+This one is not the mock losing. It is three things wanting one capability that does not exist:
+
+- **Decision 21** — *a finding's drawer opens on the code, call site highlighted*.
+- **Decision 26** — *the Findings tab reads narrative, then **diff**, then evidence*.
+- The mock's `08-pull-request` **"The patch"** panel, with per-file hunks and line numbers.
+
+**Checked against all nineteen routes rather than assumed.** None serves source, a diff, or the
+patch. `GET /api/workflows/{finding_id}` is the closest and its nodes carry `branch`, `pr_url`,
+`ci_url`, `replay_evidence`, `routing_row` and `tier` — every fact *about* the edit and no part of
+the edit itself. `sync.dashboard.queries` reads `pr_url` and `pr_number` out of the checkpoint, and
+`evidence-bundle.tsx` already says so on screen.
+
+**So this is an API item before it is a console item, and no lane can start the console half.**
+Lane B cannot build the drawer, and this lane cannot build the patch panel; both would be inventing
+a payload. It is recorded here rather than attempted because the decisions are the highest
+authority and two of them are, today, unbuildable.
+
+**What it needs, stated so whoever picks it up is not designing from scratch:** a route that returns
+the patch for a finding — the unified diff the run produced, or the file and the hunk — and, for
+decision 21, the source lines around a call site with the line marked. Both exist in the graph and
+the checkpointer; neither reaches the transport. **Care is owed on one point:** the console's
+read-only guarantee is enforced by `test_no_route_reaches_past_the_read_surface`, and serving
+customer source is still a read, but it widens what a console session can see from *facts about a
+repository* to *the repository*. That is a deliberate decision rather than a detail.
+
 **Third conflict, recorded by Lane C, `CI-W378` — the pull request screen's approval bar.**
 `screens/08-pull-request.png` draws a full-width bar under the header offering **Abandon**,
 **Request changes** and **Approve**, with the sentence that approval is a standing instruction and
