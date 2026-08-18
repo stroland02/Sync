@@ -165,6 +165,19 @@ def app_factory() -> Starlette:
     def graph_reader(repo_id: str):
         return graph_views.repository_graph(store, repo_id, limit=GRAPH_BINDING_LIMIT)
 
+    def events_reader(repo_id: str):
+        """Decision 76's bus, as an iterator the route owns the lifetime of.
+
+        Held open with no lifetime cap by owner selection, so the generator ends when the client
+        goes and the listening connection closes with it. The heartbeat is emitted here rather
+        than in the store because it is a fact about this stream being alive, not about the
+        graph -- nothing in `sync.graph` should be inventing events.
+        """
+        with store.subscribe_events(repo_id) as stream:
+            while True:
+                event = stream.next(timeout=15.0)
+                yield event if event is not None else {"kind": "heartbeat", "repo_id": repo_id}
+
     def findings_over_time_reader(*, repo_id: str | None = None):
         return graph_views.findings_by_kind_over_time(store, repo_id=repo_id)
 
@@ -278,6 +291,7 @@ def app_factory() -> Starlette:
         observed_reader=observed_reader,
         vendor_operations_reader=vendor_operations_reader,
         findings_over_time_reader=findings_over_time_reader,
+        events_reader=events_reader,
         detector_reader=detector_reader,
         adapters_reader=adapters_reader,
         severity_reader=severity_reader,
@@ -289,11 +303,6 @@ def app_factory() -> Starlette:
         findings_reader=findings_reader,
         settings_reader=settings_reader,
         settings_writer=settings_writer,
-        # The store itself, because `subscribe_events` opens a connection of its own for the
-        # subscription rather than sharing this one -- a session waiting on `LISTEN` cannot
-        # also serve reads. Passing the store rather than a bound method keeps the protocol
-        # in `app.py` describing the thing that exists instead of a wrapper around it.
-        events_reader=store,
         api_password=configured_api_password(),
     )
 

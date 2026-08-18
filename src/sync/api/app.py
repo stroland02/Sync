@@ -31,25 +31,19 @@ route needs.
 
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
-from typing import Any, Callable, Optional, Protocol
+import json
+
+from typing import Any, Callable, Iterator, Optional
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response, StreamingResponse
+from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
-
-from sync.api.events import event_frames
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES, REFUSED_MERGE_POLICIES
 
 from sync.core.models import CONTEXT_BODY_MAX
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
-
-# One wait for an event before the stream says it is quiet. Long enough that a busy index is
-# not broken up by comment frames, short enough that a reader hears the stream is still there
-# well inside the idle timeout of anything sitting in the middle.
-_EVENT_WAIT_SECONDS = 15.0
 
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
@@ -88,6 +82,10 @@ ObservedReader = Callable[..., dict[str, Any]]
 VendorOperationsReader = Callable[..., dict[str, Any]]
 # Dashboard 1's dated aggregate. Keyword-only scope, like every other narrowing reader.
 FindingsOverTimeReader = Callable[..., dict[str, Any]]
+# Decision 76's bus, as an iterator of events for one repository. An iterator rather than a
+# callback so the route owns the lifetime: when the client goes, the generator is closed and
+# the listening connection with it.
+EventsReader = Callable[[str], Iterator[dict[str, Any]]]
 DetectorReader = Callable[[], dict[str, Any]]
 
 # The adapter inventory backs `sync.dashboard.adapters.adapter_inventory`. It takes no
@@ -133,17 +131,6 @@ OverviewReader = Callable[[], dict[str, Any]]
 ContextReader = Callable[[str], dict[str, Any]]
 ContextWriter = Callable[[str, str], None]
 SettingsReader = Callable[[str], dict[str, Any]]
-
-
-class EventSource(Protocol):
-    """Something that hands out a live subscription to one repository's events.
-
-    Spelled as the method `GraphStore` already exposes rather than as a wrapper around it.
-    An adapter here would be a second place for the subscription's shape to be described,
-    and the store's is the one that has to be right.
-    """
-
-    def subscribe_events(self, repo_id: str) -> AbstractContextManager[Any]: ...
 SettingsWriter = Callable[[str, dict[str, Any]], Any]
 
 
@@ -210,6 +197,7 @@ def create_app(
     observed_reader: ObservedReader,
     vendor_operations_reader: VendorOperationsReader,
     findings_over_time_reader: FindingsOverTimeReader,
+    events_reader: EventsReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -221,7 +209,6 @@ def create_app(
     findings_reader: FindingsReader | None = None,
     settings_reader: SettingsReader | None = None,
     settings_writer: SettingsWriter | None = None,
-    events_reader: EventSource | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -351,6 +338,41 @@ def create_app(
         since = request.query_params.get("since")
         page = surface.whats_changed(vendor=vendor_id, since=since, limit=limit, offset=offset)
         return JSONResponse(page)
+
+    async def repository_events(request: Request) -> StreamingResponse:
+        """Decision 76's stream, scoped by the path decision 49 puts it in.
+
+        **Held open with no lifetime cap, by owner selection.** The cost was stated when the
+        choice was offered: a handful of forgotten tabs each hold a listening Postgres connection,
+        and enough of them exhaust the pool the read API shares. What is *not* a cap and is done
+        anyway is cleanup -- the generator is closed when the client disconnects, so a closed tab
+        releases its connection immediately rather than at some later timeout.
+
+        **The heartbeat is a named event rather than an SSE comment**, also owner-selected. It
+        carries no domain fact and is named so nobody mistakes it for one: what it asserts is that
+        the stream is alive. Without it a proxy closing an idle connection is indistinguishable
+        from an index that simply had nothing to say, and decision 76 requires the console to
+        render a drop -- which it can only do if a drop is distinguishable from silence.
+
+        `X-Accel-Buffering` is set because a buffering proxy defeats the whole transport: events
+        arrive in a batch when the connection closes, which is the opposite of a stream.
+        """
+        repo_id = request.path_params["repo_id"]
+
+        def frames() -> Iterator[str]:
+            for event in events_reader(repo_id):
+                # Two newlines end an SSE frame; one separates its fields. Written as
+                # escapes rather than a multi-line literal so the framing cannot be
+                # reformatted away by an editor that trims trailing whitespace.
+                frame = "event: " + event["kind"] + "\n"
+                frame += "data: " + json.dumps(event) + "\n\n"
+                yield frame
+
+        return StreamingResponse(
+            frames(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
     async def findings_over_time(request: Request) -> JSONResponse:
         # `repo_id` narrows and is optional: absent means every repository the index has
@@ -558,57 +580,8 @@ def create_app(
             return JSONResponse(settings_reader(repo_id))
         return JSONResponse({"ok": True})
 
-    async def events(request: Request) -> Response:
-        """The console's event stream, decision 76, with no polling fallback behind it.
-
-        Scope is required rather than defaulted to the fleet. Every page is scoped to a
-        workspace, and a stream that answered an unscoped request would send one customer's
-        activity to a client watching another -- the same defect `B92` closed for the
-        counted routes, arriving on a channel where nobody would see it in a payload.
-
-        A deployment with no event source answers 503 rather than an empty stream. An empty
-        stream and an absent one look identical to a reader, and only one of them is worth
-        waiting on; saying which is the console's whole argument.
-        """
-        repo_id = request.query_params.get("repo_id")
-        if not repo_id:
-            return JSONResponse(
-                {
-                    "error": (
-                        "repo_id is required: this stream is scoped to one workspace, and an "
-                        "unscoped subscription would carry another one's activity"
-                    )
-                },
-                status_code=400,
-            )
-        if events_reader is None:
-            return JSONResponse(
-                {
-                    "error": (
-                        "this deployment has no event stream configured, so nothing will "
-                        "arrive on it -- which is not the same as a stream that is quiet"
-                    )
-                },
-                status_code=503,
-            )
-
-        return StreamingResponse(
-            event_frames(
-                events_reader,
-                repo_id,
-                is_disconnected=request.is_disconnected,
-                wait_seconds=_EVENT_WAIT_SECONDS,
-            ),
-            media_type="text/event-stream",
-            # `no-store` because a cached event stream is a replay of somebody else's
-            # moment, and `no` buffering because a proxy holding frames to fill a block
-            # turns a live stream into a delayed one that still looks live.
-            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
-        )
-
     routes = [
         Route("/api/overview", overview, methods=["GET"]),
-        Route("/api/events", events, methods=["GET"]),
         Route("/api/findings", findings_list, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/findings", findings_list, methods=["GET"]),
         Route("/api/repos/{repo_id:path}/findings", findings_list, methods=["GET"]),
@@ -625,6 +598,8 @@ def create_app(
         Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/events", repository_events, methods=["GET"]),
+        Route("/api/repositories/{repo_id}/events", repository_events, methods=["GET"]),
         Route("/api/change-units", change_units, methods=["GET"]),
         Route(
             "/api/vendors/{vendor_id}/operations/{operation_id}/bindings",

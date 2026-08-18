@@ -204,6 +204,12 @@ def _fake_findings_over_time_reader(*, repo_id=None) -> dict[str, Any]:
     }
 
 
+def _fake_events_reader(repo_id: str):
+    """A finite stand-in for the bus, so a test never waits on a real index run."""
+    yield {"kind": "call_site.indexed", "repo_id": repo_id, "path": "src/a.ts"}
+    yield {"kind": "heartbeat", "repo_id": repo_id}
+
+
 def _fake_observed_reader(
     repo_id: str,
     *,
@@ -330,6 +336,7 @@ def _build_app(
     graph_reader=_fake_graph_reader,
     change_volume_reader=_fake_change_volume_reader,
     observed_reader=_fake_observed_reader,
+    events_reader=_fake_events_reader,
     findings_over_time_reader=_fake_findings_over_time_reader,
     vendor_operations_reader=_fake_vendor_operations_reader,
     detector_reader=_fake_detector_reader,
@@ -343,7 +350,6 @@ def _build_app(
     findings_reader=None,
     settings_reader=_fake_settings_reader,
     settings_writer=_fake_settings_writer,
-    events_reader=None,
     api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
@@ -367,6 +373,7 @@ def _build_app(
         graph_reader=graph_reader,
         change_volume_reader=change_volume_reader,
         observed_reader=observed_reader,
+        events_reader=events_reader,
         findings_over_time_reader=findings_over_time_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
@@ -381,7 +388,6 @@ def _build_app(
         settings_reader=settings_reader,
         settings_writer=settings_writer,
         api_password=api_password,
-        events_reader=events_reader,
     )
 
 
@@ -1570,6 +1576,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
+    def events_reader(repo_id: str):
+        return _fake_events_reader(repo_id)
+
     def findings_over_time_reader(*, repo_id=None):
         return _fake_findings_over_time_reader(repo_id=repo_id)
 
@@ -1589,6 +1598,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         graph_reader=_fake_graph_reader,
         change_volume_reader=_fake_change_volume_reader,
         observed_reader=observed_reader,
+        events_reader=events_reader,
         findings_over_time_reader=findings_over_time_reader,
         vendor_operations_reader=vendor_operations_reader,
         detector_reader=detector_reader,
@@ -1804,11 +1814,6 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
 #   unpaginated deliberately.
 _NOT_COLLECTIONS = {
-    # A subscription rather than a page. `limit` and `offset` describe a set that is already
-    # complete when it is asked for, and this one is not: what it carries has not happened
-    # yet. Decision 76 also refused a polling fallback, so there is no second, paged reading
-    # of the same route to keep consistent with.
-    "/api/events",
     "/api/overview",
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
@@ -1840,6 +1845,11 @@ _NOT_COLLECTIONS = {
     # not by how many findings exist. Paging a distribution truncates the picture while looking
     # complete, which is the reason `/api/overview` is unpaginated too.
     "/api/findings/over-time",
+    # A stream is not a page. It has no total to report and no offset to advance, and it ends when
+    # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
+    # mean here.
+    "/api/repositories/{repo_id:path}/events",
+    "/api/repositories/{repo_id}/events",
 }
 
 _PAGE_ENVELOPE_KEYS = {"items", "total", "next_offset"}
@@ -2141,14 +2151,6 @@ def _normalized(path: str) -> str:
 # it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
-    # CI-W426: the route exists and the console side is the motion work of decisions 76-79.
-    # **Its removal condition is not the same as the others in this set** and that is worth
-    # saying plainly rather than letting a reader assume: an event stream is consumed with
-    # `EventSource`, not `fetch`, so `client.ts` fetching this path is not what will retire
-    # the entry. When the console subscribes, this guard has to learn to see an EventSource
-    # -- otherwise the receipt silently becomes the permanent exemption the note above warns
-    # against.
-    "/api/events",
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
@@ -2156,6 +2158,12 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/repos/{param}/findings",
     "/api/repositories/{param}/settings",
     "/api/repos/{param}/settings",
+    # CI-W425: the route exists and its console consumer is the next unit. Worth naming the trap
+    # for whoever removes this: an SSE route is read by `new EventSource(...)`, never by `fetch`,
+    # so this guard will still not see it once the consumer lands. The guard has to learn
+    # EventSource at the same time as this entry goes -- otherwise the entry becomes permanent
+    # for a route that is genuinely consumed, which is the rot this set's own comment warns of.
+    "/api/repositories/{param}/events",
 }
 
 
@@ -2644,3 +2652,55 @@ def test_findings_over_time_route_passes_the_repository_scope_through():
     TestClient(app).get("/api/findings/over-time?repo_id=org%2Fpayments")
 
     assert seen == [{"repo_id": "org/payments"}]
+
+
+def test_the_events_route_streams_server_sent_events():
+    """Decision 76: a real stream rather than polling. The content type is the contract -- an
+    EventSource will not attach to anything else."""
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    with TestClient(app) as client:
+        response = client.get("/api/repositories/r1/events")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+
+def test_each_event_is_framed_with_its_type_so_a_client_can_dispatch_on_it():
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    with TestClient(app) as client:
+        body = client.get("/api/repositories/r1/events").text
+
+    assert "event: call_site.indexed" in body
+    assert '"path":"src/a.ts"' in body.replace(" ", "")
+
+
+def test_the_heartbeat_is_a_named_event_so_silence_is_not_a_drop():
+    """Owner-selected over an SSE comment. It carries no domain fact, and it is named so nobody
+    mistakes it for one -- what it asserts is that the stream is alive, nothing more."""
+    app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
+
+    with TestClient(app) as client:
+        body = client.get("/api/repositories/r1/events").text
+
+    assert "event: heartbeat" in body
+
+
+def test_the_events_route_is_scoped_by_the_path_and_not_a_query_string():
+    """Decision 49: scope lives in the route path. The reader is handed the repository the URL
+    names and cannot be handed another's stream."""
+    seen: list[str] = []
+
+    def reader(repo_id: str):
+        seen.append(repo_id)
+        return _fake_events_reader(repo_id)
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), events_reader=reader
+    )
+
+    with TestClient(app) as client:
+        client.get("/api/repositories/org%2Fpayments/events")
+
+    assert seen == ["org/payments"]
