@@ -501,8 +501,12 @@ sits.
   vendor specification staged that a fresh container does not have. `B188` in
   `docs/superpowers/BACKLOG.md` carries the three ways out and what each one costs. Until that
   lands, this shows you that the product runs, not what it finds in your code.
-- **It is three commands, not one.** `git clone`, `cd`, `docker compose up`. The single-command
-  form is a thin `npx` wrapper over exactly this, and it is not built yet.
+- **The one-command form exists and is `npx @superloglabs/sync`.** `bin/sync-up.mjs` checks the
+  single prerequisite and hands over to exactly the `docker compose` invocation above — it
+  deliberately reimplements none of it, because npm delivers a Node program and a wrapper claiming
+  to install Python and a database would fail in front of the person being shown it. What has not
+  been verified is the published path: whether that command resolves for somebody who is not
+  already in this checkout.
 
 To stop it, and to remove its database with it:
 
