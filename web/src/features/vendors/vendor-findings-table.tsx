@@ -413,6 +413,10 @@ export function VendorFindingsCard({
             limit={DEFAULT_LIMIT}
             shown={page.items.length}
             total={page.total}
+            /* `severity_total` is this scope's own count, read without the filter applied --
+               `types.ts` states it does not agree with `total` whenever a filter is on and is not
+               supposed to. That disagreement is exactly the number decision 60 wants shown. */
+            unfilteredTotal={activeFilters.length > 0 ? page.severity_total : undefined}
             nextOffset={page.next_offset}
             busy={query.isFetching}
             onOffsetChange={setOffset}

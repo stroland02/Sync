@@ -27,6 +27,7 @@ export function PageControls({
   limit,
   shown,
   total,
+  unfilteredTotal,
   nextOffset,
   busy,
   onOffsetChange,
@@ -35,13 +36,15 @@ export function PageControls({
   limit: number
   shown: number
   total: number
+  /** The same scope's count with no filter applied, when the caller knows it. */
+  unfilteredTotal?: number
   nextOffset: number | null
   busy: boolean
   onOffsetChange: (offset: number) => void
 }) {
   return (
     <div className="flex items-center gap-3 text-body">
-      <span className="text-ink-muted">{describeRange(offset, shown, total)}</span>
+      <span className="text-ink-muted">{describeRange(offset, shown, total, unfilteredTotal)}</span>
       <Button
         variant="outline"
         size="sm"

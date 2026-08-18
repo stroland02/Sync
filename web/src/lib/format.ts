@@ -43,9 +43,26 @@ export function describeRung(rung: BindingSource): string {
 }
 
 /** "1-50 of 123", or "none" when there is nothing to place. */
-export function describeRange(offset: number, shown: number, total: number): string {
-  if (total === 0) return "none"
-  return `${offset + 1}–${offset + shown} of ${total}`
+export function describeRange(
+  offset: number,
+  shown: number,
+  total: number,
+  unfilteredTotal?: number,
+): string {
+  // Decision 60: never a bare row count while a filter is active. The owner did not take filter
+  // chips, so this string is the only thing standing between a narrowed table and being read as
+  // the whole set. The decision's example is single-page ("showing 4 of 31"); across pages that
+  // would be false, so the range stays and the filtered clause travels with it.
+  const hidden =
+    unfilteredTotal !== undefined && unfilteredTotal > total ? unfilteredTotal - total : 0
+
+  if (total === 0) {
+    return hidden > 0 ? `none of ${unfilteredTotal}, all ${hidden} filtered out` : "none"
+  }
+  const range = `${offset + 1}–${offset + shown} of ${total}`
+  // A filter that excluded nothing needs no warning, and "0 filtered out" is noise that makes the
+  // real case easier to miss.
+  return hidden > 0 ? `${range} matched, ${hidden} filtered out` : range
 }
 
 /**
