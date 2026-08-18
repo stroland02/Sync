@@ -1,14 +1,18 @@
 /**
- * The route's region order, against mock screen 07's two-pane trajectory shape.
+ * The Solution Workflow's shape: a persistent fact rail beside two tabs over one run.
  *
- * The rail carries the run facts and then the sequence, under a "Node by node" panel; the content
- * column carries the fetched-at line, then the activity timeline, then any superseded generations.
- * This only asserts structure — heading order and which column a region lands in — never styling,
- * per `.claude/rules/console-dev-loop.md`'s scope for this runner.
+ * The owner's sentence redefined what this screen is for — it is where a human intervenes in work
+ * that is still in progress, not a record of what an agent did. So the structure under test is that
+ * split: the run's identity holds still in the rail while the main pane carries `Activity` (the
+ * turn-by-turn transcript, ending in the reply box) and `Findings` (the settled output).
+ *
+ * Structure and derivation only — heading order, which pane a region lands in, which tab is
+ * selected. Never class names, never a snapshot: this console is being actively restyled and a
+ * snapshot here would go red on every correct change.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -76,42 +80,69 @@ function mockWorkflow() {
   } as any)
 }
 
-describe("WorkflowPage's region order", () => {
-  it("reads page header, then Node by node, then Activity, top to bottom", () => {
+/** Radix activates a tab on pointer-down, so a click alone leaves the selection where it was. */
+function selectTab(name: string) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }))
+}
+
+describe("the persistent fact rail", () => {
+  it("carries the run's identity as a label/value list, ahead of the transcript", () => {
     mockWorkflow()
 
     const { container } = renderScreen("finding-123")
 
-    const headings = Array.from(container.querySelectorAll("h1, h2")).map(
-      (el) => el.textContent ?? "",
-    )
-    const headerIndex = headings.findIndex((text) => text.includes("Run 1"))
-    const nodeByNodeIndex = headings.findIndex((text) => text.includes("Node by node"))
-    const activityIndex = headings.findIndex((text) => text.includes("Activity"))
-
-    expect(headerIndex).toBeGreaterThanOrEqual(0)
-    expect(nodeByNodeIndex).toBeGreaterThan(headerIndex)
-    expect(activityIndex).toBeGreaterThan(nodeByNodeIndex)
+    const labels = Array.from(container.querySelectorAll("dt")).map((el) => el.textContent ?? "")
+    expect(labels.length).toBeGreaterThan(0)
+    for (const expected of ["Finding", "Repository", "Tier", "Strategy", "Waiting on"]) {
+      expect(labels).toContain(expected)
+    }
   })
+})
 
-  it("renders the run facts in the rail before the node sequence", () => {
+describe("two tabs over one run", () => {
+  it("offers Activity and Findings, with Activity selected on arrival", () => {
     mockWorkflow()
 
-    const { container } = renderScreen("finding-123")
+    renderScreen("finding-123")
 
-    const marks = Array.from(container.querySelectorAll("dt, h2, h3")).map(
-      (el) => el.textContent ?? "",
-    )
-    const findingFactIndex = marks.findIndex((text) => text.includes("Finding"))
-    const nodeByNodeIndex = marks.findIndex((text) => text.includes("Node by node"))
-    const firstNodeIndex = marks.findIndex((text) => text === "locate")
-
-    expect(findingFactIndex).toBeGreaterThanOrEqual(0)
-    expect(nodeByNodeIndex).toBeGreaterThan(findingFactIndex)
-    expect(firstNodeIndex).toBeGreaterThan(nodeByNodeIndex)
+    const tabs = screen.getAllByRole("tab")
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Activity", "Findings"])
+    expect(screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected")).toBe("true")
   })
 
-  it("keeps the Node-by-node intro sentence describing what a standing does and does not say", () => {
+  it("reads transcript, then checkpoint timeline, then the reply box at the bottom of Activity", () => {
+    mockWorkflow()
+
+    renderScreen("finding-123")
+
+    const panel = screen.getByRole("tabpanel")
+    const headings = within(panel)
+      .getAllByRole("heading")
+      .map((el) => el.textContent ?? "")
+
+    expect(headings.length).toBeGreaterThan(0)
+    const sequence = headings.findIndex((text) => text.includes("Node by node"))
+    const timeline = headings.findIndex((text) => text.includes("Checkpoint timeline"))
+    const reply = headings.findIndex((text) => text.includes("Reply to this run"))
+
+    expect(sequence).toBeGreaterThanOrEqual(0)
+    expect(timeline).toBeGreaterThan(sequence)
+    expect(reply).toBeGreaterThan(timeline)
+  })
+
+  it("swaps the transcript for the settled output when Findings is selected", () => {
+    mockWorkflow()
+
+    renderScreen("finding-123")
+    selectTab("Findings")
+
+    expect(screen.getByRole("heading", { name: "Settled output" })).not.toBeNull()
+    expect(screen.queryByRole("heading", { name: "Reply to this run" })).toBeNull()
+  })
+})
+
+describe("the sentences this screen may not lose", () => {
+  it("keeps the Node-by-node intro describing what a standing does and does not say", () => {
     mockWorkflow()
 
     renderScreen("finding-123")
@@ -119,6 +150,18 @@ describe("WorkflowPage's region order", () => {
     expect(
       screen.getByText(
         "Eight nodes, in the order the graph wires them. A standing is the checkpoint's own answer — nothing here says a node is executing.",
+      ),
+    ).not.toBeNull()
+  })
+
+  it("keeps the timeline's own account of where its rows come from", () => {
+    mockWorkflow()
+
+    renderScreen("finding-123")
+
+    expect(
+      screen.getByText(
+        "Assembled at read time from the checkpointer. Nothing writes a timeline row.",
       ),
     ).not.toBeNull()
   })
