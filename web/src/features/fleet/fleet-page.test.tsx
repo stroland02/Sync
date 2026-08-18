@@ -59,13 +59,30 @@ function renderOverview(entry = "/") {
 }
 
 describe("the overview screen", () => {
-  it("is called Overview, so one destination has one name", () => {
+  it("carries no page header, because density is dense", () => {
     renderOverview()
 
-    // It was titled "Repositories", labelled "Codebases" in the registry, and sits at the "Fleet"
-    // level. Three names for one destination is the confusion this rename removes. The *level*
-    // stays "Fleet" — that is the specification's word and `test_console_hierarchy.py` holds it.
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Overview")
+    // Owner answer 7: tight rows, small type, minimal padding, no page headers. The screen is
+    // named by the breadcrumb and the sidebar; an h1 repeating it spends a band of the first
+    // screen on a word the reader just clicked. Recorded conflict: the mock draws one, and
+    // answer 20 says the answer wins.
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
+  })
+
+  it("puts the fact tiles beside the dependency graph, per owner decision 2", () => {
+    const { container } = renderOverview("/?repo_id=org%2Fone")
+
+    // Answer 2 names the arrangement: last indexed, call sites, vendors, bindings by rung and
+    // open findings, with the graph to the right. Its consequence is that the graph sits above
+    // the fold on the first screen, so it is not optional -- which is why this is a structural
+    // assertion and not a note. jsdom has no layout, so "beside" is measured in Chrome; what is
+    // held here is the precondition without which it cannot be true at any viewport.
+    const band = container.querySelector("[aria-label='Codebase facts']")
+    expect(band).not.toBeNull()
+
+    const pair = band!.parentElement
+    expect(pair).not.toBeNull()
+    expect(pair!.childElementCount).toBe(2)
   })
 
   it("does not list the codebases, because the Overview is one workspace's findings", () => {
