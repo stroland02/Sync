@@ -39,6 +39,25 @@ import {
 
 afterEach(cleanup)
 
+describe("the vendor's mark", () => {
+  it("shows the vendor's own mark beside the id, per decision 6", () => {
+    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />)
+
+    expect(screen.getByTestId("vendor-mark-image")).toBeTruthy()
+  })
+
+  /**
+   * Decision 6 reversed the refusal to render a mark. It did not reverse what the refusal was
+   * protecting: the id is what Sync actually holds, and the mark is an aid to finding it.
+   */
+  it("keeps the id as the identity rather than letting the mark stand for it", () => {
+    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />)
+
+    expect(screen.getByRole("heading", { name: "stripe" })).toBeTruthy()
+    expect(screen.getByTestId("vendor-mark-image").getAttribute("alt")).toBe("")
+  })
+})
+
 const delivered: AdapterRow = {
   vendor_id: "stripe",
   kind: "coded",
@@ -60,16 +79,17 @@ const neverDelivered: AdapterRow = {
 }
 
 describe("VendorCard", () => {
-  it("identifies the vendor by its id and embeds no vendor mark of any kind", () => {
+  it("identifies the vendor by its id, and draws no mark of its own", () => {
     const { container } = render(
       <VendorCard vendorId="stripe" adapter={delivered} openFindingCount={3} />
     )
 
-    // A vendor logo is a third-party mark. The id is the identity Sync actually holds, and it is
-    // the one the graph, the payload and every other screen key on.
+    // Decision 6 reversed the refusal to show a mark, and kept the reason behind it: the id is the
+    // identity Sync actually holds, and it is what the graph, the payload and every other screen
+    // key on. What stays refused is a mark Sync renders itself — no inline svg, no drawn path.
     expect(screen.getByRole("heading", { name: "stripe" })).toBeTruthy()
-    expect(container.querySelector("img")).toBeNull()
-    expect(container.querySelector("[src]")).toBeNull()
+    expect(container.querySelector("svg")).toBeNull()
+    expect(container.querySelector("path")).toBeNull()
   })
 
   it("renders every tier in the registry's own vocabulary, legible as a word without colour", () => {
