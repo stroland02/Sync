@@ -25,6 +25,7 @@ from sync.api.auth import configured_api_password, validate_bind_security
 from sync.core.models import RepoContext, RepoSettings
 from sync.dashboard import fleet, graph_views
 from sync.dashboard.adapters import adapter_inventory
+from sync.dashboard.patch import patch_for_finding
 from sync.dashboard.queries import workflow_state
 from sync.graph.store import DEFAULT_DSN, GraphStore, describe_dsn
 from sync.mcp.tools import GraphSurface
@@ -119,6 +120,9 @@ def app_factory() -> Starlette:
 
     def workflow_reader(finding_id: str):
         return workflow_state(checkpointer_dsn, finding_id)
+
+    def patch_reader(finding_id: str):
+        return patch_for_finding(checkpointer_dsn, finding_id)
 
     def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
         return fleet.runs(
@@ -279,6 +283,7 @@ def app_factory() -> Starlette:
     return create_app(
         surface=surface,
         workflow_reader=workflow_reader,
+        patch_reader=patch_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,

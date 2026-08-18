@@ -47,6 +47,10 @@ from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
+# The patch a run produced, keyed the same way its workflow is. A diff is Sync's own artifact
+# and is served; customer source is not, and stays blocked on the threat-model ruling.
+PatchReader = Callable[[str], Optional[dict[str, Any]]]
+
 # The fleet roll-ups read the checkpointer and the graph store directly, outside `GraphSurface`
 # -- same reasoning as `WorkflowReader`: a run, a repair record and a repo_id roll-up are not
 # graph-surface questions, and folding them into the surface would ask one abstraction to speak
@@ -198,6 +202,7 @@ def create_app(
     vendor_operations_reader: VendorOperationsReader,
     findings_over_time_reader: FindingsOverTimeReader,
     events_reader: EventsReader,
+    patch_reader: PatchReader,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
     severity_reader: SeverityReader,
@@ -389,6 +394,23 @@ def create_app(
         payload = vendor_operations_reader(
             vendor_id, repo_id=request.query_params.get("repo_id")
         )
+        return JSONResponse(payload)
+
+    async def finding_patch(request: Request) -> JSONResponse:
+        """The diff a run wrote, and the branch it went to, in one answer.
+
+        **Owner ruling: the two travel together.** A diff served alone is the shape a reader
+        mistakes for a change that has already landed in their repository, and the branch is
+        the only thing on the payload that says otherwise.
+
+        A finding with no run at all is a 404. A finding whose run produced no patch is a
+        200 carrying the reason -- deciding against a patch is an answer, not a missing page,
+        and the reason is exactly what a reviewer opened this to read.
+        """
+        finding_id = request.path_params["finding_id"]
+        payload = patch_reader(finding_id)
+        if payload is None:
+            return _not_found("patch", finding_id)
         return JSONResponse(payload)
 
     async def workflow(request: Request) -> JSONResponse:
@@ -592,6 +614,7 @@ def create_app(
         # segment registered after a path parameter is swallowed by it.
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
+        Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/corpus", corpus, methods=["GET"]),

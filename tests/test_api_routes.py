@@ -326,6 +326,7 @@ def _build_app(
     *,
     surface: GraphSurface,
     workflow_reader=lambda finding_id: None,
+    patch_reader=lambda finding_id: None,
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
     corpus_health_reader=_fake_corpus_health_reader,
@@ -363,6 +364,7 @@ def _build_app(
     return create_app(
         surface=surface,
         workflow_reader=workflow_reader,
+        patch_reader=patch_reader,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
@@ -1588,6 +1590,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     app = create_app(
         surface=surface,
         workflow_reader=workflow_reader,
+        patch_reader=lambda finding_id: None,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
         corpus_health_reader=corpus_health_reader,
@@ -1814,6 +1817,9 @@ _MULTI_CURSOR_COLLECTIONS = {
 #   truncated picture that reads as a complete one -- the same reason `/api/overview` was made
 #   unpaginated deliberately.
 _NOT_COLLECTIONS = {
+    # One run's diff, not a page of them. The finding names the run, and a diff has no
+    # second half to fetch.
+    "/api/findings/{finding_id}/patch",
     "/api/overview",
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
@@ -2151,6 +2157,9 @@ def _normalized(path: str) -> str:
 # it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
+    # CI-W427: the route exists; decision 47's pull request screen that leads with the diff
+    # is the console half and is a separate item.
+    "/api/findings/{param}/patch",
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
