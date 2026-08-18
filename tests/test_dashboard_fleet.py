@@ -257,6 +257,36 @@ def test_runs_recovers_finding_id_as_the_first_colon_segment(checkpointer_tables
     assert page["items"][0]["finding_id"] == FINDING_ID
 
 
+def test_runs_scoped_to_repository(checkpointer_tables, store):
+    s1 = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts"))
+    f1 = store.insert_finding(_finding(s1))
+    s2 = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts"))
+    f2 = store.insert_finding(_finding(s2))
+
+    _insert_checkpoint(
+        f"{f1}:run1:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "opened"},
+    )
+    _insert_checkpoint(
+        f"{f2}:run2:0",
+        "1f069000-0000-6000-8000-000000000002",
+        channel_values={"outcome": "abandoned"},
+    )
+
+    scoped = runs(DSN, repo_id="r1", store=store)
+    assert scoped["total"] == 1
+    assert len(scoped["items"]) == 1
+    assert scoped["items"][0]["finding_id"] == f1
+    assert scoped["items"][0]["repo_id"] == "r1"
+
+    fleet_runs = runs(DSN, store=store)
+    assert fleet_runs["total"] == 2
+    r_map = {item["finding_id"]: item["repo_id"] for item in fleet_runs["items"]}
+    assert r_map[f1] == "r1"
+    assert r_map[f2] == "r2"
+
+
 def test_runs_recovers_run_id_as_the_second_colon_segment(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:rehearsal-2026-08-05:0",
@@ -436,6 +466,37 @@ def test_corpus_summary_of_an_empty_corpus_is_empty_not_an_error(store):
     assert summary["by_terminal_status"] == {}
     assert summary["by_strategy"] == {}
     assert summary["by_tier"] == {}
+
+
+def test_corpus_summary_scoped_to_repository(store):
+    s1 = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts"))
+    f1 = store.insert_finding(_finding(s1))
+    s2 = store.upsert_call_site(_site(repo_id="r2", path="src/b.ts"))
+    f2 = store.insert_finding(_finding(s2))
+
+    store.record_migration_outcome(
+        _outcome(finding_id=f1, attempt_index=0, terminal_status="opened")
+    )
+    store.record_migration_outcome(
+        _outcome(finding_id=f2, attempt_index=0, terminal_status="abandoned")
+    )
+
+    scoped_r1 = corpus_summary(store, repo_id="r1")
+    assert scoped_r1["repo_id"] == "r1"
+    assert scoped_r1["attempts"] == 1
+    assert scoped_r1["distinct_findings"] == 1
+    assert scoped_r1["by_terminal_status"] == {"opened": 1}
+
+    scoped_r2 = corpus_summary(store, repo_id="r2")
+    assert scoped_r2["repo_id"] == "r2"
+    assert scoped_r2["attempts"] == 1
+    assert scoped_r2["distinct_findings"] == 1
+    assert scoped_r2["by_terminal_status"] == {"abandoned": 1}
+
+    fleet_summary = corpus_summary(store)
+    assert fleet_summary["repo_id"] is None
+    assert fleet_summary["attempts"] == 2
+    assert fleet_summary["distinct_findings"] == 2
 
 
 # --- abandonment by change kind and tier ------------------------------------
