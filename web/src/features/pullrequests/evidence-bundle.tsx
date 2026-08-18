@@ -9,28 +9,33 @@
  * of the three is evidence *for* a pull request, so none is repeated here. The Solution
  * Workflow page already shows all eight, node by node.
  *
- * ## The stage is the frame, M7-W180
+ * ## The stage is a ruled row, `CI-W375`, superseding M7-W180's frame
  *
- * `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` is the mapping table this port was
- * gated on, and ruling 3 is this file. Each stage drew its own `rounded border border-border` around
- * an `li`; M7-W179 then gave a multi-line evidence value the vendored card's plane, so a stage
- * carrying `diagnostics` or `replay_evidence` drew a card inside a hand-spelled border — two plain
- * hairline rectangles at two different radii with nothing to tell them apart. The stage is a
- * `MetricPanel` now: the title in the header strip, the blurb and the evidence in the body, and the
- * `li` draws nothing.
+ * The mock draws these five as rows inside one panel, separated by rules, each with its own time
+ * on the right — and the 2026-08-18 ruling makes the mock authoritative for what it *draws*. So
+ * the five `MetricPanel`s are one `ol` of ruled `li`s.
  *
- * **A stage that carries a block still nests one card, so the box count did not change and the
- * honest claim is narrower than one frame instead of two.** What changed is that the outer box has a
- * label strip: it reads as a named stage containing an artifact rather than as a rectangle that
- * acquired another rectangle. Flattening the block would undo M7-W179 from outside the file that
- * made it; flattening the stage would leave five verdicts running together in one column. Ruling 4
- * carries both.
+ * **This does not discard M7-W180's argument; it is the first arrangement that actually settles
+ * it.** That ruling was reacting to a real defect — each stage drew its own hairline border, and
+ * M7-W179 then gave a multi-line evidence value the vendored card's plane, so a stage carrying
+ * `diagnostics` or `replay_evidence` drew a card inside a hand-spelled border: two rectangles at
+ * two radii with nothing to tell them apart. It fixed that by promoting the outer box to a
+ * labelled panel, and recorded honestly that the box count had not changed.
+ *
+ * A rule is not a box. The outer rectangle is gone rather than relabelled, so a stage carrying a
+ * block now draws exactly one frame — the block's — which is what M7-W180's own ruling 4 wanted
+ * and could not reach without flattening something it did not own. Five verdicts do not run
+ * together in one column, because the rule separates them and each row's title carries its weight.
+ *
+ * `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` is still the mapping table that
+ * port was gated on; this supersedes its ruling 3 for this file alone.
  */
 
 import type { WorkflowNode, WorkflowNodeName, WorkflowOutcome } from "@/api/types"
-import { MetricPanel } from "@/components/metric-panel"
+import { Absent } from "@/components/status"
 import { NodeEvidence } from "@/features/workflows/evidence"
 import { STANDING_SENTENCE } from "@/features/workflows/node-standing"
+import { formatTimestamp } from "@/lib/format"
 
 type BundleNodeName = Extract<
   WorkflowNodeName,
@@ -203,27 +208,47 @@ function BundleStages({
   staged: { stage: BundleStage; node: WorkflowNode | undefined }[]
 }) {
   return (
-    <ol className="flex flex-col gap-section">
-      {staged.map(({ stage, node }) => {
+    /* One panel of ruled rows rather than five stacked panels, which is what the mock draws and
+       is the denser reading of the same five stages: a reviewer scanning for the one node that
+       did not run reads five titles down a single edge instead of five framed boxes. Each row
+       carries its own timestamp on the right, where the mock puts it.
+
+       The rule sits on every row but the first, so the group reads as one list with separators
+       rather than as five things that happen to be adjacent. */
+    <ol className="flex min-w-0 flex-col">
+      {staged.map(({ stage, node }, index) => {
         const hasEvidence = node !== undefined && Object.keys(node.evidence).length > 0
 
         return (
-          <li key={stage.name} className="min-w-0">
-            <MetricPanel label={stage.title}>
-              <div className="min-w-0">
-                <p className="max-w-prose text-body text-muted-foreground">{stage.blurb}</p>
-                {node?.standing === "due_again" && (
-                  <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
-                )}
-                {hasEvidence ? (
-                  <NodeEvidence name={stage.name} evidence={node.evidence} />
+          <li
+            key={stage.name}
+            className={`min-w-0 py-field ${index === 0 ? "" : "border-line border-t"}`}
+          >
+            <div className="flex min-w-0 items-baseline justify-between gap-row">
+              <h3 className="text-body font-medium">{stage.title}</h3>
+              {/* `last_seen_at` is when the checkpointer last wrote this node, and it is optional
+                  on the transport. A node that has one gets it; a node that does not gets the
+                  absence marker rather than an empty column, because a blank right edge reads as
+                  "nothing happened" and the truth is "this run recorded no time for it". */}
+              <span className="shrink-0 font-mono text-meta text-ink-muted">
+                {node?.last_seen_at ? (
+                  formatTimestamp(node.last_seen_at)
                 ) : (
-                  <div className="mt-field">
-                    <EmptyStage node={node} />
-                  </div>
+                  <Absent>no time recorded</Absent>
                 )}
+              </span>
+            </div>
+            <p className="mt-field max-w-prose text-body text-muted-foreground">{stage.blurb}</p>
+            {node?.standing === "due_again" && (
+              <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
+            )}
+            {hasEvidence ? (
+              <NodeEvidence name={stage.name} evidence={node.evidence} />
+            ) : (
+              <div className="mt-field">
+                <EmptyStage node={node} />
               </div>
-            </MetricPanel>
+            )}
           </li>
         )
       })}
