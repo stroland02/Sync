@@ -17,15 +17,28 @@
 
 import { spawn, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync } from "node:fs"
-import { uvVerdict, environmentVerdict } from "./python-bootstrap.mjs"
-import { previousRunVerdict, cacheVerdict } from "./embedded-postgres.mjs"
+import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { Readable } from "node:stream"
+import { pipeline } from "node:stream/promises"
+import { uvVerdict, environmentVerdict, FETCH as UV_FETCH, REBUILD as ENV_REBUILD } from "./python-bootstrap.mjs"
+import { previousRunVerdict, cacheVerdict, summarise, ADOPT, REAP, DOWNLOAD } from "./embedded-postgres.mjs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
 const COMPOSE_FILE = "docker-compose.demo.yml"
 const CONSOLE_URL = "http://127.0.0.1:4173"
+// Outside the repository, deliberately: binaries and a cluster are once per machine, and a
+// second checkout adopting them is the point of recording anything at all.
+const PG_HOME = join(homedir(), ".sync-postgres")
+const PG_DATA = join(PG_HOME, "data")
+const PG_PORT = 5433
+// The publisher's own portable binaries for the pinned version. Windows-only by design of the
+// no-admin path; the archive unpacks to `pgsql/` under PG_HOME.
+const PG_BINARIES_URL =
+  "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64-binaries.zip"
+const PG_BINARIES_SIZE_MB = 340
 // Written by the installer once it exists. Absent means no zero-prerequisite install has run
 // here, which is a different fact from one that ran and left nothing behind.
 const INSTALL_RECORD = ".sync-install.json"
@@ -55,7 +68,9 @@ export function dockerDiagnosis(cliProbe, daemonProbe, platform = process.platfo
           ? "                          (--install-docker, or `npm run install-docker`, runs it for you)\n"
           : "                          (printed rather than run by --install-docker: review it first)\n") +
         "\nIt is the only prerequisite. Everything else -- Python, uv, Node, Postgres -- ships\n" +
-        "inside the image and is never installed on your machine.",
+        "inside the image and is never installed on your machine.\n\n" +
+        "No admin rights? `npm run no-admin` (or --no-admin) runs everything in user space\n" +
+        "instead: an embedded Postgres, a pinned Python, and the console -- no Docker at all.",
     }
   }
   if (daemonProbe.error || daemonProbe.status !== 0) {
@@ -68,6 +83,56 @@ export function dockerDiagnosis(cliProbe, daemonProbe, platform = process.platfo
     }
   }
   return { ok: true }
+}
+
+/**
+ * Whether the no-admin path is built for this platform.
+ *
+ * Windows is where the wall is real: every container runtime — Docker Desktop, WSL2, Podman,
+ * Rancher — needs the "Virtual Machine Platform" feature enabled, which is elevated, so a user
+ * without admin rights has no container route at all. That is who this path exists for, and it
+ * was proven by hand on exactly such a machine before it was automated. macOS and Linux have
+ * user-space routes of their own and this path has never run there; offering it untested would
+ * fail in front of exactly the person it claims to rescue. B191 carries building them.
+ */
+export function noAdminSupport(platform) {
+  if (platform === "win32") return { ok: true }
+  return {
+    ok: false,
+    message:
+      "The no-admin path is built and tested on Windows only, where elevation gates every\n" +
+      "container runtime. On this platform use Docker (root or rootless), or the from-source\n" +
+      "path in docs/developing.md — both run in user space here. B191 tracks extending this.",
+  }
+}
+
+/**
+ * The case Decision 97's four verdicts do not cover: a cluster at our path with no record.
+ *
+ * It happens exactly one way — a person built the cluster by hand, which is how this path was
+ * proven before it was automated. Running `initdb` onto that directory would destroy a working
+ * database to satisfy a bookkeeping gap, so: adopt what serves (and write the record so the
+ * next run knows it), start what is stopped, and only a genuinely absent directory is a first
+ * run.
+ */
+export function unrecordedClusterVerdict({ dataDirExists, serving }) {
+  if (!dataDirExists) {
+    return { action: "fresh", message: "No cluster here. Creating one." }
+  }
+  if (serving) {
+    return {
+      action: "adopt",
+      message:
+        `A Postgres cluster this installer did not record is already serving from ${PG_DATA}. ` +
+        "Using it — this run started nothing, and wrote the record so the next run knows it.",
+    }
+  }
+  return {
+    action: "start-existing",
+    message:
+      `A cluster exists at ${PG_DATA} and is not running. Starting it — nothing is created ` +
+      "and nothing is overwritten.",
+  }
 }
 
 /**
@@ -233,6 +298,163 @@ ${report.caveat}
   )
 }
 
+// -- The no-admin action layer. Decisions 97-99 are the pure functions above and in the two
+// bootstrap modules; everything below is the part they said was "not written yet": the
+// download, the process start and the port bind. Windows-only — `noAdminSupport` is the gate.
+
+const EXE = process.platform === "win32" ? ".exe" : ""
+
+function pgBin(tool) {
+  return join(PG_HOME, "pgsql", "bin", `${tool}${EXE}`)
+}
+
+function pgBinariesVersion() {
+  if (!existsSync(pgBin("pg_ctl"))) return null
+  const result = spawnSync(pgBin("pg_ctl"), ["--version"], { encoding: "utf-8", shell: false })
+  if (result.error || result.status !== 0) return null
+  const match = /([0-9]+\.[0-9]+)/.exec(result.stdout ?? "")
+  return match ? match[1] : null
+}
+
+function clusterServing() {
+  if (!existsSync(pgBin("pg_ctl"))) return false
+  const result = spawnSync(pgBin("pg_ctl"), ["status", "-D", PG_DATA], { stdio: "ignore", shell: false })
+  return !result.error && result.status === 0
+}
+
+function postmasterRecord() {
+  const path = join(PG_DATA, "postmaster.pid")
+  if (!existsSync(path)) return null
+  const lines = readFileSync(path, "utf-8").split(/\r?\n/)
+  const pid = Number(lines[0])
+  const port = Number(lines[3])
+  if (!Number.isInteger(pid) || pid <= 0) return null
+  return { pid, port: Number.isInteger(port) && port > 0 ? port : PG_PORT }
+}
+
+/** Runs a step whose failure ends the install, naming the step rather than a stack. */
+function mustRun(label, command, args, options = {}) {
+  const result = spawnSync(command, args, { stdio: "inherit", shell: false, ...options })
+  if (result.error || result.status !== 0) {
+    process.stderr.write(`\n${label} failed${result.error ? `: ${result.error.message}` : ` (exit ${result.status})`}.\n`)
+    process.exit(1)
+  }
+}
+
+async function downloadPostgresBinaries() {
+  mkdirSync(PG_HOME, { recursive: true })
+  const archive = join(PG_HOME, "postgresql-binaries.zip")
+  const response = await fetch(PG_BINARIES_URL)
+  if (!response.ok || !response.body) {
+    process.stderr.write(`\nThe binaries download answered ${response.status} for ${PG_BINARIES_URL}.\n`)
+    process.exit(1)
+  }
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(archive))
+  // A stale `pgsql/` of another version would shadow the one just fetched; the archive itself
+  // is deleted because the extracted tree is the cache, not the zip.
+  rmSync(join(PG_HOME, "pgsql"), { recursive: true, force: true })
+  mustRun("Extracting the Postgres binaries", "tar", ["-xf", archive, "-C", PG_HOME])
+  rmSync(archive, { force: true })
+}
+
+function startCluster() {
+  mustRun("Starting Postgres", pgBin("pg_ctl"), [
+    "start", "-D", PG_DATA, "-l", join(PG_HOME, "postgres.log"), "-o", `-p ${PG_PORT}`, "-w",
+  ])
+}
+
+function writeInstallRecord(lockDigest) {
+  const postmaster = postmasterRecord()
+  const record = {
+    lockDigest,
+    postgres: postmaster
+      ? { pid: postmaster.pid, port: postmaster.port, version: pgBinariesVersion() ?? WANTED_POSTGRES }
+      : null,
+  }
+  writeFileSync(join(REPO_ROOT, INSTALL_RECORD), JSON.stringify(record, null, 2) + "\n", "utf-8")
+}
+
+async function runNoAdmin() {
+  const support = noAdminSupport(process.platform)
+  if (!support.ok) {
+    process.stderr.write(`\n${support.message}\n\n`)
+    process.exit(1)
+  }
+
+  // uv. Fetch-if-absent is not built, and printing the verdict's "Fetching it" without
+  // fetching would be the overstatement these modules forbid -- so absence gets directions
+  // instead of the verdict, and B191 carries building the fetch.
+  const uv = uvVerdict({ foundVersion: uvProbe(), minimumVersion: MINIMUM_UV })
+  if (uv.action === UV_FETCH) {
+    process.stderr.write(
+      "\nuv is required and was not found (or is too old). Install it in user space, no admin:\n\n" +
+        '  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"\n\n' +
+        "then run this again.\n\n",
+    )
+    process.exit(1)
+  }
+  process.stdout.write(`\n${uv.message}\n`)
+
+  // The Python environment, decided on the lockfile digest and never an mtime.
+  const previous = installRecord()
+  const environment = environmentVerdict(environmentProbe(previous))
+  process.stdout.write(`${environment.message}\n`)
+  if (environment.action === ENV_REBUILD) {
+    mustRun("Installing the Python environment", "uv", ["sync"], { cwd: REPO_ROOT })
+  }
+  const lock = join(REPO_ROOT, "uv.lock")
+  const lockDigest = existsSync(lock)
+    ? createHash("sha256").update(readFileSync(lock)).digest("hex")
+    : null
+
+  // The binaries, then the cluster.
+  const cache = cacheVerdict({
+    cachedVersion: pgBinariesVersion(),
+    wantedVersion: WANTED_POSTGRES,
+    sizeMb: PG_BINARIES_SIZE_MB,
+  })
+  process.stdout.write(`${cache.message}\n`)
+  if (cache.action === DOWNLOAD) await downloadPostgresBinaries()
+
+  let cluster
+  let freshDatabase = false
+  const recorded = previous?.postgres ?? null
+  if (recorded) {
+    cluster = previousRunVerdict({ record: recorded, alive: clusterServing(), wantedVersion: WANTED_POSTGRES })
+    process.stdout.write(`${cluster.message}\n`)
+    if (cluster.action === REAP) {
+      mustRun("Stopping the other-version Postgres", pgBin("pg_ctl"), ["stop", "-D", PG_DATA, "-m", "fast", "-w"])
+      // Its data belongs to the version being replaced; kept beside the new cluster rather
+      // than deleted, because a stopped database is somebody's data until they say otherwise.
+      renameSync(PG_DATA, `${PG_DATA}.pg${recorded.version}.bak`)
+    }
+    if (cluster.action === REAP || (cluster.action !== ADOPT && !existsSync(PG_DATA))) {
+      freshDatabase = true
+    }
+  } else {
+    cluster = unrecordedClusterVerdict({ dataDirExists: existsSync(PG_DATA), serving: clusterServing() })
+    process.stdout.write(`${cluster.message}\n`)
+    if (cluster.action === "fresh") freshDatabase = true
+    if (cluster.action === "start-existing") startCluster()
+  }
+
+  if (freshDatabase) {
+    mustRun("Creating the database cluster", pgBin("initdb"), ["-D", PG_DATA, "-U", "sync", "-A", "trust", "-E", "UTF8"])
+    startCluster()
+    mustRun("Creating the sync database", pgBin("createdb"), ["-p", String(PG_PORT), "-U", "sync", "sync"])
+    process.stdout.write("Seeding the schema and a fixture to look at.\n")
+    mustRun("Seeding the console", "uv", ["run", "python", "scripts/seed_console.py"], { cwd: REPO_ROOT })
+  } else {
+    process.stdout.write("The existing database is kept exactly as it is. Nothing was seeded.\n")
+  }
+
+  writeInstallRecord(lockDigest)
+  process.stdout.write(`\nIn short: ${summarise({ postgres: cluster, cache })}.\n`)
+  process.stdout.write("Handing over to the dev bring-up, which starts the API and the console.\n\n")
+  const child = spawn("uv", ["run", "python", "scripts/dev_up.py"], { cwd: REPO_ROOT, stdio: "inherit", shell: false })
+  child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 1)))
+}
+
 function main() {
   if (!existsSync(join(REPO_ROOT, COMPOSE_FILE))) {
     process.stderr.write(
@@ -247,6 +469,14 @@ function main() {
   // Docker made it unrunnable exactly where it mattered -- found on such a machine, not theorised.
   if (process.argv.includes("--check")) {
     runCheck()
+    return
+  }
+
+  if (process.argv.includes("--no-admin")) {
+    runNoAdmin().catch((error) => {
+      process.stderr.write(`\nThe no-admin install stopped: ${error.message}\n`)
+      process.exit(1)
+    })
     return
   }
 

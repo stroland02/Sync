@@ -310,7 +310,7 @@ def test_the_pnpm_commands_hand_over_to_things_that_exist():
     manifest = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
     scripts = manifest.get("scripts", {})
 
-    for name in ("start", "down", "check", "install-docker"):
+    for name in ("start", "down", "check", "install-docker", "no-admin"):
         assert name in scripts, f"`pnpm {name}` does not exist"
         assert "sync-up.mjs" in scripts[name], (
             f"`pnpm {name}` must hand over to the doorbell rather than reimplement it"
@@ -389,6 +389,111 @@ def test_the_missing_docker_refusal_prints_the_install_command_for_this_platform
     )
     assert "--install-docker" in verdict["message"], (
         "the refusal must name the flag that runs the install, or nobody discovers it"
+    )
+
+
+# -- `CI-W453`: the no-admin path ----------------------------------------------------------
+#
+# The owner's machine has no admin rights, so Docker, WSL2 and every VM-backed runtime are
+# closed -- and the alternative was proven by hand before it was automated: portable Postgres
+# binaries in user space, a cluster on 5433, `uv sync`, seed, `dev_up.py`. These pin the
+# decision layer of turning that afternoon into one command.
+
+
+@pytest.mark.parametrize(
+    "platform, expected_ok",
+    [("win32", True), ("darwin", False), ("linux", False)],
+)
+def test_no_admin_is_windows_first_and_says_so_elsewhere(platform, expected_ok):
+    """Windows is where the no-admin wall is real: enabling any VM feature is elevated, so a
+    user without admin has no container runtime at all. macOS and Linux have user-space routes
+    of their own, and a half-tested path offered there would fail in front of exactly the
+    person it claims to rescue -- refused with directions instead, `B191` carries building it.
+    """
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
+
+    script = (
+        f"import {{ noAdminSupport }} from {DOORBELL.as_uri()!r};"
+        f"console.log(JSON.stringify(noAdminSupport({platform!r})));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["ok"] is expected_ok
+    if not expected_ok:
+        assert verdict["message"], "a refusal with no directions strands the reader"
+
+
+@pytest.mark.parametrize(
+    "data_dir_exists, serving, expected_action, fragment",
+    [
+        (True, True, "adopt", "started nothing"),
+        (True, False, "start-existing", "not running"),
+        (False, False, "fresh", ""),
+    ],
+)
+def test_a_cluster_the_installer_never_recorded_is_adopted_rather_than_clobbered(
+    data_dir_exists, serving, expected_action, fragment
+):
+    """The case Decision 97's four verdicts do not cover: a cluster at our path with no install
+    record, because a person built it by hand -- which is exactly how this path was proven
+    before it was automated. Running `initdb` onto that directory would destroy a working
+    database to satisfy a bookkeeping gap. Adopt what serves, start what is stopped, and only
+    a genuinely absent directory is a first run.
+    """
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
+
+    script = (
+        f"import {{ unrecordedClusterVerdict }} from {DOORBELL.as_uri()!r};"
+        f"const r = unrecordedClusterVerdict({{dataDirExists: {str(data_dir_exists).lower()}, "
+        f"serving: {str(serving).lower()}}});"
+        "console.log(JSON.stringify(r));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert verdict["action"] == expected_action
+    if fragment:
+        assert fragment in verdict["message"]
+
+
+def test_the_missing_docker_refusal_offers_the_no_admin_path():
+    """The reader most likely to meet this refusal is the reader who cannot act on it: no
+    admin rights means no Docker, no matter how clearly the install command is printed. The
+    refusal names the path that needs none."""
+    node = _node()
+    if node is None:
+        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
+
+    script = (
+        f"import {{ dockerDiagnosis }} from {DOORBELL.as_uri()!r};"
+        "console.log(JSON.stringify(dockerDiagnosis({status: 1}, {status: 0}, 'win32')));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    verdict = json.loads(result.stdout.strip())
+    assert "no-admin" in verdict["message"], (
+        "the refusal offers only routes that need elevation; a reader without admin rights is "
+        "left with nothing to type"
     )
 
 

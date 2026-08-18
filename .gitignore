@@ -51,3 +51,4 @@ web/dist/
 
 # Ephemeral sweep state: when each budget notice was first seen. Per-machine, not shared.
 scripts/orchestration/hold_clock.json
+.sync-install.json

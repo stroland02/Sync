@@ -4723,3 +4723,26 @@ not build.
 **Evidence that closes it:** `npx @superloglabs/sync` on a machine that has Docker and has never
 seen this repository reaches the console password prompt. Until that has been run, this entry
 stays open no matter how finished the pieces look.
+
+### B191 — the no-admin path is Windows-only and cannot yet fetch its own `uv`
+
+**What is wrong.** `CI-W453` built the action layer for Decisions 97-99 — adopt/start/create an
+embedded Postgres in user space, rebuild the Python environment on a lockfile digest, hand over to
+`dev_up.py` — but two of its refusals are scaffolding rather than product:
+
+1. **macOS and Linux get directions instead of the path.** `noAdminSupport` refuses there because
+   the path has never run on either, not because it cannot. The Postgres binaries source and the
+   archive format differ per platform; the verdict layer is already platform-free.
+2. **A machine without `uv` is told to install it and come back.** `uvVerdict`'s FETCH action is
+   decided and tested, and nothing performs it — the installer prints the official user-space
+   one-liner rather than fetching, because printing "Fetching it" without fetching would be the
+   overstatement the bootstrap modules forbid.
+
+**Also carried here:** the embedded cluster does not survive a reboot unattended — `pg_ctl start`
+is manual until something owns starting it, and the record in `.sync-install.json` goes stale the
+moment the machine restarts (the recorded pid dies with the boot, which `previousRunVerdict`
+already reads correctly as a crash rather than a clean slate).
+
+**Evidence that closes it:** `--no-admin` on a macOS and a Linux machine without admin rights and
+without `uv` reaches the console, and a Windows reboot followed by `--no-admin` adopts or restarts
+the cluster without a manual `pg_ctl`.

@@ -80,6 +80,20 @@ diagnosis removed; `npm run down` (or `pnpm down`) stops it and removes its data
 is `start` rather than `up` because `pnpm up` is pnpm's own alias for `update` — a script named
 `up` runs something different under each package manager.
 
+### No admin rights? No Docker? Still runs.
+
+On a locked-down Windows machine every container runtime is closed — Docker Desktop, WSL2 and
+the rest all need an elevated Windows feature. From a checkout:
+
+```bash
+npm run no-admin
+```
+
+runs everything in user space instead: an embedded Postgres in `~/.sync-postgres`, a pinned
+Python built by `uv`, the schema, a fixture, and the same console — nothing elevated, nothing
+installed machine-wide. It adopts what a previous run (or you, by hand) already set up rather
+than rebuilding it, and says which it did. Windows-only today; `B191` carries the rest.
+
 ### 3. From source, for working on Sync itself
 
 Python 3.12, `uv`, Node 22.22+, and Postgres on 5433. **[docs/developing.md](docs/developing.md)**

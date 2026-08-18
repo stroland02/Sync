@@ -12,6 +12,7 @@
     "down": "node bin/sync-up.mjs down",
     "check": "node bin/sync-up.mjs --check",
     "install-docker": "node bin/sync-up.mjs --install-docker",
+    "no-admin": "node bin/sync-up.mjs --no-admin",
     "dev": "uv run python scripts/dev_up.py"
   },
   "files": [
