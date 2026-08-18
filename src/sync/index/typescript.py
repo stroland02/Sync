@@ -450,12 +450,13 @@ class TypeScriptAdapter:
     def _source_files(self, repo: RepoRef) -> list[Path]:
         root = Path(repo.local_path)
         valid_extensions = {".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"}
-        skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage"}
+        skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", ".turbo", ".output"}
         sources: list[Path] = []
         for p in root.rglob("*"):
             if not p.is_file():
                 continue
-            if any(part in skip_dirs for part in p.parts):
+            rel_parts = p.relative_to(root).parts
+            if any(part in skip_dirs for part in rel_parts[:-1]):
                 continue
             if p.name.endswith(".d.ts"):
                 continue

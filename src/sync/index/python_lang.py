@@ -508,8 +508,11 @@ class PythonAdapter:
 
     def _source_files(self, repo: RepoRef) -> list[Path]:
         root = Path(repo.local_path)
-        skip = {".venv", "venv", "site-packages", "__pycache__", ".tox", "build", "dist"}
-        return [p for p in root.rglob("*.py") if not skip & set(p.parts)]
+        skip = {".venv", "venv", "site-packages", "__pycache__", ".tox", "build", "dist", ".git", ".cache"}
+        return [
+            p for p in root.rglob("*.py")
+            if p.is_file() and not (skip & set(p.relative_to(root).parts[:-1]))
+        ]
 
     def _readable_sources(self, repo: RepoRef) -> Iterator[tuple[Path, bytes]]:
         """Every source file that is UTF-8, with its bytes, naming the ones that are not.

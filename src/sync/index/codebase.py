@@ -120,6 +120,38 @@ def discover_codebase_vendors(repo_path: Path) -> list[str]:
     return sorted(discovered)
 
 
+from sync.core import OperationRef
+
+
+class _FallbackIndexingAdapter:
+    """Minimal indexing adapter when no staged specification cache exists."""
+
+    def __init__(self, vendor_id: str) -> None:
+        self.vendor_id = vendor_id
+        if vendor_id == "stripe":
+            self.sdk_bindings = {
+                "typescript": {"package": "stripe"},
+                "python": {"distribution": "stripe", "module": "stripe"},
+            }
+        elif vendor_id == "twilio":
+            self.sdk_bindings = {
+                "typescript": {"package": "twilio"},
+                "python": {"distribution": "twilio", "module": "twilio"},
+            }
+        else:
+            self.sdk_bindings = {}
+
+    def operation_for_symbol(self, symbol: str, *, language: str | None = None) -> OperationRef | None:
+        parts = symbol.split(".")
+        if len(parts) >= 3:
+            resource = parts[-2]
+            action = parts[-1]
+            method = "POST" if action in ("create", "post", "cancel", "refund", "update") else "GET"
+            op_id = f"{action.capitalize()}{resource.capitalize()}"
+            return OperationRef(operation_id=op_id, http_method=method, path=f"/v1/{resource}")
+        return OperationRef(operation_id=symbol, http_method="POST", path=f"/{symbol}")
+
+
 def _load_or_create_vendor_adapter(
     vendor_id: str,
     cache_dir: Path | None,
@@ -127,30 +159,38 @@ def _load_or_create_vendor_adapter(
     to_version: str,
 ) -> Any:
     """Instantiate a VendorAdapter for indexing, from cache or fallback construction."""
-    if cache_dir is not None:
-        context = VendorContext(
-            cache_dir=cache_dir,
-            from_version=from_version,
-            to_version=to_version,
-        )
-        try:
-            return load_vendor(vendor_id, context)
-        except Exception:
+    candidate_caches = [cache_dir] if cache_dir is not None else [Path(".cache/specs"), Path(".cache")]
+    for candidate in candidate_caches:
+        if candidate is not None and candidate.is_dir():
+            context = VendorContext(
+                cache_dir=candidate,
+                from_version=from_version,
+                to_version=to_version,
+            )
             try:
-                prepared = prepare_vendor(vendor_id, context)
-                return prepared.adapter
+                return load_vendor(vendor_id, context)
             except Exception:
-                pass
+                try:
+                    prepared = prepare_vendor(vendor_id, context)
+                    return prepared.adapter
+                except Exception:
+                    pass
 
     from sync.signals.stripe.adapter import StripeAdapter
-    from sync.signals.twilio.adapter import TwilioAdapter
-
     if vendor_id == "stripe":
-        return StripeAdapter()
-    if vendor_id == "twilio":
-        return TwilioAdapter()
+        potential_symbol_maps = [
+            Path(".cache/stripe_symbols.json"),
+            Path(".cache/specs/stripe/symbols.json"),
+            Path(".cache/specs/symbols.json"),
+        ]
+        for map_path in potential_symbol_maps:
+            if map_path.is_file():
+                try:
+                    return StripeAdapter(spec_dir=map_path.parent, symbol_map_path=map_path)
+                except Exception:
+                    pass
 
-    return None
+    return _FallbackIndexingAdapter(vendor_id)
 
 
 def index_codebase(
@@ -197,11 +237,10 @@ def index_codebase(
                 if unread is not None:
                     unread_paths.update(unread(repo))
 
-    # Also run literal call sites pass for deprecation tracking
     ts_exts = {".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"}
-    skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage"}
+    skip_dirs = {"node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", ".turbo", ".output"}
     for p in repo_path.rglob("*"):
-        if not p.is_file() or any(part in skip_dirs for part in p.parts):
+        if not p.is_file() or any(part in skip_dirs for part in p.relative_to(repo_path).parts[:-1]):
             continue
         if p.name.endswith(".d.ts") or p.suffix.lower() not in ts_exts:
             continue

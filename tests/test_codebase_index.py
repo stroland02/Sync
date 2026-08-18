@@ -250,3 +250,81 @@ def test_index_codebase_unreadable_file_recorded_in_report(tmp_path, staged_cach
     assert len(report.call_sites) >= 1
     assert any("bad_binary.ts" in p for p in report.unread_paths)
 
+
+def test_index_codebase_unindexed_language_repo(tmp_path):
+    """An unindexed language (Go/Rust) repo produces a clean empty report with zero tracebacks."""
+    repo_dir = tmp_path / "go_rust_repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / "go.mod").write_text("module example.com/mygo\n\ngo 1.21\n", encoding="utf-8")
+    (repo_dir / "main.go").write_text(
+        'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println("Hello")\n}\n',
+        encoding="utf-8",
+    )
+    (repo_dir / "Cargo.toml").write_text(
+        '[package]\nname = "myrust"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+
+    report = index_codebase(repo_dir)
+    assert isinstance(report, CodebaseIndexReport)
+    assert report.repo.repo_id == "go_rust_repo"
+    assert report.vendors == ()
+    assert report.call_sites == ()
+    assert report.unbound_import_paths == ()
+    assert report.unread_paths == ()
+
+
+def test_index_codebase_zero_call_sites_repo(tmp_path, staged_cache):
+    """A repo with declared dependencies but 0 call sites returns a clean report."""
+    repo_dir = tmp_path / "zero_call_sites_app"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / "package.json").write_text(
+        json.dumps({"name": "zero-calls", "dependencies": {"stripe": "14.0.0", "lodash": "^4.17.0"}}),
+        encoding="utf-8",
+    )
+    src_dir = repo_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "utils.ts").write_text("export function add(a: number, b: number) { return a + b; }", encoding="utf-8")
+
+    report = index_codebase(repo_dir, cache_dir=staged_cache)
+    assert report.repo.repo_id == "zero-calls"
+    assert "stripe" in report.vendors
+    assert report.call_sites == ()
+    assert report.unbound_import_paths == ()
+
+
+def test_index_codebase_missing_lockfile_and_unknown_framework(tmp_path, staged_cache):
+    """A project with an unknown framework (e.g. Astro/Svelte) and no lockfile indexes without error."""
+    repo_dir = tmp_path / "astro_framework_app"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    # Manifest has no lockfile (no package-lock.json, no yarn.lock, no pnpm-lock)
+    (repo_dir / "package.json").write_text(
+        json.dumps({
+            "name": "astro-app",
+            "dependencies": {
+                "astro": "^4.0.0",
+                "stripe": "^14.0.0",
+            },
+        }),
+        encoding="utf-8",
+    )
+    src_dir = repo_dir / "src" / "pages"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "api.ts").write_text(
+        """\
+import Stripe from 'stripe';
+const stripe = new Stripe('key');
+export async function GET() {
+    return stripe.charges.create({ amount: 100, currency: 'usd' });
+}
+""",
+        encoding="utf-8",
+    )
+
+    report = index_codebase(repo_dir, cache_dir=staged_cache)
+    assert report.repo.repo_id == "astro-app"
+    assert "stripe" in report.vendors
+    assert len(report.call_sites) == 1
+    assert report.call_sites[0].operation_id == "PostCharges"
+
+
