@@ -6,6 +6,7 @@ import type { RunRow } from "@/api/types"
 const row = (over: Partial<RunRow>): RunRow => ({
   thread_id: "f1:abc:1",
   finding_id: "f1",
+  repo_id: "org/one",
   current_node: null,
   outcome: null,
   abandon_reason: null,

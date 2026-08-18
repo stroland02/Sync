@@ -38,9 +38,12 @@ UNSCOPED_BY_DESIGN = {"/", "/settings"}
 # a lane having to fix another lane's screens first, which is the same shape as the dead-symbol
 # baseline. Each entry is a screen that currently sends a reader nowhere, and removing an entry is
 # the fix rather than the paperwork.
-KNOWN_DEAD: frozenset[str] = frozenset({
-    "features/fleet/runs-table.tsx",
-})
+# Empty, and that is the state to keep it in. `runs-table.tsx` was the last entry: it linked to
+# `/findings/:id/workflow`, which the router does not serve, because `RunRow`'s TypeScript type
+# omitted the `repo_id` the payload has always carried. The type is corrected and the link is
+# workspace-scoped, so the entry is deleted rather than kept -- an exemption that outlives its
+# reason is a permission nobody revoked.
+KNOWN_DEAD: frozenset[str] = frozenset()
 
 
 def unscoped_links(source: str) -> list[str]:
