@@ -86,7 +86,7 @@ import {
   sortCallSites,
   type SortState,
 } from "./call-site-columns"
-import { Skeleton } from "@/components/skeleton"
+import { Pending } from "@/features/findings/pending"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { BindingDrawer } from "@/features/bindings/binding-drawer"
@@ -138,7 +138,7 @@ function boundCallSites(data: BindingSurfaceResponse): number {
 /**
  * The operation's own facts, label left and value right, beside the header rather than under it.
  *
- * Three states per counted fact and they are three different claims. A `Skeleton` says the query
+ * Three states per counted fact and they are three different claims. `<Pending>` says the query
  * is in flight — `components/skeleton.tsx` carries why that is not one of `states.tsx`'s five
  * sentences. `<Absent>` says the query failed, which is not the same as a count of zero, and the
  * error state under it names what failed. A number says the number.
@@ -152,7 +152,7 @@ function operationFacts(
 ): Fact[] {
   const counted = (value: number, width: string) => {
     if (data !== null) return value.toLocaleString()
-    return failed ? <Absent>the API did not answer</Absent> : <Skeleton width={width} />
+    return failed ? <Absent>the API did not answer</Absent> : <Pending />
   }
 
   return [

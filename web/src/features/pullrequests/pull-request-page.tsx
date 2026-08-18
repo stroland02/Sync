@@ -53,7 +53,7 @@ import { workspacePath } from "@/features/findings/workspace-path"
 import { WORKFLOW_POLL_MS, useWorkflow } from "@/api/queries"
 import type { WorkflowState } from "@/api/types"
 import { type Fact, FactList } from "@/components/fact-list"
-import { Skeleton } from "@/components/skeleton"
+import { Pending } from "@/features/findings/pending"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent } from "@/components/status"
 import { Button } from "@/components/ui/button"
@@ -104,7 +104,8 @@ const BELOW: BelowThisPanel = {
  * The bundle's own facts, in the rail beside the evidence.
  *
  * Three states per fact and they are three different claims, the same three every ported detail
- * level spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is
+ * level spells: `<Pending>` writes the word where the value goes while the query is in flight,
+ * `<Absent>` says it failed, and a value is
  * a value. The finding is answered by the URL rather than by the query, so it never wears either.
  *
  * There is no State row on purpose. `RunOutcome` renders the run's disposition as the first thing
@@ -121,7 +122,7 @@ function railFacts(
   function fact(width: string, render: (state: WorkflowState) => ReactNode): ReactNode {
     if (data !== undefined) return render(data)
     if (failure !== null) return failure
-    return <Skeleton width={width} />
+    return <Pending />
   }
 
   return [

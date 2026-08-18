@@ -56,7 +56,7 @@ import {
 import { type Fact, FactList } from "@/components/fact-list"
 import { MetricPanel } from "@/components/metric-panel"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
-import { Skeleton } from "@/components/skeleton"
+import { Pending } from "@/features/findings/pending"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import {
@@ -119,7 +119,7 @@ function FieldList({ label, values }: { label: string; values: string[] }) {
  * `sync.dashboard.fleet.runs` is the query that lists every generation as its own row.
  */
 function remediationFact(state: RemediationState): ReactNode {
-  if (state.kind === "pending") return <Skeleton width="w-28" />
+  if (state.kind === "pending") return <Pending />
   if (state.kind === "none") {
     return <Absent>the checkpointer holds no run for this finding</Absent>
   }
@@ -158,7 +158,8 @@ function standingWord(standing: RemediationStanding, outcome: string | null): Re
  * The finding's own facts, label left and value right, in the rail beside the content.
  *
  * Three states per fact and they are three different claims, the same three every ported level
- * spells: a `Skeleton` says the query is in flight, `<Absent>` says it failed, and a value is a
+ * spells: `<Pending>` writes the word where the value goes while the query is in flight,
+ * `<Absent>` says it failed, and a value is a
  * value. Remediation is answered by a second query and carries its own four.
  *
  * `failure` is the caller's sentence rather than a boolean, because this level can fail two ways
@@ -181,7 +182,7 @@ function findingFacts(
   function fact(width: string, render: (found: FindingDetail) => ReactNode): ReactNode {
     if (data !== null) return render(data)
     if (failure !== null) return failure
-    return <Skeleton width={width} />
+    return <Pending />
   }
 
   return [
@@ -326,7 +327,7 @@ function FindingDetailPage({
   ) : failure !== null ? (
     failure
   ) : (
-    <Skeleton width="w-96" />
+    <Pending />
   )
 
   return (
