@@ -83,6 +83,17 @@ export function bindingSurfaceHref(
   )}/operations/${encodeURIComponent(operationId)}`
 }
 
+/**
+ * Every open finding in the workspace.
+ *
+ * One letter from `findingHref`, which is the detail. That is the same pairing `vendorsHref` and
+ * `vendorHref` already use, so the convention is consistent rather than a trap unique to findings —
+ * plural is the list, singular takes a subject.
+ */
+export function findingsHref(repoId: string): string {
+  return `${repo(repoId)}/findings`
+}
+
 /** One finding. */
 export function findingHref(repoId: string, findingId: string): string {
   return `${repo(repoId)}/findings/${encodeURIComponent(findingId)}`
