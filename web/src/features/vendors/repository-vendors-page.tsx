@@ -38,6 +38,7 @@ import {
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 
 
+import { vendorHref } from "@/lib/hrefs"
 export interface RepositoryVendorsPageProps {
   readonly question?: string
 }
@@ -170,7 +171,7 @@ export function RepositoryVendorsPage() {
                 return (
                   <Link
                     key={vendor.vendor_id}
-                    to={`/vendors/${encodeURIComponent(vendor.vendor_id)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
+                    to={vendorHref(repoId ?? "", vendor.vendor_id)}
                     className="block group focus:outline-none"
                   >
                     <VendorCard
@@ -198,7 +199,7 @@ export function RepositoryVendorsPage() {
                     <TableRow key={vendor.vendor_id}>
                       <TableCell>
                         <Link
-                          to={`/vendors/${encodeURIComponent(vendor.vendor_id)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
+                          to={vendorHref(repoId ?? "", vendor.vendor_id)}
                           className="font-mono underline underline-offset-2"
                         >
                           {vendor.vendor_id}

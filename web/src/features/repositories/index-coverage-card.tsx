@@ -35,6 +35,7 @@ import { Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { formatTimestamp } from "@/lib/format"
 
+import { vendorHref } from "@/lib/hrefs"
 export function IndexCoverageCard({ repoId }: { repoId: string }) {
   const query = useRepositoryCoverage(repoId)
 
@@ -89,7 +90,7 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
                       <TableRow key={vendorId}>
                         <TableCell>
                           <Link
-                            to={`/vendors/${encodeURIComponent(vendorId)}?repo_id=${encodeURIComponent(repoId)}`}
+                            to={vendorHref(repoId, vendorId)}
                             className="font-mono underline underline-offset-2"
                           >
                             {vendorId}

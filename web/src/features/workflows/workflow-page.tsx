@@ -84,6 +84,7 @@ import { formatTimestamp } from "@/lib/format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/tabs"
 
 
+import { findingHref } from "@/lib/hrefs"
 /**
  * The rail's "Node by node" panel, stated before the sequence it wraps rather than left implicit
  * in the eight rows themselves — a reader meeting a `▶` glyph should already know it means the
@@ -98,9 +99,9 @@ export interface WorkflowPageProps {
 
 export function WorkflowPage() {
   // The identifier comes out of the URL, so it is checked before a request is made for it.
-  const { findingId } = useParams<{ findingId: string }>()
-  if (findingId === undefined) return <UnknownRoute />
-  return <Workflow findingId={findingId} />
+  const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
+  if (repoId === undefined || findingId === undefined) return <UnknownRoute />
+  return <Workflow repoId={repoId} findingId={findingId} />
 }
 
 /**
@@ -179,7 +180,7 @@ const BELOW: BelowThisPanel = {
  * sequence used to sit inside. They are here because this is where a reader meets them before
  * reading anything they qualify, rather than after.
  */
-function Arrival({ findingId }: { findingId: string }) {
+function Arrival({ repoId, findingId }: { repoId: string; findingId: string }) {
   return (
     <>
       <h3 className="text-emphasis">What arrived</h3>
@@ -189,7 +190,7 @@ function Arrival({ findingId }: { findingId: string }) {
           Read from the checkpointer, which is a different database from the API Dependency
           Graph — this screen carries no indexing timestamp and no binding rung for that reason.{" "}
           <Link
-            to={`/findings/${encodeURIComponent(findingId)}`}
+            to={findingHref(repoId, findingId)}
             className="underline underline-offset-2"
           >
             The finding itself
@@ -206,7 +207,7 @@ function Arrival({ findingId }: { findingId: string }) {
   )
 }
 
-function Workflow({ findingId }: { findingId: string }) {
+function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
   const terminal = isRunTerminal(data)
@@ -225,7 +226,7 @@ function Workflow({ findingId }: { findingId: string }) {
   return (
     <DetailGrid
       railSide="narrow"
-      rail={<RunFactRail findingId={findingId} data={data} failure={failure} />}
+      rail={<RunFactRail repoId={repoId} findingId={findingId} data={data} failure={failure} />}
     >
       <div className="flex min-w-0 flex-col gap-8">
         {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
@@ -283,7 +284,7 @@ function Workflow({ findingId }: { findingId: string }) {
                   <NodeSequence
                     nodes={data.nodes}
                     outcome={data.outcome}
-                    opening={<Arrival findingId={findingId} />}
+                    opening={<Arrival repoId={repoId} findingId={findingId} />}
                     closing={
                       <RunOutcome
                         outcome={data.outcome}
@@ -302,7 +303,7 @@ function Workflow({ findingId }: { findingId: string }) {
               </TabsContent>
 
               <TabsContent value="findings" className="flex min-w-0 flex-col gap-8">
-                <SettledOutput findingId={findingId} state={data} />
+                <SettledOutput repoId={repoId} findingId={findingId} state={data} />
 
                 <SupersededGenerations
                   generations={data.generations}

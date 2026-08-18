@@ -52,6 +52,7 @@ import {
 } from "@/features/fleet/cardinality"
 import { VendorFindingsTable } from "@/features/fleet/vendor-distribution"
 
+import { detectorsHref } from "@/lib/hrefs"
 /** Severity counts, in the vocabulary's own order rather than by size. */
 function SeverityBreakdown({ counts }: { counts: Tally }) {
   const entries = Object.entries(counts).sort(([a], [b]) => a.localeCompare(b))
@@ -106,7 +107,7 @@ export function OpenFindingsCard({ repoId }: { repoId: string }) {
                 selected. A vendor below opens its findings still scoped here; detector
                 attribution for this repository alone is on{" "}
                 <Link
-                  to={`/detectors?repo_id=${encodeURIComponent(repoId)}`}
+                  to={detectorsHref(repoId)}
                   className="underline underline-offset-2"
                 >
                   the detectors screen

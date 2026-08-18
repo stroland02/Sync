@@ -41,14 +41,10 @@ import { ProvenanceStrip } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Formatted } from "@/components/status"
 import { VendorChangeVolumeChart } from "@/features/vendors/vendor-change-chart"
+import { bindingSurfaceHref } from "@/lib/hrefs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { formatTimestamp, orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
-
-function bindingSurfaceHref(vendorId: string, operation: string, repoId: string): string {
-  const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
-  return `${path}?repo_id=${encodeURIComponent(repoId)}`
-}
 
 export function VendorChangesCard({
   vendorId,
@@ -131,7 +127,7 @@ export function VendorChangesCard({
                   <TableCell className="font-mono">
                     {change.operation ? (
                       <Link
-                        to={bindingSurfaceHref(vendorId, change.operation, repoId)}
+                        to={bindingSurfaceHref(repoId, vendorId, change.operation)}
                         className="underline underline-offset-2"
                       >
                         {change.operation}

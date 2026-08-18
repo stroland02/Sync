@@ -28,6 +28,7 @@ import { STANDING_LABEL } from "@/features/workflows/node-standing"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
+import { findingHref, pullRequestHref } from "@/lib/hrefs"
 /**
  * The nodes whose evidence is an artifact rather than a step of the story.
  *
@@ -62,9 +63,11 @@ function settledNodes(state: WorkflowState): WorkflowNode[] {
 }
 
 export function SettledOutput({
+  repoId,
   findingId,
   state,
 }: {
+  repoId: string
   findingId: string
   state: WorkflowState
 }) {
@@ -92,7 +95,7 @@ export function SettledOutput({
           What stands behind a claim on this console is the provenance rung, and the rung lives on
           the API Dependency Graph rather than in the checkpointer.{" "}
           <Link
-            to={`/findings/${encodeURIComponent(findingId)}`}
+            to={findingHref(repoId, findingId)}
             className="underline underline-offset-2"
           >
             The finding
@@ -142,7 +145,7 @@ export function SettledOutput({
 
       <p className="max-w-prose text-body text-muted-foreground">
         <Link
-          to={`/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}
+          to={pullRequestHref(repoId, findingId)}
           className="underline underline-offset-2"
         >
           {state.outcome === "opened"

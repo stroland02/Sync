@@ -48,6 +48,7 @@ import { Badge } from "@/vendor/supabase/ui/badge"
 import { formatTimestamp } from "@/lib/format"
 
 
+import { vendorHref } from "@/lib/hrefs"
 /** What the index-coverage answer turned out to be, once its scope and its 404 are accounted for. */
 type CoverageState =
   | { kind: "ready"; byVendor: Tally; lastIndexed: Record<string, string> }
@@ -193,7 +194,7 @@ export function RepositoryServicesPage() {
                 <TableRow key={service}>
                   <TableCell>
                     <Link
-                      to={`/vendors/${encodeURIComponent(service)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
+                      to={vendorHref(repoId ?? "", service)}
                       className="font-mono underline underline-offset-2"
                     >
                       {service}

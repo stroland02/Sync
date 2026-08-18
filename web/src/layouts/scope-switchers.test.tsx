@@ -16,13 +16,13 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { MemoryRouter, useLocation } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { vendorHref } from "@/lib/hrefs"
 import { ROUTES } from "@/lib/routes"
 import {
   REPO_SCOPED_PATHS,
   ScopeTrail,
   repositoryHref,
   scopeFromLocation,
-  vendorHref,
 } from "@/layouts/scope-switchers"
 
 afterEach(() => {
@@ -176,8 +176,12 @@ describe("where a switcher sends you", () => {
     )
   })
 
-  it("carries the repository scope onto the vendor it switches to", () => {
-    expect(vendorHref("shopify", "seed-console")).toBe("/vendors/shopify?repo_id=seed-console")
+  it("sends the vendor switcher into the workspace, not to a path the console stopped serving", () => {
+    // This used to assert `/vendors/shopify?repo_id=seed-console`, and asserted it correctly --
+    // against a path `M14-W386` had already stopped routing, so the switcher navigated into the
+    // 404 screen and this test agreed with it. The builder now comes from `lib/hrefs`, which is
+    // checked against `ROUTES` itself, so the assertion cannot outlive the route again.
+    expect(vendorHref("seed-console", "shopify")).toBe("/repositories/seed-console/vendors/shopify")
   })
 
   it("names only paths the registry declares as taking a repository scope", () => {
@@ -212,9 +216,25 @@ describe("the trail on screen", () => {
   it("renders a skeleton where a name will be while its list has not loaded", () => {
     mockState.repositories = pending()
     mockState.overview = pending()
-    renderAt("/")
 
-    expect(trail().querySelectorAll('[role="presentation"]')).toHaveLength(2)
+    // One switcher at the picker, two inside a workspace. The vendor switcher is not drawn
+    // without a workspace because every vendor destination is inside one -- a control with
+    // nowhere to navigate is absent rather than inert, which is the registry's own rule for a
+    // destination that needs a subject.
+    renderAt("/")
+    expect(trail().querySelectorAll('[role="presentation"]')).toHaveLength(1)
+  })
+
+  it("skeletons only the name it does not have yet, inside a workspace", () => {
+    mockState.repositories = pending()
+    mockState.overview = pending()
+    renderAt("/repositories/seed-console")
+
+    // The address names the workspace, so that name needs no list to arrive and is drawn at once.
+    // The vendor's does -- nothing in the address names one -- so it is the only skeleton. A bare
+    // count would pass on the wrong pair; this says which switcher is waiting and which is not.
+    expect(within(trail()).getByText("seed-console")).toBeTruthy()
+    expect(trail().querySelectorAll('[role="presentation"]')).toHaveLength(1)
   })
 
   it("states what the list is counted over, and what an empty one means", () => {
@@ -255,7 +275,7 @@ describe("the trail on screen", () => {
     const popover = openSwitcher(/vendor/i)
     fireEvent.click(within(popover).getByRole("option", { name: "shopify" }))
 
-    expect(address()).toBe("/vendors/shopify?repo_id=seed-console")
+    expect(address()).toBe("/repositories/seed-console/vendors/shopify")
   })
 })
 

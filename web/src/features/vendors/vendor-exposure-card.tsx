@@ -36,15 +36,11 @@ import { ErrorState, LoadingState } from "@/components/states"
 import { TableEmptyState } from "@/components/table-empty"
 import { Badge } from "@/vendor/supabase/ui/badge"
 
+import { bindingSurfaceHref } from "@/lib/hrefs"
 /** What `observed` says on screen, including the case where nothing looked. */
 export function observedLabel(observed: boolean | null): string {
   if (observed === null) return "never measured"
   return observed ? "traffic confirmed" : "no traffic seen"
-}
-
-function bindingSurfaceHref(vendorId: string, operation: string, repoId: string): string {
-  const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
-  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 export function VendorExposureCard({
@@ -109,7 +105,7 @@ export function VendorExposureCard({
               <TableRow key={operation.operation_id}>
                 <TableCell className="font-mono">
                   <Link
-                    to={bindingSurfaceHref(vendorId, operation.operation_id, repoId)}
+                    to={bindingSurfaceHref(repoId, vendorId, operation.operation_id)}
                     className="underline underline-offset-2"
                   >
                     {operation.operation_id}

@@ -31,9 +31,12 @@ function renderScreen(findingId = "finding-123") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/findings/${findingId}/workflow`]}>
+      <MemoryRouter initialEntries={[`/repositories/org%2Fone/findings/${findingId}/workflow`]}>
         <Routes>
-          <Route path="/findings/:findingId/workflow" element={<WorkflowPage />} />
+          <Route
+            path="/repositories/:repoId/findings/:findingId/workflow"
+            element={<WorkflowPage />}
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

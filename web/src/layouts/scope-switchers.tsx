@@ -49,6 +49,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { ErrorState } from "@/components/states"
+import { overviewHref, vendorHref } from "@/lib/hrefs"
 import { DESTINATIONS, ROUTES } from "@/lib/routes"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/vendor/supabase/ui/popover"
@@ -160,15 +161,17 @@ export function repositoryHref(repoId: string, pathname: string, search: string)
 }
 
 /**
- * Where picking a vendor goes, carrying the repository scope with it.
+ * Where picking a vendor goes.
  *
  * Always the vendor's own screen. Substituting a vendor into a binding surface would keep an
  * operation id that belongs to the vendor being left, which resolves to a screen about nothing.
+ *
+ * **The workspace is not optional any more, and that is why this delegates rather than builds.**
+ * This used to append `?repo_id=` to an unscoped `/vendors/{id}` and drop the parameter entirely
+ * when no workspace was selected -- a path `M14-W386` stopped serving, so the switcher navigated
+ * into the 404 screen. There is no vendor destination without a workspace, so the switcher that
+ * needs one is not rendered without one.
  */
-export function vendorHref(vendorId: string, repoId: string | null): string {
-  const path = `/vendors/${encodeURIComponent(vendorId)}`
-  return repoId === null ? path : `${path}?${REPO_KEY}=${encodeURIComponent(repoId)}`
-}
 
 /** A path divider, and nothing a screen reader should spell out. */
 function Divider() {
@@ -281,7 +284,7 @@ export function ScopeTrail() {
   // asserting something nothing computed.
   const pageLabel = labelFor(pathname)
   const repositories = useRepositories()
-  const overview = useOverview()
+  const overview = useOverview(repoId ?? undefined)
 
   return (
     <nav aria-label="Scope" className="flex min-w-0 items-center gap-field">
@@ -299,7 +302,7 @@ export function ScopeTrail() {
       <Switcher
         name="Repository"
         value={repoId}
-        valueHref={repoId === null ? null : `/repositories/${encodeURIComponent(repoId)}`}
+        valueHref={repoId === null ? null : overviewHref(repoId)}
         options={repositories.data?.repo_ids ?? []}
         pending={repositories.isPending}
         error={repositories.error}
@@ -309,20 +312,28 @@ export function ScopeTrail() {
         skeletonWidth="w-28"
       />
 
-      <Divider />
+      {/* No workspace, no vendor switcher. Every vendor destination is inside a workspace now,
+          so without one there is nothing this control could navigate to -- and a control that
+          absorbs the press reads as broken, where one that is absent is honest about being
+          unavailable. That is the registry's own rule for a destination needing a subject. */}
+      {repoId !== null && (
+        <>
+          <Divider />
 
-      <Switcher
-        name="Vendor"
-        value={vendorId}
-        valueHref={vendorId === null ? null : vendorHref(vendorId, repoId)}
-        options={overview.data?.vendors.map((vendor) => vendor.vendor_id) ?? []}
-        pending={overview.isPending}
-        error={overview.error}
-        caption="Every vendor with an open finding"
-        absence="No vendor has an open finding, so this list has nothing to switch to. A vendor with none is still reachable at its own address."
-        hrefFor={(id) => vendorHref(id, repoId)}
-        skeletonWidth="w-20"
-      />
+          <Switcher
+            name="Vendor"
+            value={vendorId}
+            valueHref={vendorId === null ? null : vendorHref(repoId, vendorId)}
+            options={overview.data?.vendors.map((vendor) => vendor.vendor_id) ?? []}
+            pending={overview.isPending}
+            error={overview.error}
+            caption="Every vendor with an open finding"
+            absence="No vendor has an open finding, so this list has nothing to switch to. A vendor with none is still reachable at its own address."
+            hrefFor={(id) => vendorHref(repoId, id)}
+            skeletonWidth="w-20"
+          />
+        </>
+      )}
 
       {/* The page's own name, and the reason it lives here rather than above the page.
           Owner decision 7 removed the header from every screen. That header carried a breadcrumb,

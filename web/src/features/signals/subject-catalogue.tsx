@@ -37,6 +37,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { formatTimestamp } from "@/lib/format"
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
+import { vendorHref } from "@/lib/hrefs"
 export interface AttachedVendor {
   vendorId: string
   callSites: number
@@ -72,7 +73,7 @@ function SubjectCard({ vendor, repoId }: { vendor: AttachedVendor; repoId: strin
             outline that skipped the level would leave the cards siblings of the roles. */}
         <h3>
           <Link
-            to={`/vendors/${encodeURIComponent(vendor.vendorId)}?repo_id=${encodeURIComponent(repoId)}`}
+            to={vendorHref(repoId, vendor.vendorId)}
             className="font-mono text-emphasis break-words underline underline-offset-2"
           >
             {vendor.vendorId}
