@@ -12,7 +12,7 @@ import { Badge } from "@/vendor/supabase/ui/badge"
 export function AboutPlatformPanel() {
   return (
     <div className="flex flex-col gap-section">
-      <div className="flex flex-col gap-1 pb-field border-b border-line">
+      <div className="flex flex-col gap-field pb-field border-b border-line">
         <h2 className="text-emphasis font-medium text-ink">About Sync & Platform Concepts</h2>
         <p className="text-body text-ink-muted">
           Foundational explanations of Sync&apos;s API Dependency Graph, provenance rungs, adapter tiers,
@@ -24,15 +24,20 @@ export function AboutPlatformPanel() {
       <SettingCard
         title="Provenance Rungs"
         description={
-          <div className="flex flex-col gap-3 text-body text-ink-muted">
+          <div className="flex flex-col gap-row text-body text-ink-muted">
             <p>
               Every binding between customer source code and an external API operation carries the
               provenance rung it was derived from. A finding without an attributed rung is rejected by
               the database schema.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-1">
-                <div className="flex items-center gap-2">
+<<<<<<< HEAD
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-row">
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
+=======
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-row pt-row">
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
+>>>>>>> origin/main
+                <div className="flex items-center gap-row">
                   <Badge>static</Badge>
                   <span className="text-meta font-medium text-ink">AST Call Sites</span>
                 </div>
@@ -42,8 +47,12 @@ export function AboutPlatformPanel() {
                 </p>
               </div>
 
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-1">
-                <div className="flex items-center gap-2">
+<<<<<<< HEAD
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
+=======
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
+>>>>>>> origin/main
+                <div className="flex items-center gap-row">
                   <Badge>resolved</Badge>
                   <span className="text-meta font-medium text-ink">Type-Resolved Symbols</span>
                 </div>
@@ -53,8 +62,12 @@ export function AboutPlatformPanel() {
                 </p>
               </div>
 
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-1">
-                <div className="flex items-center gap-2">
+<<<<<<< HEAD
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
+=======
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
+>>>>>>> origin/main
+                <div className="flex items-center gap-row">
                   <Badge>observed</Badge>
                   <span className="text-meta font-medium text-ink">Runtime Telemetry</span>
                 </div>
@@ -64,8 +77,12 @@ export function AboutPlatformPanel() {
                 </p>
               </div>
 
-              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-1">
-                <div className="flex items-center gap-2">
+<<<<<<< HEAD
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-3 flex flex-col gap-field">
+=======
+              <div className="rounded-surface border border-line bg-surface-muted/30 p-row flex flex-col gap-field">
+>>>>>>> origin/main
+                <div className="flex items-center gap-row">
                   <Badge>unattributed</Badge>
                   <span className="text-meta font-medium text-ink">Vendor Changes</span>
                 </div>
@@ -83,12 +100,12 @@ export function AboutPlatformPanel() {
       <SettingCard
         title="Adapter Tiers"
         description={
-          <div className="flex flex-col gap-3 text-body text-ink-muted">
+          <div className="flex flex-col gap-row text-body text-ink-muted">
             <p>
               Sync ingests vendor changes through pluggable signal adapters classified into three
               distinct tiers:
             </p>
-            <ul className="list-disc list-inside space-y-1 text-meta text-ink-muted">
+            <ul className="list-disc list-inside space-y-field text-meta text-ink-muted">
               <li>
                 <strong className="text-ink font-mono">coded</strong>: Hand-crafted, first-class
                 adapters containing specialized vendor knowledge (e.g. Stripe, OpenAI).
@@ -110,7 +127,7 @@ export function AboutPlatformPanel() {
       <SettingCard
         title="Abandoned Runs as Data"
         description={
-          <div className="flex flex-col gap-2 text-body text-ink-muted">
+          <div className="flex flex-col gap-row text-body text-ink-muted">
             <p>
               When an automated remediation run halts because a patch fails verification, breaks
               customer typechecks, or encounters an ambiguous semantic edit, the run is recorded with
@@ -128,12 +145,12 @@ export function AboutPlatformPanel() {
       <SettingCard
         title="Verification Gates"
         description={
-          <div className="flex flex-col gap-2 text-body text-ink-muted">
+          <div className="flex flex-col gap-row text-body text-ink-muted">
             <p>
               Every patch proposed by Sync must pass two mandatory gates before opening a pull
               request:
             </p>
-            <ol className="list-decimal list-inside space-y-1 text-meta text-ink-muted">
+            <ol className="list-decimal list-inside space-y-field text-meta text-ink-muted">
               <li>
                 <strong className="text-ink">Static Verification (`tsc`)</strong>: The patched tree
                 must compile cleanly with untracked and ignored files held out of the build.
@@ -143,7 +160,7 @@ export function AboutPlatformPanel() {
                 automated test suite and lint pipeline must pass on the forge.
               </li>
             </ol>
-            <p className="text-meta text-ink-muted mt-1">
+            <p className="text-meta text-ink-muted mt-field">
               Sync never executes customer application code directly; only their declared compiler
               and toolchain are invoked under isolated environment boundaries.
             </p>
