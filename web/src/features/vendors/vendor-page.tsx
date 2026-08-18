@@ -1,10 +1,15 @@
 /**
  * One API service: what is at risk across the codebase, and what the vendor changed.
  *
- * Screen layout extracted from `docs/console-mock/index.html` Section 3 (`03-vendor`):
- * - Top 2-column grid: "What the vendor changed" (left) and "Where it was read from" (right)
- * - Control bar: Severity, prefix path filter, and ordering choices
- * - Full-width bottom card: "Errors and incidents" (open findings table, pagination, provenance)
+ * **Owner decision 29 sets the order, and the mock draws the opposite one.** `03-vendor` leads
+ * with what the vendor changed and puts open findings at the bottom. The decision leads with
+ * exposure — what this vendor costs this codebase — and puts the vendor's history below it as the
+ * reason those findings appeared. The settled authority order puts a decision above the mock, so
+ * the conflict is resolved that way and recorded rather than left for the next reader to
+ * rediscover.
+ *
+ * Top to bottom: the findings control bar and the open findings, then what the vendor published
+ * beside where it was read from.
  */
 
 import { useParams, useSearchParams } from "react-router"
@@ -96,17 +101,18 @@ export function VendorPage({ question = DEFAULT_QUESTION }: VendorPageProps) {
         </div>
       </DetailGrid>
 
-      {/* Top 2-column layout from console-mock 03-vendor */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <div className="flex flex-col gap-8" data-testid="vendor-exposure">
+        <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
+        <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
+      </div>
+
+      <div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start"
+        data-testid="vendor-history"
+      >
         <VendorChangesCard vendorId={vendorId} repoId={repoId} />
         <VendorSourcesCard vendorId={vendorId} repoId={repoId} />
       </div>
-
-      {/* Findings Controls Bar */}
-      <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
-
-      {/* Findings / Errors & Incidents Table */}
-      <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
     </section>
   )
 }
