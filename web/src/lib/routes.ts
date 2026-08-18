@@ -44,6 +44,7 @@ import { matchPath } from "react-router"
 import { BindingSurfacePage } from "@/features/bindings/binding-surface-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
+import { FindingsPage } from "@/features/findings/findings-page"
 import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
 import { CodebasePage } from "@/features/repositories/codebase-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
@@ -145,6 +146,23 @@ export const ROUTES: readonly RouteEntry[] = [
       "What did the remediation pipeline attempt, what did it abandon, and which change kinds does it not handle mechanically?",
     params: ["repoId"],
     element: RunsPage,
+  },
+  {
+    // Immediately after Runs by the owner's ruling: the things an operator acts on lead, the
+    // things they investigate follow. This is the question the product exists to answer and the
+    // rail did not have it -- a finding was reachable only by drilling through a vendor, a signal
+    // or a detector first.
+    //
+    // `Finding` is the specification's own level, not a promotion: a list of findings aggregates
+    // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
+    path: "/repositories/:repoId/findings",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    label: "Findings",
+    level: "Finding",
+    question: "What is broken in this workspace, and what is each finding bound to?",
+    params: ["repoId"],
+    element: FindingsPage,
   },
   {
     path: "/repositories/:repoId/services",

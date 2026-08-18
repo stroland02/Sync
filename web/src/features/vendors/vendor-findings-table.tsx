@@ -54,32 +54,20 @@
  * shared hook rather than two derivations.
  */
 
-import { Link } from "react-router"
-
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useVendorFindings } from "@/api/queries"
 import type { FindingOrder, VendorFindingsPage } from "@/api/types"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/data-table"
 import { ActiveFilters, FacetChips, PrefixFilter, type FacetOption } from "@/components/filters"
 import { MetricPanel } from "@/components/metric-panel"
 import { OrderChoice } from "@/components/ordering"
-import { ProvenanceStrip, RungBadge } from "@/components/provenance"
+import { ProvenanceStrip } from "@/components/provenance"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Formatted } from "@/components/status"
 import { ControlBar } from "@/layouts/control-bar"
 import { FooterBar } from "@/layouts/footer-bar"
-import { orAbsent } from "@/lib/format"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
-import { bindingSurfaceHref, findingHref } from "@/lib/hrefs"
+import { FindingsTable } from "@/features/findings/findings-table"
 const OFFSET_KEY = "findings_offset"
 const SEVERITY_KEY = "severity"
 const PATH_KEY = "path"
@@ -343,59 +331,7 @@ export function VendorFindingsCard({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Severity</TableHead>
-                {/* Rung sits ahead of the call site so it stays on screen at 1280px without a
-                    sideways scroll: the call site is the widest cell in this table — a path
-                    from a customer repository — and no fixture here is long enough to prove
-                    that on its own. */}
-                <TableHead>Rung</TableHead>
-                <TableHead>Call site</TableHead>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Operation</TableHead>
-                <TableHead>Change kind</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {page.items.map((row) => (
-                <TableRow key={row.finding_id}>
-                  <TableCell>{row.severity}</TableCell>
-                  <TableCell>
-                    <RungBadge rung={row.binding_source} />
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    <Link
-                      to={findingHref(repoId, row.finding_id)}
-                      className="underline underline-offset-2"
-                      aria-label={`Finding ${row.finding_id} at ${row.file} line ${row.line}`}
-                    >
-                      {row.file}:{row.line}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    <Formatted value={orAbsent(row.symbol)} />
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    {row.operation ? (
-                      <Link
-                        to={bindingSurfaceHref(repoId, vendorId, row.operation)}
-                        className="underline underline-offset-2"
-                      >
-                        {row.operation}
-                      </Link>
-                    ) : (
-                      <Formatted value={orAbsent(row.operation)} />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Formatted value={orAbsent(row.change_kind)} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <FindingsTable repoId={repoId} rows={page.items} />
           <p className="max-w-prose text-meta text-muted-foreground">
             Each call site opens its finding. The finding's full id is the heading of that page —
             this table shows the path instead, because an opaque 32-character hash cost three
