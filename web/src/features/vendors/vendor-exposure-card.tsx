@@ -41,9 +41,9 @@ export function observedLabel(observed: boolean | null): string {
   return observed ? "traffic confirmed" : "no traffic seen"
 }
 
-function bindingSurfaceHref(vendorId: string, operation: string, repoId: string | null): string {
+function bindingSurfaceHref(vendorId: string, operation: string, repoId: string): string {
   const path = `/bindings/vendors/${encodeURIComponent(vendorId)}/operations/${encodeURIComponent(operation)}`
-  return repoId === null ? path : `${path}?repo_id=${encodeURIComponent(repoId)}`
+  return `${path}?repo_id=${encodeURIComponent(repoId)}`
 }
 
 export function VendorExposureCard({
@@ -51,7 +51,7 @@ export function VendorExposureCard({
   repoId,
 }: {
   vendorId: string
-  repoId: string | null
+  repoId: string
 }) {
   const query = useVendorOperations(vendorId, repoId)
 

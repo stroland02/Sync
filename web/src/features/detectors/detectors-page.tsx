@@ -51,27 +51,26 @@
  * carries its sentence, because the scope is already at its widest.
  */
 
-import { useSearchParams } from "react-router"
+import { useParams } from "react-router"
 
-import { Button } from "@/components/ui/button"
+import { UnknownRoute } from "@/layouts/unknown-route"
+
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
 import { ControlBar } from "@/layouts/control-bar"
-import { useClearFilters } from "@/lib/use-filter-param"
 
-
-/** The scope key, the only parameter `GET /api/detectors` takes. */
-const REPO_KEY = "repo_id"
 
 export interface DetectorsPageProps {
   readonly question?: string
 }
 
 export function DetectorsPage() {
-  const [searchParams] = useSearchParams()
-  const repoId = searchParams.get(REPO_KEY)
-  // No offsets to reset: this route paginates nothing, so widening the scope changes which rows
-  // exist without moving any window over them.
-  const widen = useClearFilters([REPO_KEY])
+  // **The route is the scope, and it used to be a query string.** This read
+  // `searchParams.get("repo_id")` while the route is `/repositories/:repoId/detectors`, so an
+  // address that named a repository could still render "Every repository the index has seen" --
+  // the screen contradicting its own URL, on a console whose whole argument is that it tells you
+  // the truth about what it checked. There is one source of scope now and the router owns it.
+  const { repoId } = useParams<{ repoId: string }>()
+  if (repoId === undefined) return <UnknownRoute />
 
   return (
     <section className="flex flex-col gap-8">
@@ -79,16 +78,10 @@ export function DetectorsPage() {
         <ControlBar>
           <div className="flex min-w-0 flex-col gap-field">
             <span className="furniture text-meta text-ink-muted">Scope</span>
-            {repoId === null ? (
-              <span className="text-body">Every repository the index has seen.</span>
-            ) : (
-              <div className="flex flex-wrap items-center gap-row">
-                <span className="font-mono text-body break-words">{repoId}</span>
-                <Button type="button" size="sm" variant="outline" onClick={widen}>
-                  Widen to every repository
-                </Button>
-              </div>
-            )}
+            {/* No widen control and no fleet-wide reading. The owner's ruling is that every page
+                corresponds to a workspace, so "every repository" is not a mode this screen has --
+                switching workspace is the switcher's job, in chrome. */}
+            <span className="font-mono text-body break-words">{repoId}</span>
           </div>
         </ControlBar>
       </div>
@@ -110,21 +103,12 @@ export function DetectorsPage() {
             are not competing, and a ratio computed from open findings alone, with no labelled
             corpus behind it, would measure nothing.
           </p>
-          {repoId === null ? (
-            <p className="max-w-prose text-body text-muted-foreground">
-              This is a fleet-wide aggregate, not a repository's own answer: nothing selected a
-              repository on the way here, so a detector's tally below counts its open findings
-              across every repository the index has seen at once. Open this screen from a
-              repository to narrow it to that codebase.
-            </p>
-          ) : (
-            <p className="max-w-prose text-body text-muted-foreground">
-              Every figure below counts open findings in{" "}
-              <span className="font-mono">{repoId}</span> and in no other repository. A detector
-              with no row here may still be raising findings elsewhere in the fleet — this screen
-              cannot tell you that, because it did not ask.
-            </p>
-          )}
+          <p className="max-w-prose text-body text-muted-foreground">
+            Every figure below counts open findings in{" "}
+            <span className="font-mono">{repoId}</span> and in no other workspace. A detector with
+            no row here may still be raising findings in another workspace — this screen cannot
+            tell you that, because it did not ask.
+          </p>
         </div>
       </div>
 
