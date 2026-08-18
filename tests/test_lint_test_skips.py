@@ -164,6 +164,11 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     that a phrase appears in the file would pass on a source that never reaches the branch
     printing it. **Raised in the same change that added the skip**, which is the pairing this
     baseline exists to force and which the two paragraphs above record being missed twice.
+
+    The nineteenth is `tests/test_python_bootstrap.py`, added by `CI-W446`, and it is the
+    eighteenth's twin: decision 98's half of the zero-prerequisite install, executed through
+    `node` for the same reason. Two skips for one installer is the shape to watch -- if a third
+    arrives, the right move is a shared marker rather than a third paragraph here.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -171,7 +176,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 18, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 19, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 
