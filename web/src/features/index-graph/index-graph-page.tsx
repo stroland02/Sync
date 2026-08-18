@@ -30,6 +30,8 @@ import { useRepositoryGraph } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
 import { classifyIndexState } from "@/features/index-graph/index-state"
+import { IndexStreamBanner } from "@/features/index-graph/index-stream-banner"
+import { useRepositoryEvents } from "@/features/index-graph/use-repository-events"
 import { OffPathNote } from "@/features/index-graph/off-path-note"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { formatTimestamp } from "@/lib/format"
@@ -46,6 +48,9 @@ export function IndexGraphPage() {
 
 function IndexGraphDetail({ repoId }: { repoId: string }) {
   const query = useRepositoryGraph(repoId)
+  // The banner carries the aliveness; the graph below stays settled until the reader asks,
+  // which is decision 87 applied to the canvas deliberately rather than 78 being dropped.
+  const stream = useRepositoryEvents(repoId)
 
   if (query.isPending) return <LoadingState what={`the indexed graph for ${repoId}`} />
   if (query.isError) {
@@ -63,6 +68,11 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
 
   return (
     <section className="flex flex-col gap-8">
+      <IndexStreamBanner
+        indexedCount={stream.indexedCount}
+        status={stream.status}
+        onShow={() => void query.refetch()}
+      />
       {state.kind === "never-recorded" && (
         <div className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section">
           <h2 className="text-emphasis font-medium text-ink">

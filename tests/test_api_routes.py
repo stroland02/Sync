@@ -96,6 +96,18 @@ def _web_source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _web_sources(pattern: str) -> list[str]:
+    """Every file under `web/` matching a glob, as text.
+
+    Empty is a legitimate answer and deliberately not a skip: a pattern that matches nothing means
+    the console has no module of that shape yet, which is different from the console being absent.
+    """
+    root = Path(__file__).resolve().parent.parent / "web"
+    if not root.is_dir():
+        pytest.skip("web/ is absent; this checkout carries no console")
+    return [path.read_text(encoding="utf-8") for path in sorted(root.glob(pattern))]
+
+
 def _fake_runs_reader(
     *, repo_id: str | None = None, limit: int = 50, offset: int = 0
 ) -> dict[str, Any]:
@@ -2167,12 +2179,6 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     "/api/repos/{param}/findings",
     "/api/repositories/{param}/settings",
     "/api/repos/{param}/settings",
-    # CI-W425: the route exists and its console consumer is the next unit. Worth naming the trap
-    # for whoever removes this: an SSE route is read by `new EventSource(...)`, never by `fetch`,
-    # so this guard will still not see it once the consumer lands. The guard has to learn
-    # EventSource at the same time as this entry goes -- otherwise the entry becomes permanent
-    # for a route that is genuinely consumed, which is the rot this set's own comment warns of.
-    "/api/repositories/{param}/events",
 }
 
 
@@ -2187,6 +2193,13 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
 
     source = _web_source("src/api/client.ts")
     fetched_literals = re.findall(r'[`"](/api[^`"]*)[`"]', source)
+    # A streaming route is never read by `fetch`. It is opened with `new EventSource(...)`, and
+    # that call does not live in `client.ts` because an EventSource is a subscription with a
+    # lifetime rather than a request -- it belongs to the hook that owns it. Without this the
+    # guard would report a genuinely consumed route as unconsumed forever, and the exemption
+    # covering for it would become permanent, which is the rot the exemption set warns about.
+    for module in _web_sources("src/features/**/use-*.ts"):
+        fetched_literals += re.findall(r'`(/api[^`]*)`', module)
     console_paths = {_normalized(literal) for literal in fetched_literals}
 
     stale_exemptions = _NOT_YET_FETCHED_BY_CONSOLE - app_paths
