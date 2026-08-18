@@ -19,6 +19,8 @@ from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.signals.intake import read_declared_dependencies
+
+_LOG = logging.getLogger(__name__)
 from sync.signals.deprecations import DEPRECATION_SOURCES
 from sync.signals.registry import (
     VendorContext,
@@ -152,6 +154,31 @@ class _FallbackIndexingAdapter:
         return None
 
 
+def _cache_candidates(vendor_id: str, cache_dir: Path | None) -> list[Path]:
+    """Where a staged specification cache for this vendor might be, most specific first.
+
+    **The per-vendor subdirectory is a candidate in its own right**, and it is the layout every
+    caller stages: `_load_stripe` reads `<cache_dir>/symbols.json`, so a map written to
+    `<cache_dir>/<vendor>/symbols.json` is invisible unless the vendor directory is offered
+    directly. The discovery branch already knew that; the explicit branch did not, so a cache
+    staged on purpose was never found -- `load_vendor` raised `FileNotFoundError` and the next
+    line fetched the specification over the network instead.
+
+    **Absolute, because a relative path resolves against the process's working directory.** Which
+    adapter loaded therefore depended on where the process happened to stand, which is the
+    order-dependence that made a plain bug look environmental: on a machine or a run where the
+    fetch succeeded the real adapter appeared, and where it timed out the fallback took over and
+    invented operation ids.
+    """
+    if cache_dir is not None:
+        return [(cache_dir / vendor_id).resolve(), cache_dir.resolve()]
+    return [
+        Path(f".cache/specs/{vendor_id}").resolve(),
+        Path(".cache/specs").resolve(),
+        Path(".cache").resolve(),
+    ]
+
+
 def _load_or_create_vendor_adapter(
     vendor_id: str,
     cache_dir: Path | None = None,
@@ -159,12 +186,8 @@ def _load_or_create_vendor_adapter(
     to_version: str = "v2330",
 ) -> Any | None:
     """Instantiate a VendorAdapter for indexing, from cache or fallback construction."""
-    candidate_caches = (
-        [cache_dir]
-        if cache_dir is not None
-        else [Path(".cache/specs"), Path(".cache"), Path(f".cache/specs/{vendor_id}")]
-    )
-    for candidate in candidate_caches:
+    failures: list[tuple[Path, Exception, Exception]] = []
+    for candidate in _cache_candidates(vendor_id, cache_dir):
         if candidate is not None and candidate.is_dir():
             context = VendorContext(
                 cache_dir=candidate,
@@ -173,13 +196,34 @@ def _load_or_create_vendor_adapter(
             )
             try:
                 return load_vendor(vendor_id, context)
-            except Exception:
+            except Exception as load_failure:
                 try:
                     prepared = prepare_vendor(vendor_id, context)
                     return prepared.adapter
-                except Exception:
-                    pass
+                except Exception as prepare_failure:
+                    failures.append((candidate, load_failure, prepare_failure))
 
+    # Loud, because choosing the fallback is a decision rather than a detail: it answers
+    # `operation_for_symbol` by inventing an operation id from the symbol's own words, so a
+    # finding built on it can name an operation no vendor has. Two nested bare `except ...: pass`
+    # used to make this silent, which is why a night of CI failures reported no reason at all.
+    for candidate, load_failure, prepare_failure in failures:
+        _LOG.warning(
+            "no adapter loaded for %s from %s: load failed with %r, prepare failed with %r; "
+            "using the fallback, whose operation ids are derived from symbol names rather than "
+            "read from a specification",
+            vendor_id,
+            candidate,
+            load_failure,
+            prepare_failure,
+        )
+    if not failures:
+        _LOG.warning(
+            "no staged cache found for %s in any of %s; using the fallback, whose operation ids "
+            "are derived from symbol names rather than read from a specification",
+            vendor_id,
+            [str(c) for c in _cache_candidates(vendor_id, cache_dir)],
+        )
     return _FallbackIndexingAdapter(vendor_id)
 
 

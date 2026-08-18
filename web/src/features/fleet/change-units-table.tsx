@@ -23,7 +23,7 @@
 import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
-import { useChangeUnits } from "@/api/queries"
+import { useChangeUnits, useOverview } from "@/api/queries"
 import { BINDING_SOURCES, type BindingSource, type ChangeUnitRow } from "@/api/types"
 import {
   Table,
@@ -36,6 +36,7 @@ import {
 } from "@/components/data-table"
 import { MetricPanel } from "@/components/metric-panel"
 import { RelativeTime } from "@/components/relative-time"
+import { IndexRunNote } from "@/features/fleet/index-run-note"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
@@ -137,6 +138,13 @@ function CheckpointCell({ unit }: { unit: ChangeUnitRow }) {
   return <RelativeTime iso={unit.last_checkpoint_at} />
 }
 
+/** The last index pass over this repository, read at the one place that needs it. */
+function IndexRunScopeNote({ repoId }: { repoId: string }) {
+  const overview = useOverview(repoId)
+  if (!overview.isSuccess) return null
+  return <IndexRunNote run={overview.data.last_index_run} />
+}
+
 function ChangeUnitEmptyState({ repoId }: { repoId?: string }) {
   return (
     <>
@@ -199,6 +207,10 @@ export function ChangeUnitsTable({ repoId }: { repoId?: string }) {
               {page.items.length === 0 && (
                 <TableEmptyRow colSpan={9}>
                   <ChangeUnitEmptyState repoId={repoId} />
+                  {/* Decision 61's "what was checked". It can be said honestly now that
+                      `index_run` records a pass; before it, "the index ran" was a claim the data
+                      could not support. */}
+                  {repoId !== undefined && <IndexRunScopeNote repoId={repoId} />}
                 </TableEmptyRow>
               )}
               {page.items.map((unit) => (
