@@ -209,14 +209,22 @@ function OneBinding({
             {
               label: "Vendor",
               value: (
-                <Link
-                  to={`/vendors/${encodeURIComponent(data.vendor_id)}${
-                    data.repo_id === null ? "" : `?repo_id=${encodeURIComponent(data.repo_id)}`
-                  }`}
-                  className="font-mono break-words underline underline-offset-2"
-                >
-                  {data.vendor_id}
-                </Link>
+                /* The vendor screen is workspace-scoped as of `M14-W386`, so the repository is
+                   a path segment rather than the query parameter it used to be. A binding whose
+                   `repo_id` is null therefore has nowhere to send a reader: the vendor exists but
+                   the address that would show it does not. It renders as text rather than as a
+                   link to a screen that would answer "No screen at this address." -- an absent
+                   destination said plainly beats a destination that lies. */
+                data.repo_id === null ? (
+                  <span className="font-mono break-words">{data.vendor_id}</span>
+                ) : (
+                  <Link
+                    to={`/repositories/${encodeURIComponent(data.repo_id)}/vendors/${encodeURIComponent(data.vendor_id)}`}
+                    className="font-mono break-words underline underline-offset-2"
+                  >
+                    {data.vendor_id}
+                  </Link>
+                )
               ),
             },
             {
