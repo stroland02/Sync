@@ -8,7 +8,7 @@ export function AdaptersSettingsPanel() {
 
   return (
     <div className="flex flex-col gap-section">
-      <div className="flex flex-col gap-1 pb-field border-b border-line">
+      <div className="flex flex-col gap-field pb-field border-b border-line">
         <h2 className="text-emphasis font-medium text-ink">Registered Adapters & Vendor Feeds</h2>
         <p className="text-body text-ink-muted">
           Every adapter this deployment registers, beside what the graph has received from it.

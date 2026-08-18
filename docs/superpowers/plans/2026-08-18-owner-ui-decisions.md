@@ -258,3 +258,42 @@ closes. **It would quietly redraw itself when nothing about the codebase had cha
 building the route that lists every indexed call site regardless of finding status; the `SCOPE_NOTE`
 stays until that is true and is deleted then, not left beside the fixed thing.
 
+
+---
+
+## Round five: decisions 33-36, owner-selected 2026-08-18
+
+**33. First run shows a numbered checklist of what happens next, not live indexing and not the real
+layout.** Four steps — installed, connect GitHub, choose a codebase, run the first index — with
+`Nothing has been indexed yet.` beneath. **Rejected: the self-drawing canvas**, which would have been
+the prettier demo and is the wrong first screen, because a person who has just run one command needs
+to know what to do rather than watch something happen. **Rejected: the real layout with every tile
+reading "not yet indexed"**, which is honest and gives a newcomer no route forward.
+
+**Consequence for the install story.** Decision 19 makes the file tree the payoff for the
+one-command install; **33 places a step before it**. The payoff still lands, after step 4, and the
+canvas is what step 4 produces rather than what step 1 shows.
+
+**34. A row opens a drawer over the table, with `Open full page` inside it.** The table stays behind
+and scroll position survives — which is the whole reason, because these lists are hundreds of rows
+and losing your place in one is the cost that makes people stop clicking. `interface-originality.md`
+already lists *a detail that opens in a drawer instead of navigating away* among the conventions of
+the form. **Rejected: expand-in-place**, too cramped for evidence; **rejected: navigate-away as the
+default**, kept as the escape hatch inside the drawer.
+
+**35. One accent hue for interaction, and no tinted surfaces.** The accent takes links, focus rings,
+primary buttons and the active nav rail. The two closed vocabularies keep their own colour — change
+kind, and the rung's single-hue ordinal ramp. **Cards, panels and headers stay grey.** So "bland" is
+answered by giving colour a *job* rather than by spreading it: every coloured thing on screen is
+either something you can act on or a value from a named vocabulary, and nothing is coloured for
+decoration.
+
+**36. Loading renders the word `loading…` where the value goes. No skeletons.** Chosen over
+skeletons, which are the industry default. **The reason is this product's reason:** a grey block in
+the shape of a number is a shape the reader completes, and a screen that refuses to let absence look
+like zero cannot then let *pending* look like a populated layout. The word is never mistaken for a
+value. **Rejected: keeping stale data dimmed**, which shows a figure that is no longer known to be
+true.
+
+**This is a fourth state, and it must not collapse into the other three.** Never-measured, measured
+zero, cannot-tell, and now *not-yet-arrived* are four different facts and each renders as itself.

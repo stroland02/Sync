@@ -82,7 +82,7 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
         {adapters.map((adapter) => (
           <TableRow key={adapter.vendor_id}>
             <TableCell className="font-mono">
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-row">
                 <VendorMark vendorId={adapter.vendor_id} />
                 {adapter.vendor_id}
               </span>

@@ -15,18 +15,23 @@
 export { fitViewport, panViewport, zoomViewport, type Viewport, type Bounds } from "@/features/index-graph/viewport"
 
 import type { Bounds } from "@/features/index-graph/viewport"
-import type { FileTreeGraph, TreeNode } from "@/features/index-graph/file-tree-graph"
+import type { FolderNode, TreeNode } from "@/features/index-graph/file-tree-graph"
+import type { OperationGraph } from "@/features/index-graph/operation-graph"
 
 export const ROW_HEIGHT = 28
 export const INDENT = 20
 export const FILE_NODE_WIDTH = 220
-export const VENDOR_COLUMN_GAP = 160
+export const COLUMN_GAP = 160
+export const VENDOR_COLUMN_GAP = COLUMN_GAP
+export const OPERATION_NODE_WIDTH = 190
+export const OPERATION_NODE_HEIGHT = 32
 export const VENDOR_NODE_WIDTH = 160
 export const VENDOR_NODE_HEIGHT = 40
 
 export type FileTreeLayoutNode =
   | { id: string; kind: "folder" | "file"; name: string; path: string; depth: number; x: number; y: number; width: number; height: number }
   | { id: string; kind: "vendor"; vendorId: string; x: number; y: number; width: number; height: number }
+  | { id: string; kind: "operation"; operationId: string; vendorId: string; x: number; y: number; width: number; height: number }
 
 export interface FileTreeLayoutEdge {
   id: string
@@ -73,34 +78,84 @@ function boundsOf(nodes: { x: number; y: number; width: number; height: number }
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
-export function layoutFileTree(graph: FileTreeGraph): FileTreeLayout {
+/**
+ * Three columns: the reader's own file tree, the operations those files call, and the vendors
+ * publishing them.
+ *
+ * The operation column exists so every edge carries the rung it was established at. A file drawn
+ * straight to a vendor spans two bindings and a rung on that hop names neither.
+ *
+ * Each node in a column is centred against the rows it connects to on its left, so an edge is
+ * short and roughly horizontal. Operations are placed against their files first, then vendors
+ * against their operations, which keeps the picture reading left to right — the reader's code
+ * reaching outward — rather than settling into an average.
+ */
+export function layoutOperationGraph(tree: FolderNode, graph: OperationGraph): FileTreeLayout {
   const treeNodes: FileTreeLayoutNode[] = []
   const fileY = new Map<string, number>()
-  walk(graph.tree, 0, { y: 0 }, treeNodes, fileY)
+  walk(tree, 0, { y: 0 }, treeNodes, fileY)
 
-  const vendorX = FILE_NODE_WIDTH + VENDOR_COLUMN_GAP
+  const operationX = FILE_NODE_WIDTH + COLUMN_GAP
+  const vendorX = operationX + OPERATION_NODE_WIDTH + COLUMN_GAP
+
+  const centreOf = (ys: number[], height: number): number => {
+    if (ys.length === 0) return -height / 2
+    return (Math.min(...ys) + Math.max(...ys) + ROW_HEIGHT) / 2 - height / 2
+  }
+
+  const operationKey = (operationId: string, vendorId: string) => `operation:${vendorId}:${operationId}`
+
+  const operationY = new Map<string, number>()
+  const operationNodes: FileTreeLayoutNode[] = graph.operations.map((operation) => {
+    const ys = graph.fileEdges
+      .filter((e) => e.operationId === operation.operationId && e.vendorId === operation.vendorId)
+      .map((e) => fileY.get(e.file))
+      .filter((y): y is number => y !== undefined)
+    const y = centreOf(ys, OPERATION_NODE_HEIGHT)
+    const id = operationKey(operation.operationId, operation.vendorId)
+    operationY.set(id, y)
+    return {
+      id,
+      kind: "operation",
+      operationId: operation.operationId,
+      vendorId: operation.vendorId,
+      x: operationX,
+      y,
+      width: OPERATION_NODE_WIDTH,
+      height: OPERATION_NODE_HEIGHT,
+    }
+  })
+
   const vendorNodes: FileTreeLayoutNode[] = graph.vendors.map((vendor) => {
-    const connectedFiles = graph.edges.filter((e) => e.vendorId === vendor.vendorId).map((e) => fileY.get(e.file))
-    const ys = connectedFiles.filter((y): y is number => y !== undefined)
-    const centre = ys.length === 0 ? 0 : (Math.min(...ys) + Math.max(...ys) + ROW_HEIGHT) / 2
+    const ys = graph.vendorEdges
+      .filter((e) => e.vendorId === vendor.vendorId)
+      .map((e) => operationY.get(operationKey(e.operationId, e.vendorId)))
+      .filter((y): y is number => y !== undefined)
     return {
       id: `vendor:${vendor.vendorId}`,
       kind: "vendor",
       vendorId: vendor.vendorId,
       x: vendorX,
-      y: centre - VENDOR_NODE_HEIGHT / 2,
+      y: centreOf(ys, VENDOR_NODE_HEIGHT),
       width: VENDOR_NODE_WIDTH,
       height: VENDOR_NODE_HEIGHT,
     }
   })
 
-  const edges: FileTreeLayoutEdge[] = graph.edges.map((edge) => ({
-    id: `edge:${edge.file}->${edge.vendorId}`,
-    from: `path:${edge.file}`,
-    to: `vendor:${edge.vendorId}`,
-  }))
+  const edges: FileTreeLayoutEdge[] = [
+    ...graph.fileEdges.map((edge) => ({
+      id: `edge:${edge.file}->${edge.vendorId}:${edge.operationId}`,
+      from: `path:${edge.file}`,
+      to: operationKey(edge.operationId, edge.vendorId),
+    })),
+    ...graph.vendorEdges.map((edge) => ({
+      id: `edge:${edge.vendorId}:${edge.operationId}->${edge.vendorId}`,
+      from: operationKey(edge.operationId, edge.vendorId),
+      to: `vendor:${edge.vendorId}`,
+    })),
+  ]
 
-  const nodes = [...treeNodes, ...vendorNodes]
+  const nodes = [...treeNodes, ...operationNodes, ...vendorNodes]
   return { nodes, edges, bounds: boundsOf(nodes) }
 }
 

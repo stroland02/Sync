@@ -102,7 +102,11 @@ export function SettingsPage() {
         {/* Left Sub-Navigation */}
         <aside className="w-full md:w-64 shrink-0 flex flex-col gap-field">
           {/* Target Codebase Selector */}
-          <div className="flex flex-col gap-1 p-3 rounded-surface border border-line bg-surface">
+<<<<<<< HEAD
+          <div className="flex flex-col gap-field p-3 rounded-surface border border-line bg-surface">
+=======
+          <div className="flex flex-col gap-field p-row rounded-surface border border-line bg-surface">
+>>>>>>> origin/main
             <span className="text-meta font-medium text-ink">Target Codebase</span>
             <Select value={activeRepo} onValueChange={setSelectedRepoId}>
               <SelectTrigger className="w-full text-meta font-mono bg-surface border-line">
@@ -123,7 +127,7 @@ export function SettingsPage() {
           </div>
 
           {/* Group Nav Items */}
-          <nav className="flex flex-col gap-1 rounded-surface border border-line bg-surface p-1">
+          <nav className="flex flex-col gap-field rounded-surface border border-line bg-surface p-field">
             {SETTING_GROUPS.map((group) => {
               const isSelected = selectedGroup === group.id
               return (
@@ -131,7 +135,11 @@ export function SettingsPage() {
                   key={group.id}
                   type="button"
                   onClick={() => handleSelectGroup(group.id)}
-                  className={`flex flex-col items-start px-3 py-2 rounded-surface text-left transition-colors ${
+<<<<<<< HEAD
+                  className={`flex flex-col items-start px-3 py-row rounded-surface text-left transition-colors ${
+=======
+                  className={`flex flex-col items-start px-row py-row rounded-surface text-left transition-colors ${
+>>>>>>> origin/main
                     isSelected
                       ? "bg-surface-muted text-ink font-medium shadow-sm"
                       : "text-ink-muted hover:text-ink hover:bg-surface-muted/50"

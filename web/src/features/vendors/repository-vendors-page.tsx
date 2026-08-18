@@ -112,7 +112,7 @@ export function RepositoryVendorsPage() {
         <div className="flex flex-col gap-section">
           {/* Controls Bar: Filter tabs & View toggle */}
           <div className="flex flex-wrap items-center justify-between gap-field pb-field border-b border-line">
-            <div className="flex items-center gap-1 overflow-x-auto">
+            <div className="flex items-center gap-field overflow-x-auto">
               <Button
                 size="sm"
                 variant={tierFilter === "all" ? "secondary" : "ghost"}
@@ -138,7 +138,7 @@ export function RepositoryVendorsPage() {
               })}
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-field">
               <Button
                 size="sm"
                 variant={viewMode === "table" ? "secondary" : "ghost"}
@@ -171,7 +171,7 @@ export function RepositoryVendorsPage() {
                   <Link
                     key={vendor.vendor_id}
                     to={`/vendors/${encodeURIComponent(vendor.vendor_id)}?repo_id=${encodeURIComponent(repoId ?? "")}`}
-                    className="block group transition-transform hover:-translate-y-0.5 focus:outline-none"
+                    className="block group focus:outline-none"
                   >
                     <VendorCard
                       vendorId={vendor.vendor_id}

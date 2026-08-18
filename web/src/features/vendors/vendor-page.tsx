@@ -78,7 +78,7 @@ export function VendorPage() {
       </div>
 
       <div
-        className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-section items-start"
         data-testid="vendor-history"
       >
         <VendorChangesCard vendorId={vendorId} repoId={repoId} />

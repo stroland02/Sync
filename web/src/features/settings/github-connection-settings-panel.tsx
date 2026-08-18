@@ -8,7 +8,7 @@ export interface GithubConnectionSettingsPanelProps {
 export function GithubConnectionSettingsPanel({ repoId }: GithubConnectionSettingsPanelProps) {
   return (
     <div className="flex flex-col gap-section">
-      <div className="flex flex-col gap-1 pb-field border-b border-line">
+      <div className="flex flex-col gap-field pb-field border-b border-line">
         <h2 className="text-emphasis font-medium text-ink">GitHub & Forge Connection</h2>
         <p className="text-body text-ink-muted">
           Local forge authentication and repository permission status for{" "}
@@ -32,7 +32,7 @@ export function GithubConnectionSettingsPanel({ repoId }: GithubConnectionSettin
           </>
         }
         control={
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-row">
             <Badge>Authenticated via gh CLI</Badge>
             <span className="font-mono text-meta text-ink-muted">CLI session: active</span>
           </div>
@@ -54,7 +54,7 @@ export function GithubConnectionSettingsPanel({ repoId }: GithubConnectionSettin
           </p>
         }
         control={
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-field">
             <span className="font-mono text-ink text-meta font-medium">{repoId}</span>
             <Badge>Monitored Codebase</Badge>
           </div>
@@ -82,8 +82,12 @@ export function GithubConnectionSettingsPanel({ repoId }: GithubConnectionSettin
           </>
         }
         refusalNotice={
-          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-1">
-            <div className="flex items-center gap-2">
+<<<<<<< HEAD
+          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-field">
+=======
+          <div className="rounded-surface border border-line bg-surface-muted/40 p-row text-meta text-ink-muted space-y-field">
+>>>>>>> origin/main
+            <div className="flex items-center gap-row">
               <Badge>Local-Only Architecture</Badge>
             </div>
             <p>
@@ -93,7 +97,7 @@ export function GithubConnectionSettingsPanel({ repoId }: GithubConnectionSettin
           </div>
         }
         control={
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-row">
             <Badge>Local Mode</Badge>
             <span className="text-meta text-ink-muted">OAuth flow not required</span>
           </div>

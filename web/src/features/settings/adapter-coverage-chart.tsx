@@ -37,7 +37,7 @@ export function AdapterCoverageChart({ adapters }: { adapters: readonly AdapterR
 
   return (
     <section className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section">
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-field">
         <h3 className="text-emphasis font-medium text-ink">Coverage by tier</h3>
         <p className="text-meta text-ink-muted">
           How many vendors each kind of adapter serves, across this whole deployment.

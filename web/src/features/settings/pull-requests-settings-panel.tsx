@@ -67,7 +67,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
 
   return (
     <div className="flex flex-col gap-section">
-      <div className="flex flex-col gap-1 pb-field border-b border-line">
+      <div className="flex flex-col gap-field pb-field border-b border-line">
         <h2 className="text-emphasis font-medium text-ink">Pull Request Automation Settings</h2>
         <p className="text-body text-ink-muted">
           Configure how Sync opens, tests, and merges pull requests for repository{" "}
@@ -92,8 +92,12 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
           </>
         }
         refusalNotice={
-          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-1">
-            <div className="flex items-center gap-2">
+<<<<<<< HEAD
+          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-field">
+=======
+          <div className="rounded-surface border border-line bg-surface-muted/40 p-row text-meta text-ink-muted space-y-field">
+>>>>>>> origin/main
+            <div className="flex items-center gap-row">
               <Badge>Refused Option: Immediate</Badge>
             </div>
             <p>
@@ -105,12 +109,16 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
           </div>
         }
         control={
-          <div className="flex flex-col gap-2 w-full max-w-md">
+          <div className="flex flex-col gap-row w-full max-w-md">
             {/* Option 1: when_checks_pass */}
             <button
               type="button"
               onClick={() => setMergePolicy("when_checks_pass")}
-              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-all ${
+<<<<<<< HEAD
+              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-colors ${
+=======
+              className={`flex items-start gap-row p-row rounded-surface border text-left transition-colors ${
+>>>>>>> origin/main
                 mergePolicy === "when_checks_pass"
                   ? "border-foreground/30 bg-surface-muted/80 shadow-sm"
                   : "border-border hover:bg-surface-muted/40"
@@ -134,7 +142,11 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
             <button
               type="button"
               onClick={() => setMergePolicy("never")}
-              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-all ${
+<<<<<<< HEAD
+              className={`flex items-start gap-3 p-3 rounded-surface border text-left transition-colors ${
+=======
+              className={`flex items-start gap-row p-row rounded-surface border text-left transition-colors ${
+>>>>>>> origin/main
                 mergePolicy === "never"
                   ? "border-foreground/30 bg-surface-muted/80 shadow-sm"
                   : "border-border hover:bg-surface-muted/40"
@@ -158,7 +170,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
         footer={
           <>
             <span>Current policy: <strong className="text-ink font-mono">{syncedData?.merge_policy}</strong></span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-row">
               {hasPolicyChanged && (
                 <Button
                   size="sm"
@@ -207,7 +219,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
         footer={
           <>
             <span>Current method: <strong className="text-ink font-mono">{syncedData?.merge_method}</strong></span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-row">
               {hasMethodChanged && (
                 <Button
                   size="sm"
@@ -249,7 +261,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
         footer={
           <>
             <span>Target branch: <strong className="text-ink font-mono">{syncedData?.base_branch}</strong></span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-row">
               {hasBranchChanged && (
                 <Button
                   size="sm"
@@ -273,8 +285,12 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
 
       {/* Repository Overrides Card — from console-mock 10-settings */}
       {repos.length > 0 && (
-        <div className="rounded-surface border border-line bg-surface p-4 flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
+<<<<<<< HEAD
+        <div className="rounded-surface border border-line bg-surface p-section flex flex-col gap-3">
+=======
+        <div className="rounded-surface border border-line bg-surface p-section flex flex-col gap-row">
+>>>>>>> origin/main
+          <div className="flex flex-col gap-field">
             <h3 className="text-meta font-semibold uppercase tracking-wider text-ink-muted">
               Repository Overrides
             </h3>
@@ -288,7 +304,7 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
             {repos.map((otherRepoId) => (
               <div
                 key={otherRepoId}
-                className="flex items-center justify-between py-2 text-meta first:pt-0"
+                className="flex items-center justify-between py-row text-meta first:pt-0"
               >
                 <span className="font-mono text-ink">{otherRepoId}</span>
                 <span className="text-ink-muted">
