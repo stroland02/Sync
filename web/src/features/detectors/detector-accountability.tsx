@@ -96,6 +96,49 @@ function plural(count: number, singular: string): string {
   return count === 1 ? singular : `${singular}s`
 }
 
+/**
+ * The `by_rung` tally, drawn as the mock's inline bar-per-row rather than a table cell.
+ *
+ * `docs/console-mock/index.html`'s `isDetectors` card (line 489) draws each rung as
+ * `112px 40px minmax(0,1fr)`: the rung name, its count right-aligned, then a track with a filled
+ * bar. The bar's width is this row's own share of the card's rung total, not a share of anything
+ * on another card — two cards are never compared by bar length here, only their own five rungs
+ * against each other, the same way `RungComposition`'s stacked bar already refuses to encode
+ * volume across detectors as length.
+ *
+ * `by_claim` and `by_severity` keep the plain `TallyTable` below: the mock's fixture has one rung
+ * breakdown per card and nothing for the other two tallies, so there is no drawing to extract for
+ * them and no reason to invent one.
+ */
+function RungBarRows({ tally, tooltipFor }: { tally: Tally; tooltipFor: (key: string) => string | undefined }) {
+  const entries = Object.entries(tally).sort(([a], [b]) => a.localeCompare(b))
+  const max = Math.max(1, ...entries.map(([, count]) => count))
+  return (
+    <div className="flex min-w-0 flex-col gap-row">
+      <h4 className="furniture text-meta text-ink-muted">By rung</h4>
+      <div className="flex flex-col">
+        {entries.map(([value, count]) => (
+          <div
+            key={value}
+            className="grid grid-cols-[7rem_2.5rem_minmax(0,1fr)] items-center gap-field border-t border-line py-field"
+          >
+            <span className="truncate font-mono text-meta text-muted-foreground" title={tooltipFor(value)}>
+              <Formatted value={orAbsent(value)} />
+            </span>
+            <span className="text-right font-mono text-meta tabular-nums">{count.toLocaleString()}</span>
+            <span className="h-1.5 overflow-hidden rounded-control bg-secondary">
+              <span
+                className="block h-1.5 rounded-control bg-ink-muted"
+                style={{ width: `${(count / max) * 100}%` }}
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function TallyTable({
   heading,
   tally,
@@ -140,22 +183,24 @@ function DetectorCard({ row }: { row: DetectorRow }) {
   return (
     <Card className="flex min-w-0 flex-col">
       <CardHeader>
-        {/* An `h3` written here rather than the vendored `CardTitle`, which is mono uppercase at
-            12px — the label register, and a detector's name is an identifier read rather than a
-            label scanned. */}
-        <h3 className="font-mono text-emphasis break-words">{row.detector}</h3>
-        <p className="text-body text-muted-foreground">
-          {/* Weight carries the count, not a size step: this card repeats once per
-              detector, so a stat-tile figure here would cost a row on every one of them. */}
-          <span className="font-semibold text-foreground tabular-nums">
+        {/* Baseline row, name left and the total pushed right by `ml-auto` -- the mock's own
+            header shape (`isDetectors`, line 483) for this card, in place of the stacked
+            name-then-sentence header this screen drew before the 2026-08-18 layout extraction.
+            The total takes `text-figure`, the stat-tile register, because it is now the one
+            number a reader scans this card for rather than a clause inside a sentence. */}
+        <div className="flex flex-wrap items-baseline gap-field">
+          <h3 className="font-mono text-emphasis break-words">{row.detector}</h3>
+          <span className="ml-auto font-mono text-figure tabular-nums">
             {row.total.toLocaleString()}
-          </span>{" "}
-          open {plural(row.total, "finding")} currently attributed to this detector.
+          </span>
+        </div>
+        <p className="furniture text-meta text-ink-muted">
+          open {plural(row.total, "finding")} currently attributed to this detector
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-section">
-        <div className="grid gap-section sm:grid-cols-3">
-          <TallyTable heading="By rung" tally={row.by_rung} tooltipFor={rungTooltip} />
+        <RungBarRows tally={row.by_rung} tooltipFor={rungTooltip} />
+        <div className="grid gap-section sm:grid-cols-2">
           <TallyTable heading="By claim" tally={row.by_claim} />
           <TallyTable heading="By severity" tally={row.by_severity} />
         </div>
@@ -175,28 +220,28 @@ function DetectorCard({ row }: { row: DetectorRow }) {
  * gives for keeping it as a series: "no open finding here rests on observed traffic" and "this
  * console does not have that rung" are opposite facts about the same picture.
  */
+/**
+ * The `isDetectors` mock's bottom strip (line 503): a bordered panel, a `text-meta` heading,
+ * then `repeat(5, minmax(0,1fr))` columns each carrying a left accent rule, the rung's name, its
+ * figure, and a caption -- in place of the two-column table this strip drew before the
+ * 2026-08-18 layout extraction. Every rung takes a column whether or not anything rests on it,
+ * which is the same "0 draws, absence is not the same fact as not-here" rule the table version
+ * already held.
+ */
 function RungTally({ composition }: { composition: Composition }) {
   return (
-    <div className="flex min-w-0 flex-col gap-row">
+    <div className="flex min-w-0 flex-col gap-field rounded-surface border border-line bg-card p-section">
       <h3 className="furniture text-meta text-ink-muted">By rung, across every detector</h3>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Rung</TableHead>
-            <TableHead>Open findings</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {composition.series.map((entry) => (
-            <TableRow key={entry.rung}>
-              <TableCell className="font-mono" title={rungTooltip(entry.rung)}>
-                {entry.rung}
-              </TableCell>
-              <TableCell className="font-mono">{entry.total.toLocaleString()}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="grid gap-section sm:grid-cols-5">
+        {composition.series.map((entry) => (
+          <div key={entry.rung} className="border-l border-ink-muted pl-field">
+            <div className="font-mono text-meta text-muted-foreground" title={rungTooltip(entry.rung)}>
+              {entry.rung}
+            </div>
+            <div className="font-mono text-figure tabular-nums">{entry.total.toLocaleString()}</div>
+          </div>
+        ))}
+      </div>
       <p className="max-w-prose text-meta text-muted-foreground">
         Counted over every open finding in this scope, once each, by the rung behind it — not
         over the bars above, each of which is a share of one detector's own total.
@@ -340,7 +385,10 @@ function DetectorCatalogue({ rows, repoId }: { rows: DetectorRow[]; repoId: stri
           instead.
         </p>
       </div>
-      <div className="flex flex-col gap-section">
+      {/* `repeat(auto-fill, minmax(320px, 1fr))` -- the mock's own card grid (`isDetectors`,
+          line 480), replacing the single-column stack this screen drew before the 2026-08-18
+          layout extraction. As many columns as fit at 320px each, never fewer than one. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-section">
         {rows.map((row) => (
           <DetectorCard key={row.detector} row={row} />
         ))}
