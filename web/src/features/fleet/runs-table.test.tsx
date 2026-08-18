@@ -76,4 +76,15 @@ describe("RunsCard rehearsal discrimination", () => {
     expect(screen.getByText("rehearsal")).toBeTruthy()
     expect(screen.getByText("halted before the remote")).toBeTruthy()
   })
+
+  it("keeps its column headers when there is nothing to list", () => {
+    mockQueryState.runs = settled([])
+    renderCard()
+
+    // Decision 61: the shape of the data is legible before there is data, so a reader learns what
+    // a run IS from a screen that has none. Swapping the whole table for a paragraph takes that
+    // away exactly when it is most useful.
+    expect(screen.getByRole("columnheader", { name: /outcome/i })).not.toBeNull()
+    expect(screen.getByText(/No run has ever checkpointed/)).not.toBeNull()
+  })
 })

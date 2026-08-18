@@ -642,3 +642,99 @@ the same basename truncate to the same string. So the **full path goes in the `t
 the accessible name** — as decisions 60 and 65 already require for hovered precision — and the source
 drawer shows it whole. **Where two visible rows would truncate identically, the column widens rather
 than lying**; identical-looking rows that are different records is a worse table than a wide one.
+
+## Round fifteen: decisions 72-75, and one raised back to the owner
+
+**72. Signals rows are vendors, expandable to their changes.** `stripe — 312 changes · 31 matched`,
+expanding to the matched changes and the operation each touched. **Rejected: one row per vendor
+change**, and **rejected: only changes that touched this workspace.**
+
+**The unmatched count is the valuable half and must not be dropped.** `312 changes · 31 matched` says
+Sync read three hundred and twelve things and can account for why two hundred and eighty-one of them
+are not your problem. A screen showing only matches would look identical whether the other 281 were
+checked or never fetched.
+
+**73. RAISED BACK TO THE OWNER, NOT RECORDED AS SETTLED.** The selection was *stage plus a live
+progress indicator*, `●○○ awaiting CI` with motion on running rows. **`CLAUDE.md:63` refuses a
+liveness pulse by name, rejected on the record three times**, and gives this exact case as the
+reason: *"nothing in our data tells a run parked on the customer's CI from one that has died."* An
+animated indicator on `awaiting CI` asserts liveness the data cannot establish. **The owner may
+overrule their own document — but it is their document, so it is raised rather than absorbed.**
+
+**74. Settings gets four editable groups**: Codebases (add, remove, select), Pull request policy with
+`immediately` still refused and the reason shown, the notification webhook naming its environment
+variable without ever accepting the value, and — **added by the owner in this round — AI model
+configuration.**
+
+**Model settings are a new group and they inherit a constraint from `CLAUDE.md`.** The model, the
+thinking mode and the effort are already fixed project-wide — `claude-opus-5`, adaptive, `xhigh` —
+and the two SDK surfaces spell them differently and are not interchangeable. **The screen shows what
+is configured and where it comes from; the API key is an environment variable and is never accepted
+by a form**, exactly as the webhook endpoint is. **Detector enable/disable was not selected** and is
+not built.
+
+**75. The install command prints what it found, then the URL.** Files read, call sites, vendors,
+findings, then `✓ http://localhost:5170`. **Rejected: the URL alone**, and **rejected: adding a
+not-measured-yet block** — which would have put the console's honesty discipline into a terminal
+before anybody has seen a screen.
+
+### 73 settled by owner reaffirmation: motion and live progress are wanted
+
+**The owner reaffirmed after the objection was raised**, and asked for live progress and motion
+across the console. **That is the decision.** What follows is the distinction that lets it be built
+without reintroducing the thing `CLAUDE.md:63` refuses, because the two are separable and the
+separation makes the interface *more* alive rather than less:
+
+- **Motion driven by a received event is honest.** A stage transition that actually arrived, a row
+  that actually inserted, a count that actually changed — animating those is showing something true,
+  and it is the kind of motion that makes a console feel connected to a running system.
+- **Motion driven by a timer is the pulse that was refused.** A spinner on `awaiting CI` rotates
+  identically whether CI is running or the run died forty minutes ago. It looks like information and
+  is not.
+
+**So the rule is: animation is bound to the event stream, never to a clock.** A run that has produced
+no event within its own stage's expected window **stops animating and says how long it has been
+silent**. That is strictly more informative than a perpetual spinner, and it is what a reviewer
+actually needs to know.
+
+`CLAUDE.md:63` is amended by the owner to this extent and no further: **motion reflecting a received
+transition is permitted. A composite score, a health figure, a traffic light and a green dot standing
+for aggregate wellness remain refused.**
+
+## Round sixteen: decisions 76-79, the motion system
+
+**76. Server-sent events push every transition.** `GET /api/events` as `text/event-stream`, carrying
+`run.stage`, `finding.opened` and the rest. **Rejected: polling**, and **rejected: push with a
+polling fallback.**
+
+**This is backend work before it is motion work**, and it is the thing that makes the rest honest:
+animation binds to a received event, so a row moves at the moment the transition actually happened.
+**A dropped stream is a state the console must render**, not one it may hide — if the connection
+fails there is no fallback by decision, so the screen says the stream is down and what it last saw.
+
+**77. A changed value swaps to its new figure with the delta beside it**, `31 ↑+1`, fading after ten
+seconds. **Rejected: counting up**, and this rejection is load-bearing — a rolling counter renders
+`1,207` on its way to `1,216`, and **`1,207` is a number nothing ever measured.** For four hundred
+milliseconds the console states a figure that was never true.
+
+**78. The canvas streams nodes as files are read, then settles the layout when the index completes**,
+about 600ms. Edges draw straight during the stream and relax at the end. **Rejected: a progress bar
+followed by the finished graph**, which hides the moment worth watching.
+
+**79. Maximum motion — staggered entrances, charts drawing in, panels springing, page cross-fades.**
+
+**Two reconciliations, because 79 as previewed contradicts 77 and omits an accessibility default.**
+
+1. **Numbers do not roll.** 79's preview lists rolling numbers among the maximum set; **decision 77
+   is the specific ruling on a changing value and it governs.** Rich motion everywhere else, swap
+   plus delta on figures. A lane building a rolling counter and citing 79 has misread the pair.
+2. **`prefers-reduced-motion` is still respected in full.** It was named in the two options not
+   chosen, and the chosen one did not say to drop it. **Honouring it is the platform default, not a
+   reduction of the owner's choice** — recorded as an assumption the owner can reverse, and it is the
+   difference between a premium interface and one that makes some people ill.
+
+**One performance bound, stated now rather than discovered on stage.** Dense tables are 50 rows
+(decision 40); a 30ms stagger across 50 rows is a page that takes a second and a half to finish
+arriving. **The stagger caps at the first 12 rows and the remainder appear together** — the effect
+is entirely in the first few anyway, and a demo that visibly crawls on real data is worse than one
+that never staggered.
