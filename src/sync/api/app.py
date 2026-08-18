@@ -484,7 +484,13 @@ def create_app(
         repo_id = request.query_params.get("repo_id")
         limit = _limit_param(request)
         offset = _offset_param(request)
-        return JSONResponse(runs_reader(repo_id=repo_id, limit=limit, offset=offset))
+        # Passed through unvalidated on purpose: a value outside the disposition vocabulary
+        # matches nothing, and an empty page is the honest answer to a stale bookmark where a
+        # 400 would turn yesterday's URL into an error screen.
+        outcome = request.query_params.get("outcome")
+        return JSONResponse(
+            runs_reader(repo_id=repo_id, limit=limit, offset=offset, outcome=outcome)
+        )
 
     async def corpus(request: Request) -> JSONResponse:
         repo_id = request.query_params.get("repo_id")

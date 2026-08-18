@@ -512,12 +512,22 @@ export interface RunRow {
  * LangGraph checkpointer, not the graph — there is no `indexed_at`, no `feed_fetched_at`,
  * no binding rung and no context-savings figure to report for it. Inheriting the envelope
  * would invent four fields the transport never sends, the same reasoning that keeps
- * `WorkflowState` off `Provenance`. `items`, `total` and `next_offset` are the whole shape.
+ * `WorkflowState` off `Provenance`.
  */
 export interface RunsPage {
   items: RunRow[]
+  /** How many runs the current filters admit — what the pager walks, not the whole fleet. */
   total: number
   next_offset: number | null
+  /**
+   * One count per disposition, computed across every run the scope holds and never narrowed
+   * by the `outcome` filter — a rail's counts say what each selection would return, and
+   * counts narrowed by the filter they set collapse to whatever is already selected. The
+   * `"null"` bucket is the in-flight one.
+   */
+  by_disposition: Record<string, number>
+  /** The scope's run count with no `outcome` filter applied — the unfiltered option's figure. */
+  unfiltered_total: number
 }
 
 /**

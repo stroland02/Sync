@@ -39,7 +39,13 @@ function run(outcome: RunRow["outcome"]): RunRow {
 }
 
 function page(items: RunRow[]): RunsPage {
-  return { items, total: items.length, next_offset: null }
+  return {
+    items,
+    total: items.length,
+    next_offset: null,
+    by_disposition: {},
+    unfiltered_total: items.length,
+  }
 }
 
 describe("isRunTerminal", () => {

@@ -30,14 +30,27 @@
  * **No severity ordering is invented here.** `severity_order` arrives in the payload because it is
  * a declared judgement rather than something the graph stores, and a copy of it in this file would
  * eventually be the wrong copy.
+ *
+ * ## Triage header, 2026-08-18
+ *
+ * The severity narrowing was a URL parameter with no control — a reader could arrive at a
+ * narrowed table but never narrow one. `TriageTabs` is that control: one tab per kind in the
+ * payload's own order, counted over the scope rather than the page, with the whole-scope tab
+ * first. Its empty states carry the absence-apart-from-zero distinction this file used to make
+ * page-wide, sharpened per-tab and naming the detectors that stood behind a measured zero.
  */
 
 import { useParams } from "react-router"
 
-import { useWorkspaceFindings } from "@/api/queries"
+import { useDetectors, useWorkspaceFindings } from "@/api/queries"
 import type { FindingOrder } from "@/api/types"
-import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { ErrorState, LoadingState } from "@/components/states"
 import { MetricPanel } from "@/components/metric-panel"
+import {
+  TriageTabs,
+  type TriageChecks,
+  type TriageTab,
+} from "@/components/triage-tabs"
 import { FindingsTable } from "@/features/findings/findings-table"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
@@ -48,12 +61,17 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 const OFFSET_KEY = "findings_offset"
 const DEFAULT_LIMIT = 25
 
+/** The tab for the whole scope. Not a severity value, so it cannot collide with one. */
+const ALL_TAB = "all"
+
 const QUESTION = "Every open finding in this workspace, and what each one is bound to."
 
 export function FindingsPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const [offset, setOffset] = useOffsetParam(OFFSET_KEY)
-  const [severity] = useFilterParam("severity")
+  // The severity tab changes which rows exist, so the offset measured against the old set is
+  // cleared in the same URL write — `use-filter-param`'s own reasoning, previously unapplied here.
+  const [severity, setSeverity] = useFilterParam("severity", [OFFSET_KEY])
   const [order] = useFilterParam("order")
 
   const query = useWorkspaceFindings(repoId ?? "", {
@@ -62,6 +80,9 @@ export function FindingsPage() {
     severity: severity ?? undefined,
     order: (order ?? undefined) as FindingOrder | undefined,
   })
+  // For the triage header's `checks`: an empty tab must say which detectors stood behind the
+  // zero, and the findings payload does not carry their names — the detector roll-up does.
+  const detectors = useDetectors(repoId)
 
   if (repoId === undefined) return <UnknownRoute />
 
@@ -77,7 +98,7 @@ export function FindingsPage() {
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 
-      {query.isPending ? (
+      {query.isPending || detectors.isPending ? (
         <LoadingState what={`open findings in ${repoId}`} />
       ) : query.isError ? (
         <ErrorState
@@ -89,10 +110,14 @@ export function FindingsPage() {
         <FindingsBody
           repoId={repoId}
           page={query.data}
+          detectorNames={
+            detectors.isSuccess ? detectors.data.detectors.map((row) => row.detector) : null
+          }
           offset={offset}
           onOffset={setOffset}
           busy={query.isFetching}
-          filtered={severity !== null}
+          severity={severity}
+          onSeverity={setSeverity}
         />
       )}
     </section>
@@ -102,36 +127,81 @@ export function FindingsPage() {
 function FindingsBody({
   repoId,
   page,
+  detectorNames,
   offset,
   onOffset,
   busy,
-  filtered,
+  severity,
+  onSeverity,
 }: {
   repoId: string
   page: NonNullable<ReturnType<typeof useWorkspaceFindings>["data"]>
+  /** The detector roll-up's names, or null when that route did not answer. */
+  detectorNames: string[] | null
   offset: number
   onOffset: (next: number) => void
   busy: boolean
-  /** Whether a narrowing is applied, which is what makes the two totals differ. */
-  filtered: boolean
+  severity: string | null
+  onSeverity: (next: string | null) => void
 }) {
-  if (page.items.length === 0) {
-    return (
-      <EmptyState
-        headline={`No open finding in ${repoId}.`}
-        // Absence apart from zero. The two cases below are the same empty table and entirely
-        // different facts, and the payload already knows which one this is.
-        detail={
-          page.indexed_at === null
-            ? `Nothing has indexed ${repoId}, so this is not a count of zero — it is the absence of a measurement. A finding appears here once INDEX has walked this workspace and a detector has run against what it found.`
-            : `${repoId} was indexed, and no detector has an open finding against it. That is a measured zero rather than an unanswered question.`
+  // The tab vocabulary is the payload's own `severity_order`, most severe first, with any kind
+  // the counts hold beyond it appended rather than dropped — a row whose kind the tabs omit is
+  // unreachable by exactly the reader triaging it. A kind at zero keeps its tab: the counts are
+  // computed without the severity narrowing, so zero is a measured answer, not an absence.
+  const kinds = [
+    ...page.severity_order,
+    ...Object.keys(page.severity_counts).filter((kind) => !page.severity_order.includes(kind)),
+  ]
+  const tabs: TriageTab[] = [
+    {
+      id: ALL_TAB,
+      label: "every kind",
+      count: { kind: "counted", value: page.severity_total },
+    },
+    ...kinds.map(
+      (kind): TriageTab => ({
+        id: kind,
+        label: kind,
+        count: { kind: "counted", value: page.severity_counts[kind] ?? 0 },
+      }),
+    ),
+  ]
+
+  // Absence apart from zero, per tab now rather than per page: an unindexed workspace has not
+  // been checked at all, an indexed one names the detectors that stood behind its zeros. The
+  // roll-up failing to answer is stated as its own fact — claiming "checked" on its behalf
+  // would put a sentence on screen nothing computed.
+  const checks: TriageChecks =
+    page.indexed_at === null
+      ? {
+          kind: "unchecked",
+          why: `Nothing has indexed ${repoId}, so no detector has had anything to run against. A finding appears here once INDEX has walked this workspace.`,
         }
-      />
-    )
-  }
+      : detectorNames === null
+        ? {
+            kind: "unchecked",
+            why: `${repoId} was indexed, but the detector roll-up did not answer, so this screen cannot name what checked it.`,
+          }
+        : detectorNames.length === 0
+          ? {
+              kind: "unchecked",
+              why: `${repoId} was indexed and the detector roll-up lists nothing for it — no detector has reported over this workspace yet.`,
+            }
+          : {
+              kind: "checked",
+              ran: [detectorNames[0], ...detectorNames.slice(1)],
+              at: page.indexed_at,
+            }
 
   return (
-    <div className="flex flex-col gap-section min-w-0">
+    <TriageTabs
+      legend="Findings by kind"
+      noun="open findings"
+      tabs={tabs}
+      activeId={severity ?? ALL_TAB}
+      onSelect={(id) => onSeverity(id === ALL_TAB ? null : id)}
+      checks={checks}
+    >
       <MetricPanel
         label="Errors and incidents"
         metric={{
@@ -159,10 +229,10 @@ function FindingsBody({
           total={page.total}
           nextOffset={page.next_offset}
           busy={busy}
-          unfilteredTotal={filtered ? page.severity_total : undefined}
+          unfilteredTotal={severity !== null ? page.severity_total : undefined}
           onOffsetChange={onOffset}
         />
       </MetricPanel>
-    </div>
+    </TriageTabs>
   )
 }

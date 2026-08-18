@@ -15,6 +15,8 @@ import { Link } from "react-router"
 import { DEFAULT_LIMIT } from "@/api/client"
 import { hasLiveRun, useRuns } from "@/api/queries"
 import type { RunDisposition, RunRow, RunsPage } from "@/api/types"
+import { FilterRail, type FilterGroup } from "@/components/filter-rail"
+import { useFacetParam } from "@/lib/use-facet-param"
 import {
   Table,
   TableBody,
@@ -54,17 +56,46 @@ function isRehearsal(run: RunRow): boolean {
 }
 
 /**
- * How many runs on the fetched page ended each way, or are still in flight. Counted over the
- * page this request returned, never over the fleet — `GET /api/runs` paginates and carries no
- * total-by-disposition figure, so a total here would have to be invented.
+ * The disposition vocabulary as the rail offers it, in a fixed order the payload cannot vary.
+ *
+ * Built from the closed set rather than from `by_disposition`'s keys: the payload omits a
+ * disposition no run has reached, and an option missing from the rail claims the value does
+ * not exist in the vocabulary — where a zero count is a real answer worth selecting. The
+ * `"in-flight"` value is the transport's word for the payload's `"null"` bucket.
  */
-function tallyDispositionsOnThisPage(items: readonly RunRow[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const run of items) {
-    const key = describeOutcome(run.outcome, isRehearsal(run))
-    counts[key] = (counts[key] ?? 0) + 1
+const OUTCOME_OPTIONS = [
+  { value: "in-flight", label: "in flight", bucket: "null" },
+  { value: "opened", label: "opened", bucket: "opened" },
+  { value: "reported", label: "reported", bucket: "reported" },
+  { value: "abandoned", label: "abandoned", bucket: "abandoned" },
+] as const
+
+/**
+ * The rail's one facet, counted over every run the deployment holds — the payload computes
+ * `by_disposition` before the outcome filter is applied, precisely so these figures say what
+ * each selection would return rather than describing the page in view.
+ */
+function outcomeGroup(
+  data: RunsPage,
+  selected: string | null,
+  onSelect: (value: string | null) => void,
+): FilterGroup {
+  const toOption = (option: (typeof OUTCOME_OPTIONS)[number]) => ({
+    value: option.value,
+    label: option.label,
+    count: { kind: "counted" as const, value: data.by_disposition[option.bucket] ?? 0 },
+  })
+  return {
+    id: "outcome",
+    legend: "Disposition",
+    selected,
+    onSelect,
+    unfiltered: {
+      label: "Every run",
+      count: { kind: "counted", value: data.unfiltered_total },
+    },
+    options: [toOption(OUTCOME_OPTIONS[0]), ...OUTCOME_OPTIONS.slice(1).map(toOption)],
   }
-  return counts
 }
 
 /**
@@ -88,7 +119,15 @@ function RunsCount({ data }: { data: RunsPage }) {
 
 export function RunsCard() {
   const [offset, setOffset] = useOffsetParam("runs_offset")
-  const query = useRuns({ limit: DEFAULT_LIMIT, offset })
+  const [outcome, setSelectedOutcome] = useFacetParam("runs_outcome")
+  const query = useRuns({ limit: DEFAULT_LIMIT, offset, outcome })
+
+  // A new narrowing starts at the first page: an offset kept from the previous selection can
+  // sit past the narrowed set's end, which renders an empty page over a non-empty answer.
+  function setOutcome(next: string | null) {
+    setSelectedOutcome(next)
+    setOffset(0)
+  }
 
   return (
     <div className="flex flex-col gap-section">
@@ -96,6 +135,15 @@ export function RunsCard() {
       {query.error && <ErrorState error={query.error} what="the fleet's runs" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
+        <div className="grid gap-section lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
+        {/* The rail's counts and the table's record count answer two different questions — the
+            rail is counted over every run the deployment holds (the payload computes it before
+            the filter applies), the footer over the narrowed set — and each states its scope. */}
+        <FilterRail
+          label="Narrow the runs"
+          countScope="Counted across every run this deployment holds, whichever option is pressed. The record count under the table describes the narrowed set."
+          groups={[outcomeGroup(query.data, outcome, setOutcome)]}
+        />
         <MetricPanel
           label="Runs"
           caption={
@@ -108,26 +156,8 @@ export function RunsCard() {
         >
           {/* Decision 61: the headers stay when there is nothing to list, so the shape of the
               data is legible before there is data and a reader learns what a run IS from a
-              screen that has none. Only the disposition tally is row-dependent — it counts the
-              rows, so with none it would be counting nothing. */}
+              screen that has none. */}
           <>
-            {query.data.items.length > 0 && (
-              <div className="flex flex-col gap-field">
-                <span className="furniture text-meta text-ink-muted">
-                  By disposition, this page only
-                </span>
-                <p className="font-mono text-body">
-                  {Object.entries(tallyDispositionsOnThisPage(query.data.items))
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([outcome, count]) => `${outcome}: ${count}`)
-                    .join(", ")}
-                </p>
-                <p className="max-w-prose text-meta text-muted-foreground">
-                  Counted across the {query.data.items.length} runs shown below, not the
-                  fleet — the fleet's true disposition mix is not in this payload.
-                </p>
-              </div>
-            )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -139,13 +169,20 @@ export function RunsCard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {query.data.items.length === 0 && (
-                    <TableEmptyRow colSpan={5}>
-                      <span className="text-ink">No run has ever checkpointed.</span>{" "}
-                      The API answered, and the checkpointer holds no thread. That is an answer,
-                      not a failure — nothing has attempted a repair on this database yet.
-                    </TableEmptyRow>
-                  )}
+                  {query.data.items.length === 0 &&
+                    (outcome !== null && query.data.unfiltered_total > 0 ? (
+                      <TableEmptyRow colSpan={5}>
+                        <span className="text-ink">No run matches this narrowing.</span> The
+                        checkpointer holds {query.data.unfiltered_total} runs and none of them
+                        carries this disposition — clear the rail's selection to see them.
+                      </TableEmptyRow>
+                    ) : (
+                      <TableEmptyRow colSpan={5}>
+                        <span className="text-ink">No run has ever checkpointed.</span> The API
+                        answered, and the checkpointer holds no thread. That is an answer, not a
+                        failure — nothing has attempted a repair on this database yet.
+                      </TableEmptyRow>
+                    ))}
                   {query.data.items.map((run) => (
                     <TableRow key={run.thread_id}>
                       <TableCell className="font-mono">
@@ -227,6 +264,7 @@ export function RunsCard() {
             would be a confident wrong verdict.
           </p>
         </MetricPanel>
+        </div>
       )}
     </div>
   )

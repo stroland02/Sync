@@ -63,10 +63,12 @@ const DESTINATION_ICON: Record<string, LucideIcon> = {
 
 /**
  * The rail slot was a disabled button reading "Settings arrives with the write path" for as
- * long as no screen existed. The screen exists now and is read-only, so the note says which of
- * those two things is true rather than continuing to promise the other.
+ * long as no screen existed, then a note calling the screen read-only for as long as that was
+ * true. The write path landed 2026-08-18 — merge policy, merge method and base branch store
+ * and save — so the note says what is editable and names the one thing that never will be.
  */
-const SETTINGS_NOTE = "Settings — read-only until the write path lands"
+const SETTINGS_NOTE =
+  "Settings — automation policy is editable; the codebase's own context file is shown, never written"
 
 /** Where a row goes when its own subject is not bound: the screen a codebase is selected on. */
 const SUBJECT_PICKER = "/"

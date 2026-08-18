@@ -136,9 +136,20 @@ def app_factory() -> Starlette:
     def dismissal_writer(finding_id: str, *, reason, actor: str) -> None:
         store.record_dismissal(finding_id, reason=reason, actor=actor)
 
-    def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+    def runs_reader(
+        *,
+        repo_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        outcome: str | None = None,
+    ):
         return fleet.runs(
-            checkpointer_dsn, repo_id=repo_id, store=store, limit=limit, offset=offset
+            checkpointer_dsn,
+            repo_id=repo_id,
+            store=store,
+            limit=limit,
+            offset=offset,
+            outcome=outcome,
         )
 
     def corpus_reader(*, repo_id: str | None = None):

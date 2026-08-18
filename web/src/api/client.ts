@@ -287,9 +287,18 @@ export function fetchPatch(findingId: string, signal?: AbortSignal): Promise<Pat
   )
 }
 
+export interface RunsParams extends PageParams {
+  /** A disposition value, `"in-flight"` for runs without one, or null for every run. */
+  outcome?: string | null
+}
+
 /** Every run the checkpointer holds, newest first — one row per thread, not per finding. */
-export function fetchRuns(params: PageParams, signal?: AbortSignal): Promise<RunsPage> {
-  const path = withPageParams("/api/runs", params)
+export function fetchRuns(params: RunsParams, signal?: AbortSignal): Promise<RunsPage> {
+  const paged = withPageParams("/api/runs", params)
+  const path =
+    params.outcome == null
+      ? paged
+      : `${paged}${paged.includes("?") ? "&" : "?"}outcome=${encodeURIComponent(params.outcome)}`
   return getJson<RunsPage>(path, signal)
 }
 

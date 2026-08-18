@@ -239,12 +239,13 @@ export function hasLiveRun(page: RunsPage | undefined): boolean {
  * does not — the same interval as a single workflow, for the same reason: nothing on this
  * screen changes faster than the customer's own CI run.
  */
-export function useRuns(params: PageParams = {}) {
+export function useRuns(params: PageParams & { outcome?: string | null } = {}) {
   const limit = params.limit ?? DEFAULT_LIMIT
   const offset = params.offset ?? 0
+  const outcome = params.outcome ?? null
   return useQuery({
-    queryKey: ["runs", limit, offset],
-    queryFn: ({ signal }) => fetchRuns({ limit, offset }, signal),
+    queryKey: ["runs", limit, offset, outcome],
+    queryFn: ({ signal }) => fetchRuns({ limit, offset, outcome }, signal),
     refetchInterval: (query) => (hasLiveRun(query.state.data) ? WORKFLOW_POLL_MS : false),
   })
 }

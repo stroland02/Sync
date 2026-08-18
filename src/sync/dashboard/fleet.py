@@ -48,6 +48,15 @@ def _run_row(thread_id: str, checkpoint: dict, repo_id: str | None = None) -> di
     }
 
 
+IN_FLIGHT = "in-flight"
+"""The filter value that selects runs with no disposition yet.
+
+Not a member of `_FINISHED` and never stored anywhere: a run is in flight exactly while its
+newest checkpoint carries no finished outcome, so the transport needs a word for that state
+that cannot collide with a real outcome value.
+"""
+
+
 def runs(
     checkpointer_dsn: str,
     *,
@@ -55,6 +64,7 @@ def runs(
     store: GraphStore | None = None,
     limit: int = 50,
     offset: int = 0,
+    outcome: str | None = None,
 ) -> dict:
     """Every run the checkpointer holds, one row per thread, newest first -- paginated by a real
     SQL `LIMIT`, plus a disposition roll-up computed across every run rather than the page.
@@ -63,7 +73,15 @@ def runs(
     collapse them the way `workflow_state` does -- that answers a per-finding question and this
     answers a per-run one, so a retried finding is two rows here and one there.
 
-    `repo_id` narrows to runs belonging to that repository (B149).
+    `repo_id` narrows to runs belonging to that repository (B149). `outcome` narrows to runs
+    whose newest checkpoint reached that disposition, with `IN_FLIGHT` selecting the ones that
+    have none yet; a value outside the vocabulary matches nothing, which is an empty page rather
+    than an error, because the console renders an out-of-vocabulary selection as its own state.
+
+    `by_disposition` and `unfiltered_total` are deliberately computed before the `outcome`
+    filter is applied: they exist so a filter rail can say what each selection *would* return,
+    and counts narrowed by the filter they set collapse to whatever is already selected.
+    `total` describes the filtered set, because pagination walks that set and no other.
     """
     limit = max(limit, 1)
     repo_map = store.finding_repo_ids() if store is not None else {}
@@ -71,48 +89,62 @@ def runs(
     if repo_id is not None:
         matching_fids = [fid for fid, r_id in repo_map.items() if r_id == repo_id]
         if not matching_fids:
-            return {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
+            return {
+                "items": [], "total": 0, "next_offset": None,
+                "by_disposition": {}, "unfiltered_total": 0,
+            }
         predicate = "checkpoint_ns = '' AND split_part(thread_id, ':', 1) = ANY(%s)"
         params: list[Any] = [matching_fids]
     else:
         predicate = "checkpoint_ns = ''"
         params = []
 
+    newest = f"""
+        SELECT DISTINCT ON (thread_id)
+               thread_id, checkpoint_id, checkpoint,
+               checkpoint->'channel_values'->>'outcome' AS outcome
+          FROM checkpoints
+         WHERE {predicate}
+         ORDER BY thread_id, checkpoint_id DESC
+    """
+
+    if outcome is None:
+        narrowed = "TRUE"
+        narrowed_params: list[Any] = []
+    elif outcome == IN_FLIGHT:
+        narrowed = "(outcome IS NULL OR outcome <> ALL(%s))"
+        narrowed_params = [list(_FINISHED)]
+    else:
+        narrowed = "outcome = %s"
+        narrowed_params = [outcome]
+
     with psycopg.connect(checkpointer_dsn, row_factory=dict_row) as conn:
         # A database no run has ever checkpointed into has no tables at all; that is the same
         # answer as an empty fleet, not an error -- `queries.workflow_state`'s guard applies
         # here identically.
         if conn.execute("SELECT to_regclass('checkpoints') AS t").fetchone()["t"] is None:
-            return {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
+            return {
+                "items": [], "total": 0, "next_offset": None,
+                "by_disposition": {}, "unfiltered_total": 0,
+            }
 
         total = conn.execute(
-            f"SELECT count(DISTINCT thread_id) AS n FROM checkpoints WHERE {predicate}",
-            params,
+            f"SELECT count(*) AS n FROM ({newest}) AS newest WHERE {narrowed}",
+            params + narrowed_params,
         ).fetchone()["n"]
 
         rows = conn.execute(
             f"""
-            SELECT thread_id, checkpoint FROM (
-                SELECT DISTINCT ON (thread_id) thread_id, checkpoint_id, checkpoint
-                  FROM checkpoints
-                 WHERE {predicate}
-                 ORDER BY thread_id, checkpoint_id DESC
-            ) AS newest_per_thread
-            ORDER BY checkpoint_id DESC
-            LIMIT %s OFFSET %s
+            SELECT thread_id, checkpoint FROM ({newest}) AS newest
+             WHERE {narrowed}
+             ORDER BY checkpoint_id DESC
+             LIMIT %s OFFSET %s
             """,
-            params + [limit, offset],
+            params + narrowed_params + [limit, offset],
         ).fetchall()
 
         outcome_rows = conn.execute(
-            f"""
-            SELECT DISTINCT ON (thread_id)
-                   checkpoint->'channel_values'->>'outcome' AS outcome
-              FROM checkpoints
-             WHERE {predicate}
-             ORDER BY thread_id, checkpoint_id DESC
-            """,
-            params,
+            f"SELECT outcome FROM ({newest}) AS newest", params
         ).fetchall()
 
     items = [
@@ -132,6 +164,7 @@ def runs(
         "total": total,
         "next_offset": consumed if consumed < total else None,
         "by_disposition": by_disposition,
+        "unfiltered_total": len(outcome_rows),
     }
 
 
