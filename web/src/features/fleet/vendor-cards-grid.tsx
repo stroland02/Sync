@@ -86,7 +86,7 @@ export function VendorCardsGrid({ repoId }: VendorCardsGridProps) {
           return (
             <Link
               key={vendorId}
-              to={`/vendors/${encodeURIComponent(vendorId)}?repo_id=${encodeURIComponent(repoId)}`}
+              to={`/repositories/${encodeURIComponent(repoId)}/vendors/${encodeURIComponent(vendorId)}`}
               className="group flex flex-col gap-row rounded-surface border border-border bg-card p-section transition-colors hover:border-foreground/20 hover:bg-surface-subtle"
             >
               <div className="flex items-center justify-between gap-row">
