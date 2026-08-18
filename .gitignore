@@ -41,6 +41,12 @@ corpus-score.json
 # The web console (M4). node_modules and the build output are reproducible from
 # package-lock.json; the lockfile is committed, these are not.
 web/node_modules/
+
+# The root manifest `CI-W371` added for the npx doorbell means `npm` installs here too, and
+# nothing ignored it. That is not merely untidy: `beta_gates.worktree_dirty()` counts untracked
+# paths, so a lane that had ever run the doorbell reported a dirty worktree and Gate 4 refused
+# to record a suite verdict for it -- correctly, and for a reason that was not the tree.
+/node_modules/
 web/dist/
 
 # Ephemeral sweep state: when each budget notice was first seen. Per-machine, not shared.
