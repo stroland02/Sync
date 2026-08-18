@@ -93,3 +93,28 @@ def test_a_vanished_terminal_is_stalled():
     needs, why = resume_lanes.verdict(dispatch, {}, SILENCE_MS)
     assert needs is True
     assert "gone" in why
+
+
+UNKNOWN = "term_agy_lane"
+
+
+def test_a_terminal_that_never_reports_output_is_not_silent_for_fifty_six_years():
+    """`lastOutputAt` is null for a terminal Orca hosts but does not manage.
+
+    The `agy` lanes are plain shells running an agent CLI, so Orca tracks no output timestamp for
+    them. Coercing that to 0 made the sweep compute silence from the epoch and print `silent for
+    29783562 minutes`, which is 56 years and which would have re-dispatched a lane that was working.
+    Unmeasurable is not the same as stopped, and this is the absence-versus-zero distinction the
+    product refuses everywhere else, reached through a `or 0`.
+    """
+    dispatch = {"status": "dispatched", "assignee_handle": UNKNOWN}
+    needs, why = resume_lanes.verdict(dispatch, {UNKNOWN: None}, SILENCE_MS)
+    assert needs is False
+    assert "cannot be measured" in why
+
+
+def test_an_unmeasurable_terminal_with_a_bad_record_is_still_not_stalled():
+    dispatch = {"status": "failed", "last_failure": "timeout"}
+    needs, why = resume_lanes.verdict(dispatch, {UNKNOWN: None}, SILENCE_MS, fallback_handle=UNKNOWN)
+    assert needs is False
+    assert "cannot be measured" in why
