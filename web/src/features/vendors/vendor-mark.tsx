@@ -13,6 +13,10 @@
  * would be claiming Sync knows which company a vendor id belongs to, which it does not; it knows
  * a string the graph keys on.
  *
+ * The monogram renders at `--text-meta` and not below it. DESIGN.md holds 12px as a floor
+ * rather than the small end of a range, and a label out of room takes fewer characters
+ * instead of a smaller step -- which `monogramFor` already does by capping at two.
+ *
  * **The domain is derived, not known.** Sync holds no homepage for a vendor, so the endpoint is
  * asked about `<id>.com` and the answer is allowed to be "no". That guess is wrong for some
  * vendors and the degradation is what makes being wrong harmless: a miss renders a monogram, which
@@ -89,7 +93,7 @@ export function VendorMark({ vendorId }: VendorMarkProps) {
   if (url === null || !served) {
     return (
       <span className={frame} data-testid="vendor-mark-monogram" aria-hidden="true">
-        <span className="font-mono text-[10px] leading-none text-ink-muted">
+        <span className="font-mono text-meta leading-none text-ink-muted">
           {monogramFor(vendorId)}
         </span>
       </span>

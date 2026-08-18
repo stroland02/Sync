@@ -36,7 +36,7 @@ export function CodebasesSettingsPanel({ repoId }: CodebasesSettingsPanelProps) 
 
   return (
     <div className="flex flex-col gap-section">
-      <div className="flex flex-col gap-1 pb-field border-b border-line">
+      <div className="flex flex-col gap-field pb-field border-b border-line">
         <h2 className="text-emphasis font-medium text-ink">Codebase & Context Settings</h2>
         <p className="text-body text-ink-muted">
           The codebases this workspace holds, and the instruction context and repository
@@ -80,8 +80,8 @@ export function CodebasesSettingsPanel({ repoId }: CodebasesSettingsPanelProps) 
           </>
         }
         refusalNotice={
-          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-1">
-            <div className="flex items-center gap-2">
+          <div className="rounded-surface border border-line bg-surface-muted/40 p-3 text-meta text-ink-muted space-y-field">
+            <div className="flex items-center gap-row">
               <Badge>Source of Truth: Customer Git Repository</Badge>
             </div>
             <p>
@@ -94,7 +94,7 @@ export function CodebasesSettingsPanel({ repoId }: CodebasesSettingsPanelProps) 
           </div>
         }
         control={
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-row">
             <Badge>Read-only: Tracked in Git</Badge>
             <span className="font-mono text-meta text-ink-muted">Path: .sync/context.md</span>
           </div>
@@ -118,7 +118,7 @@ export function CodebasesSettingsPanel({ repoId }: CodebasesSettingsPanelProps) 
           </p>
         }
         control={
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-field">
             <Badge>Active</Badge>
             <span className="text-meta text-ink-muted font-mono">TypeScript / Python</span>
           </div>
