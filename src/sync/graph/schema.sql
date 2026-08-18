@@ -546,3 +546,37 @@ CREATE TABLE IF NOT EXISTS intake_attempt (
 
 CREATE INDEX IF NOT EXISTS intake_attempt_vendor_idx ON intake_attempt (vendor_id, attempted_at DESC);
 
+-- Grain: one row per DISMISSAL of one finding by one person at one time. Not a property of the
+-- finding, and that distinction is the whole decision (owner decision 45, 2026-08-18): a finding
+-- dismissed and later un-dismissed has two rows and the current state is the latest one, because
+-- a column would overwrite and the console could not then show that somebody changed their mind.
+-- Counting dismissed findings by counting rows here is wrong for exactly the reason it is wrong
+-- on `migration_outcome`.
+--
+-- `reason` is NULL on an un-dismissal and one of the closed vocabulary otherwise. The vocabulary
+-- is closed for the same reason `abandon_reason_code` is: a promise to learn from dismissals
+-- needs a schema that can answer the question, and free text cannot be aggregated. The values are
+-- Sync's own reviewers' -- `interface-originality.md` takes a vocabulary's shape and never its
+-- values.
+--
+-- `false_positive` is the only honest source of detector accuracy, so it must stay separable
+-- rather than pooled with the other three. That is why the reason is a column here and not a
+-- boolean beside a note.
+--
+-- Dismissal is not deletion: the finding row is untouched and stays listed, filtered out by
+-- default. A read surface can only offer that filter because the finding is still there.
+CREATE TABLE IF NOT EXISTS finding_dismissal (
+    id           BIGSERIAL PRIMARY KEY,
+    finding_id   TEXT NOT NULL REFERENCES finding (id) ON DELETE CASCADE,
+    -- NULL means this row un-dismissed the finding. A reason is required to dismiss and
+    -- meaningless to restore, and `record_dismissal` enforces the pairing.
+    reason       TEXT,
+    -- Who, as recorded by whatever authenticates the write. Not nullable: a dismissal nobody can
+    -- be attributed to is not reviewable, and the point of keeping history is that a reader can
+    -- ask who decided.
+    actor        TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS finding_dismissal_latest_idx
+    ON finding_dismissal (finding_id, created_at DESC);
