@@ -491,6 +491,16 @@ export interface RunRow {
   thread_id: string
   finding_id: string
   /**
+   * What the heartbeat table knows about an in-flight run (B194): `alive` — the runner's
+   * process ticked inside its window; `expired` — the sweep recorded that heartbeats stopped
+   * with no clean exit, a stored transition rather than a per-read guess; `unmonitored` — no
+   * heartbeat row, the run predates the table. `null` on a terminal run, where liveness is
+   * not a question.
+   */
+  liveness: "alive" | "expired" | "unmonitored" | null
+  /** When the runner's process last said "still here", or null when never monitored. */
+  last_heartbeat_at: string | null
+  /**
    * The repository this run's finding belongs to, or `null` when the checkpoint does not name
    * one. The transport has always carried it (`sync.dashboard.fleet._run_row`); this type omitted
    * it, so every screen built links without it and sent readers to an address the router does not

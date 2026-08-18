@@ -214,6 +214,25 @@ export function RunsCard() {
                             <Formatted value={orAbsent(run.abandon_reason)} />
                           </div>
                         )}
+                        {/* Liveness as a recorded word, in-flight rows only (B194). A chip
+                            from a closed vocabulary, legible without colour — `expired` is a
+                            stored transition the sweep wrote, never a per-render guess, and
+                            `unmonitored` is the honest word for a run that predates the
+                            heartbeat table. */}
+                        {run.liveness !== null && (
+                          <div className="mt-field">
+                            <span className="furniture rounded-control border border-line px-field py-field text-meta text-ink-muted">
+                              {run.liveness === "alive" && "process alive"}
+                              {run.liveness === "expired" && "heartbeats stopped"}
+                              {run.liveness === "unmonitored" && "not monitored"}
+                            </span>
+                            {run.liveness === "alive" && run.last_heartbeat_at !== null && (
+                              <span className="ml-row font-mono text-meta text-muted-foreground">
+                                <RelativeTime iso={run.last_heartbeat_at} />
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-meta">
                         <RelativeTime iso={run.last_checkpoint_at} />
@@ -253,15 +272,20 @@ export function RunsCard() {
             className="mt-section"
           />
 
+          {/* Amended 2026-08-18 with B194 rather than deleted: the checkpoint half is still
+              true and still the reason "last checkpoint" is never read as liveness. What
+              changed is that monitored runs now carry a second, separate signal, and the
+              paragraph says exactly how far it reaches. */}
           <p className="max-w-prose border-t border-line pt-section text-body text-muted-foreground">
-            There is no heartbeat and no process registry — the only evidence a run exists
-            is a checkpoint row, and "last checkpoint" is staleness, not liveness. A run
-            parked at <code className="font-mono">await_ci</code> blocks inside that node
-            while it waits on the customer's CI, and writes no checkpoint for as long as
-            that takes, by design. A run parked at any other node with the same silence
-            has probably died. Nothing in this data tells the two apart, so this screen
-            does not guess: there is no dot and no colour here, because a wrong guess
-            would be a confident wrong verdict.
+            A checkpoint records progress, not existence — "last checkpoint" is staleness, not
+            liveness. A run parked at <code className="font-mono">await_ci</code> blocks inside
+            that node while it waits on the customer's CI, and writes no checkpoint for as long
+            as that takes, by design. What tells that run apart from one that died is the
+            heartbeat: the runner's process says "still here" on a timer, straight through a CI
+            wait, and a run whose heartbeats stop with no clean exit is recorded{" "}
+            <span className="font-mono">expired</span> by a sweep — a stored transition, not a
+            guess made at render time. A run marked <span className="font-mono">not monitored</span>{" "}
+            predates that mechanism, and for it this screen still does not guess.
           </p>
         </MetricPanel>
         </div>

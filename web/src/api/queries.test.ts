@@ -33,6 +33,8 @@ function run(outcome: RunRow["outcome"]): RunRow {
     repo_id: "org/one",
     current_node: outcome === null ? "await_ci" : null,
     outcome,
+    liveness: outcome === null ? "unmonitored" : null,
+    last_heartbeat_at: null,
     abandon_reason: null,
     last_checkpoint_at: "2026-08-06T09:00:00Z",
   }

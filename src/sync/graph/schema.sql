@@ -524,6 +524,29 @@ CREATE TABLE IF NOT EXISTS repo_settings (
 -- database that predates it -- this is the one statement that reaches them.
 ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS remote_url TEXT;
 
+-- Grain: one row per checkpoint thread -- the same grain as a run, one generation of one finding.
+--
+-- The liveness the checkpointer cannot carry (B194). A checkpoint records progress, so a run
+-- blocking inside `await_ci` writes none for as long as the customer's CI takes, and nothing
+-- distinguished it from a run that died -- the console refuses to guess, on the record. The
+-- runner's own process refreshes `last_heartbeat_at` on a timer while the graph executes,
+-- including through `await_ci`, because the heartbeat measures the process rather than progress.
+--
+-- Three timestamps, three different ends: `stopped_at` is the runner exiting cleanly (whatever
+-- the outcome -- abandoned is a clean exit); `expired_at` is the sweep recording that heartbeats
+-- stopped arriving with no clean exit, which is the stored state transition a liveness claim
+-- requires; a row with neither is a run whose process was alive as of `last_heartbeat_at`.
+-- A thread with no row predates this table or ran outside it, which the reader reports as
+-- unmonitored rather than guessing either way.
+CREATE TABLE IF NOT EXISTS run_heartbeat (
+    thread_id           TEXT PRIMARY KEY,
+    started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_heartbeat_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expire_after_secs   INTEGER NOT NULL DEFAULT 90,
+    stopped_at          TIMESTAMPTZ,
+    expired_at          TIMESTAMPTZ
+);
+
 -- Grain: one row per attempt (not per adapter).
 --
 -- Identity is (vendor_id, attempted_at, COALESCE(from_version, ''), COALESCE(to_version, ''))

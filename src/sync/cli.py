@@ -39,6 +39,7 @@ from sync.forge.webhook import (
     record_merge_outcome,
 )
 from sync.graph.store import DEFAULT_DSN, GraphStore
+from sync.graph.heartbeat import RunHeartbeat
 from sync.index.codebase import _resolve_repo_ref, index_codebase, remote_repo_id
 from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
@@ -1217,10 +1218,15 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                 # Resuming takes `None`: an interrupted thread handed a payload
                 # re-enters at START and redoes the patch and the push it had
                 # already paid for.
-                state = graph.invoke(
-                    None if resuming else {"finding": finding, "repo": repo},
-                    config=config,
-                )
+                #
+                # The heartbeat wraps the whole invocation, `await_ci` included: it measures
+                # the process, not progress, which is the distinction the checkpointer cannot
+                # carry and the console refused to guess about (B194).
+                with RunHeartbeat(args.dsn, thread_id):
+                    state = graph.invoke(
+                        None if resuming else {"finding": finding, "repo": repo},
+                        config=config,
+                    )
                 # `report_reason` is listed because a tier -1 run has neither of the other
                 # two by design, and the spec is explicit that these are real findings
                 # worth surfacing -- they are simply not remediation findings.

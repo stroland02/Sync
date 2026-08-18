@@ -64,6 +64,8 @@ DismissalWriter = Callable[..., None]
 # three databases' worth of shape.
 RunsReader = Callable[..., dict[str, Any]]
 SetupReader = Callable[..., dict[str, Any]]
+StagingReader = Callable[[str], dict[str, Any]]
+StagingWriter = Callable[[str, dict[str, Any]], dict[str, Any]]
 CorpusReader = Callable[..., dict[str, Any]]
 CorpusHealthReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
@@ -225,6 +227,8 @@ def create_app(
     settings_reader: SettingsReader | None = None,
     settings_writer: SettingsWriter | None = None,
     setup_reader: SetupReader | None = None,
+    staging_reader: StagingReader | None = None,
+    staging_writer: StagingWriter | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -490,6 +494,29 @@ def create_app(
             return JSONResponse({"error": "Setup reader not configured"}, status_code=501)
         return JSONResponse(setup_reader(repo_id=request.query_params.get("repo_id")))
 
+    async def get_staging(request: Request) -> JSONResponse:
+        """A vendor's declared staging fields and their current values (B195). An empty schema
+        is an answer -- the vendor has nothing to configure -- and never a 404."""
+        if staging_reader is None:
+            return JSONResponse({"error": "Staging reader not configured"}, status_code=501)
+        return JSONResponse(staging_reader(request.path_params["vendor_id"]))
+
+    async def set_staging(request: Request) -> JSONResponse:
+        """Write the writable staging fields. The same class of write as repository settings:
+        deployment configuration, not the graph -- the read-only rule over the graph holds."""
+        if staging_writer is None:
+            return JSONResponse({"error": "Staging writer not configured"}, status_code=501)
+        try:
+            payload = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "body must be JSON"}, status_code=400)
+        if not isinstance(payload, dict):
+            return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
+        try:
+            return JSONResponse(staging_writer(request.path_params["vendor_id"], payload))
+        except ValueError as error:
+            return JSONResponse({"error": str(error)}, status_code=400)
+
     async def runs(request: Request) -> JSONResponse:
         repo_id = request.query_params.get("repo_id")
         limit = _limit_param(request)
@@ -712,6 +739,8 @@ def create_app(
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/setup", setup, methods=["GET"]),
+        Route("/api/adapters/{vendor_id}/staging", get_staging, methods=["GET"]),
+        Route("/api/adapters/{vendor_id}/staging", set_staging, methods=["POST"]),
         Route("/api/corpus", corpus, methods=["GET"]),
         Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
         Route("/api/corpus/abandonment", abandonment, methods=["GET"]),

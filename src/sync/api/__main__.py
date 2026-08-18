@@ -16,6 +16,7 @@ instead, naming the commands that fill one.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import uvicorn
 from starlette.applications import Starlette
@@ -30,6 +31,7 @@ from sync.dashboard.queries import workflow_state
 from sync.graph.store import DEFAULT_DSN, GraphStore, describe_dsn
 from sync.mcp.tools import GraphSurface
 from sync.obs.log import configure as configure_logging
+from sync.signals import staging
 
 # The port `web/vite.config.ts` proxies `/api` to. Named rather than inlined so
 # tests/test_api_routes.py can bind the two together instead of asking them to agree by hand.
@@ -160,6 +162,21 @@ def app_factory() -> Starlette:
 
     def repositories_reader():
         return fleet.repositories(store)
+
+    def staging_reader(vendor_id: str):
+        return {
+            "vendor_id": vendor_id,
+            "schema": staging.staging_schema(vendor_id),
+            "values": staging.read_staging(vendor_id, Path("vendor-cache")),
+        }
+
+    def staging_writer(vendor_id: str, payload: dict):
+        written = staging.write_staging(vendor_id, Path("vendor-cache"), payload)
+        return {
+            "vendor_id": vendor_id,
+            "schema": staging.staging_schema(vendor_id),
+            **written,
+        }
 
     def setup_reader(*, repo_id: str | None = None):
         # The sole repository stands in when none is named — the install story is one codebase,
@@ -348,6 +365,8 @@ def app_factory() -> Starlette:
         settings_reader=settings_reader,
         settings_writer=settings_writer,
         setup_reader=setup_reader,
+        staging_reader=staging_reader,
+        staging_writer=staging_writer,
         api_password=configured_api_password(),
     )
 

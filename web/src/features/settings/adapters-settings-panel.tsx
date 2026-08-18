@@ -2,6 +2,7 @@ import { useAdapters } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 import { AdapterCoverageChart } from "@/features/settings/adapter-coverage-chart"
 import { AdapterTable } from "@/features/settings/adapter-table"
+import { StagingEditor } from "@/features/settings/staging-editor"
 
 export function AdaptersSettingsPanel() {
   const query = useAdapters()
@@ -29,6 +30,19 @@ export function AdaptersSettingsPanel() {
         <>
           <AdapterCoverageChart adapters={query.data.adapters} />
           <AdapterTable adapters={query.data.adapters} />
+
+          {/* B195: each adapter's staging, drawn by one schema-driven renderer. Rendered per
+              registered adapter rather than per vendor this file knows about — a vendor name
+              spelled here would be the knowledge the plugin boundary keeps out. */}
+          <div className="flex flex-col gap-section border-t border-line pt-section">
+            <h2 className="text-emphasis font-medium text-ink">Staging</h2>
+            {query.data.adapters.map((adapter) => (
+              <div key={adapter.vendor_id} className="flex flex-col gap-row">
+                <span className="font-mono text-body text-ink">{adapter.vendor_id}</span>
+                <StagingEditor vendorId={adapter.vendor_id} />
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>

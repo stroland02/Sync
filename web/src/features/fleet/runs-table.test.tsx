@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -22,6 +22,8 @@ function scopedRun(repoId: string | null): RunRow {
     run_id: "prod-run-9",
     current_node: null,
     outcome: "opened",
+    liveness: null,
+    last_heartbeat_at: null,
     abandon_reason: null,
     last_checkpoint_at: "2026-08-05T12:00:00Z",
   }
@@ -70,6 +72,8 @@ describe("RunsCard rehearsal discrimination", () => {
       run_id: "prod-run-1",
       current_node: null,
       outcome: "opened",
+      liveness: null,
+      last_heartbeat_at: null,
       abandon_reason: null,
       last_checkpoint_at: "2026-08-05T12:00:00Z",
     }
@@ -81,6 +85,8 @@ describe("RunsCard rehearsal discrimination", () => {
       run_id: "rehearsal-2026-08-05",
       current_node: null,
       outcome: "reported",
+      liveness: null,
+      last_heartbeat_at: null,
       abandon_reason: null,
       last_checkpoint_at: "2026-08-05T12:00:00Z",
     }

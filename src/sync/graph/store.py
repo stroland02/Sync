@@ -2899,6 +2899,75 @@ class GraphStore:
             ],
         )
 
+    def begin_run_heartbeat(self, thread_id: str, *, expire_after_secs: int = 90) -> None:
+        """Open (or re-open, on resume) the heartbeat row for one run.
+
+        A resumed thread reuses its row: the previous generation's `stopped_at` or
+        `expired_at` describes a process that is over, and carrying either into a run that is
+        executing right now would report the new process through the old one's death.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO run_heartbeat (thread_id, expire_after_secs)
+            VALUES (%s, %s)
+            ON CONFLICT (thread_id) DO UPDATE SET
+               started_at = now(),
+               last_heartbeat_at = now(),
+               expire_after_secs = EXCLUDED.expire_after_secs,
+               stopped_at = NULL,
+               expired_at = NULL
+            """,
+            [thread_id, expire_after_secs],
+        )
+
+    def heartbeat_run(self, thread_id: str) -> None:
+        """The tick. Idempotent and tiny on purpose: it runs on a timer from a worker thread."""
+        self._connect().execute(
+            "UPDATE run_heartbeat SET last_heartbeat_at = now() WHERE thread_id = %s",
+            [thread_id],
+        )
+
+    def stop_run_heartbeat(self, thread_id: str) -> None:
+        """The clean exit, whatever the outcome -- an abandoned run still exited cleanly."""
+        self._connect().execute(
+            "UPDATE run_heartbeat SET stopped_at = now() WHERE thread_id = %s",
+            [thread_id],
+        )
+
+    def expire_stale_heartbeats(self) -> list[str]:
+        """Record EXPIRED for every run whose heartbeats stopped with no clean exit.
+
+        Read-triggered rather than a daemon: this deployment is local-first and owns no
+        supervisor, so the sweep runs when runs are read -- which is exactly when the answer
+        is about to be shown to somebody. The transition is recorded, not computed per read:
+        `expired_at` is written once and the moment it happened survives.
+        """
+        rows = self._connect().execute(
+            """
+            UPDATE run_heartbeat
+               SET expired_at = now()
+             WHERE stopped_at IS NULL
+               AND expired_at IS NULL
+               AND last_heartbeat_at < now() - make_interval(secs => expire_after_secs)
+            RETURNING thread_id
+            """
+        ).fetchall()
+        return [row["thread_id"] for row in rows]
+
+    def run_heartbeats(self, thread_ids: list[str]) -> dict[str, dict]:
+        """The heartbeat rows for these threads, keyed by thread id. Absent is a fact."""
+        if not thread_ids:
+            return {}
+        rows = self._connect().execute(
+            """
+            SELECT thread_id, started_at, last_heartbeat_at, stopped_at, expired_at
+              FROM run_heartbeat
+             WHERE thread_id = ANY(%s)
+            """,
+            [thread_ids],
+        ).fetchall()
+        return {row["thread_id"]: dict(row) for row in rows}
+
     def record_intake_attempt(self, attempt: IntakeAttempt) -> str:
         """Persist one intake attempt record.
 

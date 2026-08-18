@@ -155,6 +155,7 @@ def runs(
         )
         for row in rows
     ]
+    _annotate_liveness(items, store)
     consumed = offset + len(items)
     by_disposition = _grouped(
         [row["outcome"] if row["outcome"] in _FINISHED else None for row in outcome_rows]
@@ -166,6 +167,41 @@ def runs(
         "by_disposition": by_disposition,
         "unfiltered_total": len(outcome_rows),
     }
+
+
+def _annotate_liveness(items: list[dict], store: GraphStore | None) -> None:
+    """Attach what the heartbeat table knows about each in-flight run (B194).
+
+    The sweep runs first, so EXPIRED is a recorded transition read back rather than a verdict
+    computed per request -- `expired_at` is written once and the moment survives.
+
+    Four answers, and none is guessed: `alive` (a heartbeat inside the window), `expired` (the
+    sweep recorded that heartbeats stopped with no clean exit -- for an in-flight run, a process
+    that exited without finishing earns the same word, because from outside the two read
+    identically and both mean nobody is working on this run), `unmonitored` (no row: the run
+    predates the table), and `null` on a terminal run, where liveness is not a question.
+    """
+    if store is None:
+        for item in items:
+            item["liveness"] = None if item["outcome"] is not None else "unmonitored"
+            item["last_heartbeat_at"] = None
+        return
+
+    store.expire_stale_heartbeats()
+    beats = store.run_heartbeats([item["thread_id"] for item in items])
+    for item in items:
+        beat = beats.get(item["thread_id"])
+        item["last_heartbeat_at"] = (
+            beat["last_heartbeat_at"].isoformat() if beat is not None else None
+        )
+        if item["outcome"] is not None:
+            item["liveness"] = None
+        elif beat is None:
+            item["liveness"] = "unmonitored"
+        elif beat["expired_at"] is not None or beat["stopped_at"] is not None:
+            item["liveness"] = "expired"
+        else:
+            item["liveness"] = "alive"
 
 
 def _grouped(values: list) -> dict:
