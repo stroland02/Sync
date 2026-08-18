@@ -39,6 +39,7 @@ from sync.forge.webhook import (
     record_merge_outcome,
 )
 from sync.graph.store import DEFAULT_DSN, GraphStore
+from sync.index.codebase import _resolve_repo_ref, index_codebase
 from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
@@ -2286,6 +2287,62 @@ def reconcile_pull_requests(args: argparse.Namespace) -> int:
     return 0
 
 
+def index_repository(args: argparse.Namespace) -> int:
+    """Index one checkout on disk and write its call sites into the graph.
+
+    **The offline half of `run`, and the reason it exists separately.** `run --repo` takes a git
+    remote and clones it, which needs `gh` and a credential; somebody meeting Sync for the first
+    time has a directory and neither. Without this the console renders perfectly and holds
+    nothing -- `/api/repositories` answers with an empty list, which is not a bug in any screen.
+
+    **No vendor needs to be staged and no network is reached.** A vendor that cannot be resolved
+    from a local cache is skipped and named in the log rather than served by a stand-in. That is
+    only safe because the stand-in is gone: it used to answer `operation_for_symbol` by deriving
+    an operation id from the symbol's own words, so this command would have filled the graph with
+    call sites bound to operations no vendor has.
+
+    The pass is recorded whether it finishes or not, so the Overview can say *when the index last
+    ran and what it found* rather than inferring it from rows that exist either way.
+    """
+    repo_path = Path(args.repo).expanduser()
+    if not repo_path.is_dir():
+        print(f"no directory at {repo_path}", file=sys.stderr)
+        return 2
+
+    store = GraphStore(args.dsn)
+    # Every other command does this, and this one needs it most: `sync index` is the first thing
+    # somebody runs against a database that has never held anything, so the tables it writes to
+    # may not exist yet. A unit test with a fake store cannot see that -- only a real database
+    # can, which is why one is in the test beside it.
+    store.apply_schema()
+    started_at = datetime.now(timezone.utc)
+    repo_id = _resolve_repo_ref(repo_path).repo_id
+    store.start_index_run(repo_id, started_at=started_at)
+    try:
+        report = index_codebase(repo_path, store=store, cache_dir=Path(args.cache))
+    except Exception:
+        store.fail_index_run(
+            repo_id, started_at=started_at, at=datetime.now(timezone.utc), outcome="failed"
+        )
+        raise
+
+    store.finish_index_run(
+        repo_id,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+        call_sites=len(report.call_sites),
+    )
+
+    print(f"indexed {report.repo.repo_id}: {len(report.call_sites)} call sites")
+    if report.vendors:
+        print(f"  vendors: {', '.join(report.vendors)}")
+    if report.unread_paths:
+        # Named rather than counted: a file the index could not read is a gap in the answer, and
+        # a number alone leaves a reader unable to tell which part of their codebase is missing.
+        print(f"  unread: {', '.join(report.unread_paths)}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The whole command surface, built without parsing anything.
 
@@ -2311,6 +2368,19 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--run-id", dest="run_id", default=None,
                             help="checkpoint namespace; defaults to the cloned commit")
     run_parser.set_defaults(func=run)
+
+    index_parser = sub.add_parser(
+        "index", help="index a checkout on disk and write its call sites into the graph"
+    )
+    index_parser.add_argument(
+        "--repo", required=True,
+        help="path to a checkout on disk. A path rather than a remote, because `run` already "
+             "takes the remote and this is the command somebody runs before they have "
+             "credentials",
+    )
+    index_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    index_parser.add_argument("--cache", default=".cache/specs")
+    index_parser.set_defaults(func=index_repository)
 
     ingest_parser = sub.add_parser(
         "ingest", help="fold a captured OTLP/JSON payload into the observed-call graph"

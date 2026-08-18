@@ -1068,6 +1068,11 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/cli.py::_model_deprecations::Exception",
     "sync/cli.py::_parameter_deprecations::Exception",
     "sync/cli.py::_scan::Exception",
+    # Wraps the whole index pass in `sync index` so a run that dies closes its `index_run`
+    # row with a terminal state instead of leaving it open forever. Re-raises immediately
+    # and decodes nothing itself; the reads that can meet undecodable bytes are inside
+    # `index_codebase`, which names `UnicodeDecodeError` and records the path.
+    "sync/cli.py::index_repository::Exception",
     # Wraps the whole index pass so a run that dies closes its `index_run` row with a
     # terminal state instead of leaving it open forever. It re-raises immediately and
     # decodes nothing itself -- the reads that can produce undecodable bytes are inside
