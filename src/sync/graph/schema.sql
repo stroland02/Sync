@@ -567,7 +567,15 @@ CREATE INDEX IF NOT EXISTS intake_attempt_vendor_idx ON intake_attempt (vendor_i
 -- default. A read surface can only offer that filter because the finding is still there.
 CREATE TABLE IF NOT EXISTS finding_dismissal (
     id           BIGSERIAL PRIMARY KEY,
-    finding_id   TEXT NOT NULL REFERENCES finding (id) ON DELETE CASCADE,
+    -- Deliberately NOT a foreign key to `finding`, and no other durable table has one either.
+    -- `finding` is re-derived: a scan truncates it and writes it again. A FK here both blocks
+    -- that truncate outright (`cannot truncate a table referenced in a foreign key constraint`)
+    -- and, with the cascade, would delete every dismissal a human recorded on every index run --
+    -- silently undoing the one thing decision 45 exists to preserve. Finding ids are stable
+    -- across re-derivation, because `insert_finding` hashes
+    -- (detector, call_site_id, vendor_change_id, claim), so the key still names the same finding
+    -- after the row is rebuilt. `tests/test_scan_preserves_durable_rows.py` is what caught it.
+    finding_id   TEXT NOT NULL,
     -- NULL means this row un-dismissed the finding. A reason is required to dismiss and
     -- meaningless to restore, and `record_dismissal` enforces the pairing.
     reason       TEXT,
