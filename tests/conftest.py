@@ -60,6 +60,16 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 import red_run_capture
+import shutil
+
+# The one marker for the one condition three files used to skip on separately -- the collapse
+# `test_lint_test_skips.py` recorded as owed once a third `node is absent` skip arrived. These
+# suites execute the installer's own JavaScript because asserting a phrase appears in the file
+# would pass on a source that never reaches the branch printing it.
+requires_node = pytest.mark.skipif(
+    shutil.which("node") is None,
+    reason="node is absent from this machine; these execute the installer's own JavaScript",
+)
 
 DEFAULT_DSN = "postgresql://sync:sync@localhost:5433/sync"
 ADMIN_DBNAME = "postgres"

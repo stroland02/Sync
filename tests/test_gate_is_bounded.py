@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -278,13 +279,19 @@ def test_the_wait_for_a_recovering_database_is_bounded():
 # --- the container side: an absent runtime is a skip, and it says so ----------------
 
 
+@pytest.mark.skipif(
+    shutil.which("docker") is None,
+    reason="docker is absent from this machine, so there is no reachable daemon to be the positive control",
+)
 def test_a_reachable_docker_daemon_reports_no_reason_to_skip():
     """The positive control, and without it the test below proves nothing.
 
     A probe that answered "unavailable" unconditionally would pass the unreachable case and
     silently convert three container tests into permanent skips -- the shape
-    `.claude/rules/test-discipline.md` calls a test that cannot fail. This machine runs Docker
-    Desktop, so the honest answer here is `None`.
+    `.claude/rules/test-discipline.md` calls a test that cannot fail. On a machine that runs
+    Docker the honest answer is `None`; on one that cannot ever run it -- no admin rights
+    closes every container runtime on Windows, measured 2026-08-18 -- the control has nothing
+    to be positive about, and the negative cases below still hold the probe's shape.
     """
     assert conftest.docker_unavailable_reason() is None
 

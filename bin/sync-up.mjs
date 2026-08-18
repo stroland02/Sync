@@ -136,6 +136,26 @@ export function unrecordedClusterVerdict({ dataDirExists, serving }) {
 }
 
 /**
+ * The settings that hold the embedded cluster to what the shipped database runs.
+ *
+ * Measured before this existed: a hand-built cluster inherited the machine's timezone from
+ * `initdb` and full durability, so timestamptz views rendered correct instants in `-05:00` and
+ * the test suite crawled on immediate fsyncs. The compose files run UTC with durability traded
+ * for speed because everything in a dev database is rebuilt by a seed; the embedded cluster is
+ * held to the same trade, adopted or created, or the two environments disagree about rendered
+ * time and wall-clock cost while both are correct.
+ */
+export function parityStatements() {
+  return [
+    "ALTER SYSTEM SET timezone TO 'UTC'",
+    "ALTER SYSTEM SET log_timezone TO 'UTC'",
+    "ALTER SYSTEM SET fsync TO off",
+    "ALTER SYSTEM SET synchronous_commit TO off",
+    "SELECT pg_reload_conf()",
+  ]
+}
+
+/**
  * The command that installs Docker on this platform, and whether the doorbell may run it.
  *
  * Measured on the first fresh-clone run anybody did: the refusal said Docker was missing and
@@ -446,6 +466,15 @@ async function runNoAdmin() {
     mustRun("Seeding the console", "uv", ["run", "python", "scripts/seed_console.py"], { cwd: REPO_ROOT })
   } else {
     process.stdout.write("The existing database is kept exactly as it is. Nothing was seeded.\n")
+  }
+
+  // Settings, not data: rows are never touched here. Idempotent by construction, so an
+  // adopted cluster pays a no-op and a drifted one is brought back without a restart.
+  process.stdout.write("Holding the cluster to the shipped database settings: UTC, durability traded for speed.\n")
+  for (const statement of parityStatements()) {
+    mustRun("Applying database settings", pgBin("psql"), [
+      "-p", String(PG_PORT), "-U", "sync", "-d", "sync", "-v", "ON_ERROR_STOP=1", "-q", "-c", statement,
+    ])
   }
 
   writeInstallRecord(lockDigest)

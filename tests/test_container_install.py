@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = REPO_ROOT / "docker-compose.demo.yml"
 DOCKERFILE = REPO_ROOT / "Dockerfile"
@@ -175,6 +177,7 @@ def _node() -> str | None:
         (0, 0, ""),
     ],
 )
+@conftest.requires_node
 def test_a_missing_docker_and_a_stopped_docker_are_told_apart(cli_status, daemon_status, expected):
     """Two failures that read identically to a newcomer and want different answers.
 
@@ -188,9 +191,6 @@ def test_a_missing_docker_and_a_stopped_docker_are_told_apart(cli_status, daemon
     and calls it with both probe results.
     """
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ dockerDiagnosis }} from {DOORBELL.as_uri()!r};"
         f"const r = dockerDiagnosis({{status: {cli_status}}}, {{status: {daemon_status}}});"
@@ -223,8 +223,6 @@ def test_a_missing_docker_and_a_stopped_docker_are_told_apart(cli_status, daemon
 
 def _run_check() -> subprocess.CompletedProcess:
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell itself")
     return subprocess.run(
         [node, str(DOORBELL), "--check"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
@@ -232,6 +230,7 @@ def _run_check() -> subprocess.CompletedProcess:
     )
 
 
+@conftest.requires_node
 def test_the_check_reports_what_an_install_would_do_rather_than_what_it_did():
     """Every action is framed as a `would`, because none of it is implemented.
 
@@ -244,6 +243,7 @@ def test_the_check_reports_what_an_install_would_do_rather_than_what_it_did():
     assert "would:" in result.stdout
 
 
+@conftest.requires_node
 def test_the_check_states_what_is_not_built_every_time():
     """Stated unconditionally rather than only when something is missing.
 
@@ -258,6 +258,7 @@ def test_the_check_states_what_is_not_built_every_time():
     assert "never had this repository" in stdout
 
 
+@conftest.requires_node
 def test_the_check_never_prints_an_absence_as_a_value():
     """`runs Python null` was real output from the first version of this command.
 
@@ -334,6 +335,7 @@ def test_the_pnpm_commands_hand_over_to_things_that_exist():
         ("linux", "get.docker.com", False),
     ],
 )
+@conftest.requires_node
 def test_each_platform_gets_its_own_docker_install_command(platform, fragment, runnable):
     """`CI-W452`, measured on the first fresh-clone run anybody did: the refusal said Docker
     was missing and left the reader to a browser. A terminal that can say `winget install`
@@ -344,9 +346,6 @@ def test_each_platform_gets_its_own_docker_install_command(platform, fragment, r
     is printed for the reader to run themselves.
     """
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ dockerInstallCommand }} from {DOORBELL.as_uri()!r};"
         f"console.log(JSON.stringify(dockerInstallCommand({platform!r})));"
@@ -363,13 +362,11 @@ def test_each_platform_gets_its_own_docker_install_command(platform, fragment, r
     assert verdict["runnable"] is runnable
 
 
+@conftest.requires_node
 def test_the_missing_docker_refusal_prints_the_install_command_for_this_platform():
     """The refusal and the installer must agree, and the reader gets both: the URL for a
     person who wants to see what they are installing, the command for one who already knows."""
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ dockerDiagnosis, dockerInstallCommand }} from {DOORBELL.as_uri()!r};"
         "const d = dockerDiagnosis({status: 1}, {status: 0}, 'win32');"
@@ -404,6 +401,7 @@ def test_the_missing_docker_refusal_prints_the_install_command_for_this_platform
     "platform, expected_ok",
     [("win32", True), ("darwin", False), ("linux", False)],
 )
+@conftest.requires_node
 def test_no_admin_is_windows_first_and_says_so_elsewhere(platform, expected_ok):
     """Windows is where the no-admin wall is real: enabling any VM feature is elevated, so a
     user without admin has no container runtime at all. macOS and Linux have user-space routes
@@ -411,9 +409,6 @@ def test_no_admin_is_windows_first_and_says_so_elsewhere(platform, expected_ok):
     person it claims to rescue -- refused with directions instead, `B191` carries building it.
     """
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ noAdminSupport }} from {DOORBELL.as_uri()!r};"
         f"console.log(JSON.stringify(noAdminSupport({platform!r})));"
@@ -439,6 +434,7 @@ def test_no_admin_is_windows_first_and_says_so_elsewhere(platform, expected_ok):
         (False, False, "fresh", ""),
     ],
 )
+@conftest.requires_node
 def test_a_cluster_the_installer_never_recorded_is_adopted_rather_than_clobbered(
     data_dir_exists, serving, expected_action, fragment
 ):
@@ -449,9 +445,6 @@ def test_a_cluster_the_installer_never_recorded_is_adopted_rather_than_clobbered
     a genuinely absent directory is a first run.
     """
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ unrecordedClusterVerdict }} from {DOORBELL.as_uri()!r};"
         f"const r = unrecordedClusterVerdict({{dataDirExists: {str(data_dir_exists).lower()}, "
@@ -471,14 +464,12 @@ def test_a_cluster_the_installer_never_recorded_is_adopted_rather_than_clobbered
         assert fragment in verdict["message"]
 
 
+@conftest.requires_node
 def test_the_missing_docker_refusal_offers_the_no_admin_path():
     """The reader most likely to meet this refusal is the reader who cannot act on it: no
     admin rights means no Docker, no matter how clearly the install command is printed. The
     refusal names the path that needs none."""
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ dockerDiagnosis }} from {DOORBELL.as_uri()!r};"
         "console.log(JSON.stringify(dockerDiagnosis({status: 1}, {status: 0}, 'win32')));"
@@ -497,7 +488,37 @@ def test_the_missing_docker_refusal_offers_the_no_admin_path():
     )
 
 
+@conftest.requires_node
+def test_the_embedded_cluster_is_held_to_the_shipped_database_settings():
+    """`CI-W454`, measured before it was written: a hand-built cluster inherited the machine's
+    timezone from `initdb` and full durability, so five view tests failed on `-05:00` renderings
+    of correct instants and the suite crawled on `DataFileImmediateSync`. The shipped database
+    (`docker-compose.yml`, both files) runs UTC with `fsync=off` and `synchronous_commit=off`
+    because everything in it is rebuilt by a seed. The no-admin cluster is held to the same
+    settings, whether adopted or created -- parity is the contract, not a default."""
+    node = _node()
+    script = (
+        f"import {{ parityStatements }} from {DOORBELL.as_uri()!r};"
+        "console.log(JSON.stringify(parityStatements()));"
+    )
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, f"the doorbell would not load: {result.stderr}"
+
+    statements = json.loads(result.stdout.strip())
+    text = " ".join(statements).lower()
+    for setting, value in (("timezone", "utc"), ("fsync", "off"), ("synchronous_commit", "off")):
+        assert setting in text and value in text, (
+            f"the parity statements do not pin {setting}; the next hand-built cluster drifts "
+            "exactly the way the first one did"
+        )
+
+
 @pytest.mark.parametrize("source_tree_present, expected_ok", [(True, True), (False, False)])
+@conftest.requires_node
 def test_a_registry_install_without_the_source_tree_is_refused_with_directions(
     source_tree_present, expected_ok
 ):
@@ -511,9 +532,6 @@ def test_a_registry_install_without_the_source_tree_is_refused_with_directions(
     phrase asserted against the source passes even when no branch prints it.
     """
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the doorbell's own JavaScript")
-
     script = (
         f"import {{ sourceTreeDiagnosis }} from {DOORBELL.as_uri()!r};"
         f"const r = sourceTreeDiagnosis({str(source_tree_present).lower()});"

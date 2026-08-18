@@ -115,10 +115,10 @@ def test_repository_is_clean() -> None:
 
 
 def test_current_skip_sites_are_a_pinned_baseline() -> None:
-    """Fifteen skip sites exist in this tree today, and every one is accepted on purpose.
+    """Seventeen skip sites exist in this tree today, and every one is accepted on purpose.
 
-    A count rather than a name-by-name list, because the point is not which fifteen -- it is
-    that a sixteenth arriving silently is impossible: this test goes red until whoever
+    A count rather than a name-by-name list, because the point is not which seventeen -- it is
+    that an eighteenth arriving silently is impossible: this test goes red until whoever
     added it either states a qualifying reason or takes the count up deliberately.
 
     Ten held before `tests/test_console_design_tokens.py`; that file added two, both naming
@@ -158,23 +158,22 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     author later. That is twice now, so the guard is earning its place rather than merely
     existing.
 
-    The eighteenth is `tests/test_embedded_postgres.py`, added by `CI-W445`, and it is the
-    absent-toolchain shape rather than the absent-console one: it executes the installer's own
-    JavaScript through `node`, for the same reason `test_container_install.py` does -- asserting
-    that a phrase appears in the file would pass on a source that never reaches the branch
-    printing it. **Raised in the same change that added the skip**, which is the pairing this
-    baseline exists to force and which the two paragraphs above record being missed twice.
+    The count *fell* for the first time on 2026-08-18, and that is the recorded remedy being
+    paid rather than coverage disappearing. The eighteenth, nineteenth and twentieth were all
+    one sentence -- *node is absent* -- across `test_embedded_postgres.py` (`CI-W445`),
+    `test_python_bootstrap.py` (`CI-W446`) and `test_container_install.py` (`CI-W449`), and the
+    paragraph recording the twentieth said whoever next touched this file owed a shared marker.
+    `conftest.requires_node` is that marker, and the collapse also swallowed six more sites of
+    the same sentence that `CI-W451`-`CI-W453` had added to `test_container_install.py` in the
+    meantime, which is what brought the debt due. One honest cost, stated rather than hidden:
+    the marker's own `skipif` lives in `conftest.py`, which the linter's `test_*.py` glob does
+    not scan, so its reason is held to the vocabulary by convention rather than by the gate.
 
-    The nineteenth is `tests/test_python_bootstrap.py`, added by `CI-W446`, and it is the
-    eighteenth's twin: decision 98's half of the zero-prerequisite install, executed through
-    `node` for the same reason. Two skips for one installer is the shape to watch -- if a third
-    arrives, the right move is a shared marker rather than a third paragraph here.
-
-    **The twentieth is that third, and it arrived one work item later** -- a second `node` skip
-    inside `tests/test_container_install.py`, added by `CI-W449` so `--check` is executed rather
-    than read. The prediction above was right and the remedy is now owed: three skips saying
-    *node is absent* want one marker, and whoever next touches this file should collapse them.
-    Recorded rather than done, because close-out is not the moment to refactor a guard.
+    The seventeenth is `tests/test_gate_is_bounded.py`'s positive control, added with
+    `CI-W454`: it asserts a reachable Docker daemon probes as available, which on a machine
+    that can never run Docker -- no admin rights closes every container runtime on Windows --
+    has nothing to control for. The skip names the absent toolchain, and the count moved in
+    the same change that added it.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -182,7 +181,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 20, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 17, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 

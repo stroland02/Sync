@@ -25,6 +25,11 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
+# Whole-module, because every test here executes the module's JavaScript through `_call`.
+pytestmark = conftest.requires_node
+
 MODULE = Path(__file__).resolve().parents[1] / "bin" / "embedded-postgres.mjs"
 
 WANTED = "16.4"
@@ -36,9 +41,6 @@ def _node() -> str | None:
 
 def _call(expression: str) -> dict:
     node = _node()
-    if node is None:
-        pytest.skip("node is absent from this machine, and this executes the installer's own JavaScript")
-
     script = (
         f"import * as m from {MODULE.as_uri()!r};"
         f"console.log(JSON.stringify({expression}));"
