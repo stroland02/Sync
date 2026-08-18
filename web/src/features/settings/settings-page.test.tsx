@@ -14,6 +14,15 @@ import { SettingsPage } from "@/features/settings/settings-page"
 
 afterEach(cleanup)
 
+/** Decision 17's order, verbatim. */
+const SETTINGS_GROUP_ORDER = [
+  "Codebases",
+  "Pull requests",
+  "Adapters",
+  "Connection",
+  "About",
+] as const
+
 function renderSettings(initialEntry = "/settings") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const adapterData: AdapterInventoryResponse = {
@@ -73,12 +82,34 @@ describe("SettingsPage sub-navigation and setting cards", () => {
     expect(screen.getByRole("button", { name: /Pull requests/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /Codebases/i })).toBeTruthy()
     expect(screen.getByRole("button", { name: /Adapters/i })).toBeTruthy()
-    expect(screen.getByRole("button", { name: /GitHub Connection/i })).toBeTruthy()
-    expect(screen.getByRole("button", { name: /About Sync/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /Connection/i })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /About/i })).toBeTruthy()
+  })
+
+  /**
+   * Decision 17 names the groups in an order, and the order is the decision. Asserted on the
+   * rendered sequence rather than on the constant, so reordering the constant without reordering
+   * the nav cannot pass.
+   */
+  it("orders the groups as decision 17 names them", () => {
+    renderSettings()
+    const labels = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent ?? "")
+      .filter((text) => SETTINGS_GROUP_ORDER.some((label) => text.startsWith(label)))
+      .map((text) => SETTINGS_GROUP_ORDER.find((label) => text.startsWith(label)))
+
+    expect(labels).toEqual([...SETTINGS_GROUP_ORDER])
+  })
+
+  it("opens on Codebases, the group decision 17 names first", async () => {
+    renderSettings()
+    expect(await screen.findByText("Project Context (.sync/context.md)")).toBeTruthy()
   })
 
   it("renders Pull requests settings with merge policy, method, branch cards and refusal notice", async () => {
     renderSettings()
+    fireEvent.click(screen.getByRole("button", { name: /Pull requests/i }))
     expect(await screen.findByText("Merge Policy")).toBeTruthy()
     expect(screen.getByText("Merge Method")).toBeTruthy()
     expect(screen.getByText("Base Branch")).toBeTruthy()
@@ -99,7 +130,7 @@ describe("SettingsPage sub-navigation and setting cards", () => {
 
   it("renders GitHub Connection group with local gh CLI status and OAuth absence note", async () => {
     renderSettings()
-    const githubBtn = screen.getByRole("button", { name: /GitHub Connection/i })
+    const githubBtn = screen.getByRole("button", { name: /Connection/i })
     fireEvent.click(githubBtn)
 
     expect(await screen.findByText("Forge Authentication (Local CLI)")).toBeTruthy()
@@ -119,7 +150,7 @@ describe("SettingsPage sub-navigation and setting cards", () => {
 
   it("renders About Sync group with platform documentation and explanations", async () => {
     renderSettings()
-    const aboutBtn = screen.getByRole("button", { name: /About Sync/i })
+    const aboutBtn = screen.getByRole("button", { name: /About/i })
     fireEvent.click(aboutBtn)
 
     expect(await screen.findByText("About Sync & Platform Concepts")).toBeTruthy()
