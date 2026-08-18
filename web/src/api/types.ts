@@ -490,6 +490,14 @@ export type RunDisposition = "opened" | "abandoned" | "reported"
 export interface RunRow {
   thread_id: string
   finding_id: string
+  /**
+   * The repository this run's finding belongs to, or `null` when the checkpoint does not name
+   * one. The transport has always carried it (`sync.dashboard.fleet._run_row`); this type omitted
+   * it, so every screen built links without it and sent readers to an address the router does not
+   * serve. `null` is a run whose repository is genuinely unknown — a scoped link cannot be built
+   * for it, and guessing would point at another workspace's finding.
+   */
+  repo_id: string | null
   run_id?: string | null
   current_node: string | null
   outcome: RunDisposition | null
