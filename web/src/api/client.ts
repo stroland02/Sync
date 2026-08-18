@@ -175,6 +175,34 @@ export function fetchVendorFindings(
  * Deliberately unpaged. The console used to derive this from a page of `fetchVendorChanges` and
  * print the result as the vendor's total, which moved when a reader paginated.
  */
+/**
+ * `GET /api/repositories/{repo_id}/findings` -- every open finding in one workspace.
+ *
+ * The same page shape the vendor level reads, narrowed by workspace instead of by vendor. The
+ * route has existed since the transport was written; nothing called it, because the only hook
+ * for this payload required a vendor id, so the console had no way to ask *what is broken here*.
+ *
+ * The workspace is a path segment rather than a query parameter, matching the route registry:
+ * scope stated twice is scope free to disagree with itself.
+ */
+export function fetchWorkspaceFindings(
+  repoId: string,
+  params: VendorFindingsParams,
+  signal?: AbortSignal,
+): Promise<VendorFindingsPage> {
+  const path = withQueryParams(
+    `/api/repositories/${encodeURIComponent(repoId)}/findings`,
+    {
+      limit: params.limit,
+      offset: params.offset,
+      severity: params.severity,
+      path: params.path,
+      order: params.order,
+    },
+  )
+  return getJson<VendorFindingsPage>(path, signal)
+}
+
 export function fetchVendorChangeVolume(
   vendorId: string,
   signal?: AbortSignal,
