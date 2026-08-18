@@ -583,7 +583,14 @@ CREATE TABLE IF NOT EXISTS finding_dismissal (
     -- be attributed to is not reviewable, and the point of keeping history is that a reader can
     -- ask who decided.
     actor        TEXT NOT NULL,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- The natural key `CLAUDE.md` requires of every table, with the conflict clause on the insert.
+    -- One person dismissing one finding at one instant is ONE event however many times the write
+    -- is replayed -- a retry after a dropped connection must not leave a second row and make the
+    -- history report a decision taken twice. It does not collapse a real change of mind: a
+    -- restore, or a second dismissal, happens at a different instant and is its own row.
+    UNIQUE (finding_id, actor, created_at)
 );
 
 CREATE INDEX IF NOT EXISTS finding_dismissal_latest_idx

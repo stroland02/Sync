@@ -1366,7 +1366,7 @@ class GraphStore:
             connection.close()
 
     def record_dismissal(
-        self, finding_id: str, *, reason: str | None, actor: str
+        self, finding_id: str, *, reason: str | None, actor: str, at: datetime | None = None
     ) -> None:
         """Dismiss a finding with a reason, or restore it by passing `reason=None`.
 
@@ -1389,9 +1389,17 @@ class GraphStore:
                 "dismissals needs a schema that can answer the question, and free text cannot "
                 "be aggregated."
             )
+        # `at` is the instant the decision was taken, and it is the third member of the natural
+        # key. A caller that supplies it gets idempotency: replaying the same write converges
+        # rather than recording the decision twice. Omitted, it is now(), so two genuine clicks
+        # stay two rows -- the key must not collapse a real change of mind.
         self._connect().execute(
-            "INSERT INTO finding_dismissal (finding_id, reason, actor) VALUES (%s, %s, %s)",
-            (finding_id, reason, actor),
+            """
+            INSERT INTO finding_dismissal (finding_id, reason, actor, created_at)
+                 VALUES (%s, %s, %s, COALESCE(%s, now()))
+            ON CONFLICT (finding_id, actor, created_at) DO UPDATE SET reason = EXCLUDED.reason
+            """,
+            (finding_id, reason, actor, at),
         )
 
     def dismissal_state(self, finding_id: str) -> dict:

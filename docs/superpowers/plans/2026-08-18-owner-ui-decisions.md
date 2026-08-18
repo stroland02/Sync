@@ -935,3 +935,44 @@ closest existing seam. **The Settings group from decision 74 becomes its interfa
 rule applies as to the webhook — **the screen names the environment variable and never accepts the
 key.** Self-hosting (decision 89) makes this straightforward, because the credential never leaves the
 customer's infrastructure.
+
+## Round twenty-one: decisions 93-96
+
+**93. The `observed` rung comes from reading the customer's existing APM.** Datadog and Sentry
+adapters already exist in `signals/`. **Sync installs nothing in their application** — it reads spans
+they already collect. **Rejected: an OTLP receiver**, and **rejected: both.**
+
+`RequestCorrelator` is the protocol that joins a span to a call site, and it is already one of the
+six. The credential is an environment variable named on screen and never accepted by a form, as with
+the webhook and the model key.
+
+**94. A workspace is a package that calls a vendor, not a repository.** In a monorepo of twelve
+packages where three call vendors, there are three workspaces. **Rejected: one workspace for the
+whole repo**, and **rejected: packages as a filter axis.**
+
+**This changes what a workspace *is*, and reconciles with decision 44 in one sentence: you add a
+codebase, and Sync derives the workspaces from it.** `Add workspace` in the switcher means *point
+Sync at a repository*; what appears afterwards is discovered by the index, not chosen. **A package
+with no vendor calls is not an empty workspace — it is not a workspace**, and the difference matters
+because an empty workspace would read as *nothing found here* rather than *nothing to watch here*.
+
+**Consequence for routing**: workspace identity becomes repository plus package, so
+`/repositories/:repoId` is no longer a sufficient scope key. That is a real change to `routes.ts` and
+to every scoped API route.
+
+**95. GitHub OAuth, with identity recorded.** **Rejected: no auth**, and **rejected: a single shared
+token.**
+
+**This is what fills the column decision 45 already specified.** That decision's grain says one row
+is one dismissal *by one person* at one time; until now nothing could populate the person.
+Self-hosted means the customer registers their own OAuth app, so the client secret lives in their
+environment exactly like every other credential here.
+
+**96. The Wednesday path is the whole loop: install → index → canvas → finding → workflow → pull
+request.** **Rejected: leading with the graph alone**, and **rejected: opening cold on a finding.**
+
+**This is the most demanding of the three and it makes the beta gates the demo rather than a
+scoreboard beside it.** Step 6 is a pull request that a run actually opened — which is `B7`, which
+has never produced a CI-green pull request, which is why Gates 1 and 2 read NOT MET and CANNOT TELL.
+**The demo path and the gate list are now the same list.** Step 2 needs the event bus wired, which
+is Gate 4's newest dead link. Nothing here is decorative.

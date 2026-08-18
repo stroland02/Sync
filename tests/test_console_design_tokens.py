@@ -399,6 +399,22 @@ _ANIMATION_FREE_ROOTS = ("features", "layouts", "components", "api", "lib")
 # root's own `_WEB_SRC / name`, so it reads "ui/" here rather than "components/ui/".
 _ANIMATION_EXCLUDE_PREFIX = {"components": "ui/"}
 
+# The two vendored catalogs, as prefixes relative to `web/src`. `vendor/supabase/` is the carve-out
+# in `.claude/rules/interface-originality.md`; `components/ui/` is the shadcn catalog the keyframe
+# guard above already excludes by the same argument -- restyling a vendored file is out of scope
+# for the task that copies it in, and a guard that fails on somebody else's defaults reports a
+# decision nobody here made. Owner ruling, 2026-08-18, on three guards red on `main`.
+#
+# One tuple rather than a prefix repeated per guard: a fact written twice disagrees with itself,
+# and the disagreement here would be a guard quietly covering less than its neighbour.
+_VENDORED_PREFIXES = ("vendor/supabase/", "components/ui/")
+
+
+def _is_vendored(path: Path, root: Path) -> bool:
+    relative = path.relative_to(root).as_posix()
+    return any(relative.startswith(prefix) for prefix in _VENDORED_PREFIXES)
+
+
 
 def test_no_keyframes_or_animation_shorthand_outside_the_component_catalog():
     _require_web_src()
@@ -500,10 +516,10 @@ def _enclosing_class_string(text: str, position: int) -> str:
     return text[start + 1 : end]
 
 
-def _geometry_transition_violations(root: Path, exclude_prefix: str | None = None) -> list[str]:
+def _geometry_transition_violations(root: Path, *, skip_vendored: bool = False) -> list[str]:
     violations = []
     for path in _iter_source_files(root):
-        if exclude_prefix is not None and path.relative_to(root).as_posix().startswith(exclude_prefix):
+        if skip_vendored and _is_vendored(path, root):
             continue
         text = _read_stripped(path)
         for match in _GEOMETRY_TRANSITION.finditer(text):
@@ -517,11 +533,9 @@ def _geometry_transition_violations(root: Path, exclude_prefix: str | None = Non
 def test_nothing_transitions_geometry_anywhere():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    # `vendor/supabase/` is vendored nearly verbatim under the Supabase carve-out
-    # (.claude/rules/interface-originality.md) -- excluded by path for the same reason
-    # `components/ui/` is excluded from the keyframe guard above. Restyling a vendored file
-    # is out of scope for the task that copies it in; that happens outside this directory.
-    violations = _geometry_transition_violations(_WEB_SRC, exclude_prefix="vendor/supabase/")
+    # Both vendored catalogs are excluded by path -- see `_VENDORED_PREFIXES`. Restyling a
+    # vendored file is out of scope for the task that copies it in.
+    violations = _geometry_transition_violations(_WEB_SRC, skip_vendored=True)
     assert not violations, (
         "a sanctioned fade is not a geometry change, so opacity is not banned here -- transform, "
         "translate, scale and box-shadow are what a claim about motion is made of, and "
@@ -1001,9 +1015,11 @@ def test_the_weight_guard_permits_the_three_weights_the_console_spends(tmp_path:
 _RING_WITH_ALPHA = re.compile(r"(?<![\w-])focus(?:-visible)?\]?:ring-([a-z-]+)/(\d{1,3})(?![\w-])")
 
 
-def _ring_alpha_violations(root: Path) -> list[str]:
+def _ring_alpha_violations(root: Path, *, skip_vendored: bool = False) -> list[str]:
     violations = []
     for path in _iter_source_files(root):
+        if skip_vendored and _is_vendored(path, root):
+            continue
         text = _read_stripped(path)
         for match in _RING_WITH_ALPHA.finditer(text):
             violations.append(
@@ -1017,7 +1033,9 @@ def _ring_alpha_violations(root: Path) -> list[str]:
 def test_no_focus_ring_is_washed_by_an_alpha_modifier():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    violations = _ring_alpha_violations(_WEB_SRC)
+    # `ring-ring/50` is shadcn's own default and arrives with the catalog; excluded by path for
+    # the same reason the geometry guard excludes it.
+    violations = _ring_alpha_violations(_WEB_SRC, skip_vendored=True)
     assert not violations, (
         "a focus ring at partial strength is a contrast figure nobody computed and nobody can "
         "read off the class name -- render the token, and argue the token in DESIGN.md:\n"
