@@ -857,6 +857,7 @@ def test_overview_summary_with_no_findings_is_empty_not_an_error(store):
             "unresolved": 0,
             "unattributed": 0,
         },
+        "last_index_run": None,
         "context_savings": 0,
         "context_savings_bound_reached": False,
         "repositories": [],
@@ -2278,3 +2279,55 @@ def test_the_burst_cost_of_per_call_site_events_is_measured_rather_than_assumed(
     # benchmark that fails on a slow machine. `written`/`drained_in` go in the register.
     assert drained_in < 30.0
     print(f"\nburst: {count} events written in {written:.2f}s, drained in {drained_in:.2f}s")
+
+
+class TestOverviewLastIndexRun:
+    """Decision 41's fact, on the screen it has to be readable from.
+
+    A toast may announce "Index finished, 1,204 call sites" but must never be the only place it
+    exists. `index_run` records it; this is what puts it on `/api/overview`, where somebody who
+    missed the toast can still read it a minute later.
+    """
+
+    def test_a_repository_never_indexed_reports_no_pass(self, store):
+        # Absence, not a zeroed row. Never-indexed and indexed-and-found-nothing are the
+        # distinction this console keeps apart everywhere else.
+        assert overview_summary(store, repo_id="r1")["last_index_run"] is None
+
+    def test_a_completed_pass_carries_its_count_and_its_outcome(self, store):
+        store.start_index_run("r1", started_at=SEEN)
+        store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=1204)
+
+        run = overview_summary(store, repo_id="r1")["last_index_run"]
+
+        assert run["outcome"] == "completed"
+        assert run["call_sites"] == 1204
+        assert run["finished_at"] == SEEN.isoformat()
+
+    def test_a_pass_still_running_reports_no_count_rather_than_nought(self, store):
+        store.start_index_run("r1", started_at=SEEN)
+
+        run = overview_summary(store, repo_id="r1")["last_index_run"]
+
+        # In flight is the fourth state: not finished, not failed, not absent. A count here would
+        # be a partial one rendered as the size of the codebase.
+        assert run["outcome"] is None
+        assert run["finished_at"] is None
+        assert run["call_sites"] is None
+
+    def test_a_pass_that_died_says_so_rather_than_looking_unfinished(self, store):
+        store.start_index_run("r1", started_at=SEEN)
+        store.fail_index_run("r1", started_at=SEEN, at=SEEN, outcome="failed")
+
+        run = overview_summary(store, repo_id="r1")["last_index_run"]
+
+        assert run["outcome"] == "failed"
+
+    def test_the_fleet_scope_reports_no_pass_because_a_pass_is_one_repositorys(self, store):
+        store.start_index_run("r1", started_at=SEEN)
+        store.finish_index_run("r1", started_at=SEEN, finished_at=SEEN, call_sites=9)
+
+        # `repo_id=None` is the fleet, and an index pass belongs to one repository. Reporting
+        # some repository's pass under a fleet heading would be the same false attribution
+        # `codebases-panel` printed one total under every card.
+        assert overview_summary(store)["last_index_run"] is None
