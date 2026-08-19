@@ -9,7 +9,7 @@ from claude_agent_sdk import ResultMessage
 from sync.core import CallSite, Finding, Remediator, RepoRef, VendorChange
 from sync.remediate import agent_patch
 from sync.remediate.agent_patch import AgentRemediator, build_patch_prompt
-from sync.runner import ALLOWED_TOOLS, DISALLOWED_TOOLS, MODEL, ClaudeSdkRunner, StaticRunner, claude_sdk
+from sync.runner import ALLOWED_TOOLS, DISALLOWED_TOOLS, ClaudeSdkRunner, StaticRunner, claude_sdk
 
 SITE = CallSite(
     repo_id="r1", path="src/billing.ts", line=6, col=8, vendor_id="stripe",
@@ -58,6 +58,18 @@ FINDING = Finding(
     severity="breaking", rationale="status removed from PostCharges",
 )
 
+
+@pytest.fixture(autouse=True)
+def _connected_provider(monkeypatch):
+    """A provider, because the runner now refuses without one.
+
+    Owner ruling, 2026-08-19: a deployment that configures nothing must not spend whoever
+    installed it, so `ClaudeSdkRunner` raises rather than defaulting. Every test here drives that
+    runner, so every test has to connect a model -- which is also the honest shape, since a run
+    with no model connected is not a run.
+    """
+    monkeypatch.setenv("SYNC_MODEL", "claude-opus-5")
+    monkeypatch.setenv("SYNC_MODEL_API_KEY", "test-key-not-a-real-credential")
 
 def _line(prompt: str, prefix: str) -> str:
     """The prompt line carrying a labelled fact, so a test can assert on that fact
@@ -355,7 +367,10 @@ def test_run_agent_configures_the_repo_cwd_and_the_pinned_model(monkeypatch, tmp
     options = captured["options"]
     assert captured["prompt"] == "do the patch"
     assert options.cwd == tmp_path
-    assert options.model == MODEL
+    # There is no default model any more: a deployment that configures nothing must not
+    # spend whoever installed it (owner ruling, 2026-08-19), so the runner drives whatever the
+    # user connected and this asserts the wiring rather than a constant.
+    assert options.model == "claude-opus-5"
     assert options.thinking == {"type": "adaptive"}
     assert options.effort == "xhigh"
     assert options.allowed_tools == ALLOWED_TOOLS

@@ -20,6 +20,7 @@ import { PullRequestsSettingsPanel } from "@/features/settings/pull-requests-set
 import { CodebasesSettingsPanel } from "@/features/settings/codebases-settings-panel"
 import { GithubConnectionSettingsPanel } from "@/features/settings/github-connection-settings-panel"
 import { AdaptersSettingsPanel } from "@/features/settings/adapters-settings-panel"
+import { ModelSettingsPanel } from "@/features/settings/model-settings-panel"
 import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
 import { IntegrationsCataloguePanel } from "@/features/settings/integrations-catalogue-panel"
 import { PagesGuidePanel } from "@/features/settings/pages-guide-panel"
@@ -28,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export type SettingsGroup =
   | "setup"
+  | "model"
   | "pull-requests"
   | "codebases"
   | "adapters"
@@ -56,6 +58,14 @@ const SETTING_GROUPS: readonly GroupDef[] = [
     id: "setup",
     label: "Setup",
     description: "The full loop's prerequisites, probed — and the git remote it addresses",
+  },
+  // Second, immediately after Setup: it is the one prerequisite the checklist cannot probe its
+  // way past, because a deployment with no model connected writes no patch and the owner's
+  // ruling is that Sync never inherits the installer's credential to hide that.
+  {
+    id: "model",
+    label: "Model",
+    description: "Which model writes the patches, and whose credential pays — yours, never ours",
   },
   {
     id: "codebases",
@@ -174,6 +184,7 @@ export function SettingsPage() {
           {selectedGroup === "setup" && (
             <SetupPanel repoId={activeRepo} />
           )}
+          {selectedGroup === "model" && <ModelSettingsPanel />}
           {selectedGroup === "pull-requests" && (
             <PullRequestsSettingsPanel repoId={activeRepo} />
           )}

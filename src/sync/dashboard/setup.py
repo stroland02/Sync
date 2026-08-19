@@ -204,17 +204,39 @@ def _model_item() -> dict:
     Settings screen that 500s because an environment variable is wrong is worse than one that says
     which variable and why.
     """
-    from sync.runner.provider import UnusableProvider, resolve_provider
+    from sync.runner.provider import (
+        API_KEY_VAR,
+        BASE_URL_VAR,
+        MODEL_VAR,
+        UnusableProvider,
+        resolve_provider,
+    )
 
     try:
         provider = resolve_provider()
     except UnusableProvider as exc:
-        return {"kind": "unusable", "model": None, "base_url": None, "detail": str(exc)}
+        return {
+            "kind": "unusable",
+            "model": None,
+            "base_url": None,
+            "has_credential": False,
+            "usable": False,
+            "detail": str(exc),
+            "variables": {"model": MODEL_VAR, "base_url": BASE_URL_VAR, "api_key": API_KEY_VAR},
+        }
     return {
         "kind": provider.kind,
         "model": provider.model,
         "base_url": provider.base_url,
+        # Whether one is present, never the value. `CLAUDE.md`: we never hold customer secrets,
+        # unqualified -- and a payload carrying a key would put it in every browser cache.
+        "has_credential": provider.has_credential,
+        "usable": provider.usable,
         "detail": provider.describe(),
+        "blocked_because": provider.blocked_because,
+        # The variable names, so the screen can tell an operator what to set without a second
+        # copy of them living in TypeScript.
+        "variables": {"model": MODEL_VAR, "base_url": BASE_URL_VAR, "api_key": API_KEY_VAR},
     }
 
 

@@ -127,7 +127,7 @@ export function VendorDistributionCard({ repoId }: { repoId: string }) {
             <EmptyState
               headline="No vendor is at risk."
               detail="The API answered, and the graph holds no open findings. That is a result, not a failure — nothing indexed is currently broken, drifting, or wasting money."
-          command="uv run sync scan --repo-id <repo>"
+          command="uv run sync run --repo <git-remote> --vendor <vendor> --from-version <a> --to-version <b>"
             />
           ) : (
             <>

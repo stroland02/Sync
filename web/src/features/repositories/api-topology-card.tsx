@@ -103,7 +103,7 @@ export function ApiTopologyCard({ repoId }: { repoId: string }) {
       <EmptyState
         headline="No API surface to describe yet."
         detail="These figures are counted over indexed call sites, and this codebase has none. That is the absence of an index pass rather than a codebase that calls nothing."
-          command={`uv run sync index --repo-id ${repoId}`}
+          command={`uv run sync index --repo ${repoId}`}
       />
     )
   }

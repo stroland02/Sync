@@ -57,7 +57,7 @@ export function RepositoriesCard() {
             <EmptyState
               headline="The index has seen no repository."
               detail="The API answered, and no call site in the graph names a repository. That is an answer, not a failure — either nothing has been indexed yet, or nothing indexed carries a repository identifier."
-          command="uv run sync index --repo-id <repo>"
+          command="uv run sync index --repo <git-remote>"
             />
           ) : (
             <>

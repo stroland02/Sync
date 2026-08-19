@@ -75,7 +75,7 @@ export function IndexCoverageCard({ repoId }: { repoId: string }) {
             <EmptyState
               headline={`The index holds no call site for ${repoId}.`}
               detail="This repository was never indexed, or it was indexed and nothing bound to a vendor was found. Those are the same answer here: the index has no configuration table, so a repository it has never seen a call site from is indistinguishable from one nobody ever configured."
-          command={`uv run sync index --repo-id ${repoId}`}
+          command={`uv run sync index --repo ${repoId}`}
             />
           ) : (
             <>

@@ -444,7 +444,7 @@ function CodebaseFactsBody() {
         <EmptyState
           headline="The index has seen no repository."
           detail="This band states facts about one codebase, and there is none to state them about. A repository configured but never indexed writes no call site, so it has no entry here — that is absence, not a codebase with nothing in it."
-          command="uv run sync index --repo-id <repo>"
+          command="uv run sync index --repo <git-remote>"
         />
       )
     case "unselected":
@@ -459,7 +459,7 @@ function CodebaseFactsBody() {
         <EmptyState
           headline="The index has never seen this repository."
           detail={`Every scoped route answers ${scope.repoId} with a legitimate zero, and six zeros nobody measured is the claim this band exists to refuse. Choose a repository the index holds.`}
-          command={`uv run sync index --repo-id ${scope.repoId}`}
+          command={`uv run sync index --repo ${scope.repoId}`}
         />
       )
     case "only":

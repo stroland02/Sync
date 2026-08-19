@@ -70,7 +70,7 @@ export function AbandonReasonsCard() {
         <EmptyState
           headline="No attempt has been abandoned."
           detail="The corpus was read and holds no abandoned repair attempt. This is a count of nought rather than a question nobody asked — but it is also a young corpus, so it will stay sparse for a while and that is the corpus rather than the chart."
-          command="uv run sync run --repo-id <repo> --vendor <vendor> --from-version <a> --to-version <b>"
+          command="uv run sync run --repo <git-remote> --vendor <vendor> --from-version <a> --to-version <b>"
         />
       ) : (
         <div className="flex flex-col gap-field">

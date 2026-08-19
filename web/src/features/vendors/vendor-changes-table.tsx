@@ -94,7 +94,7 @@ export function VendorChangesCard({
         <EmptyState
           headline={`Nothing recorded for ${vendorId}.`}
           detail="The API answered with an empty page. Either no feed has been ingested for this vendor, or it has published nothing Sync tracks."
-          command="uv run sync scan --repo-id <repo>"
+          command="uv run sync run --repo <git-remote> --vendor <vendor> --from-version <a> --to-version <b>"
         />
       ) : (
         <div className="flex flex-col gap-section">

@@ -17,7 +17,6 @@ to build by forgetting one.
 
 from sync.runner.claude_sdk import (
     ALLOWED_TOOLS,
-    DEFAULT_MODEL as MODEL,
     DISALLOWED_TOOLS,
     ClaudeSdkRunner,
     configured_model,
@@ -42,7 +41,6 @@ __all__ = [
     "ASK_HUMAN_SCHEMA",
     "ClaudeSdkRunner",
     "DISALLOWED_TOOLS",
-    "MODEL",
     "configured_model",
     "OUTCOME_TOOL_SCHEMAS",
     "OutcomeToolValidator",

@@ -31,7 +31,7 @@ export function AdapterCoverageChart({ adapters }: { adapters: readonly AdapterR
       <EmptyState
         headline="No adapter is registered."
         detail="The inventory answered with an empty list, so there is nothing to count by tier. This is a read that found nothing, not a read that did not happen."
-          command="uv run sync adapters"
+          command="uv run sync intake --vendor <vendor>"
       />
     )
   }

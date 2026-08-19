@@ -65,7 +65,7 @@ export function TierOutcomesCard() {
         <EmptyState
           headline="No repair attempt has been recorded."
           detail="The corpus holds no attempt at any tier, so there is no cascade to draw. This table cannot be backfilled — every attempt processed before it existed is gone — so an empty chart here means nothing has run yet rather than that nothing was kept."
-          command="uv run sync run --repo-id <repo> --vendor <vendor> --from-version <a> --to-version <b>"
+          command="uv run sync run --repo <git-remote> --vendor <vendor> --from-version <a> --to-version <b>"
         />
       ) : (
         <div className="flex flex-col gap-field">

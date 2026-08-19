@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, ResultMessage, query
 
-from sync.runner.provider import DEFAULT_MODEL, resolve_provider
+from sync.runner.provider import require_provider
 
 # The default, and the only model spend in the product: this runner is the patch agent, and no
 # other code path here calls a model. `SYNC_MODEL` overrides it so a deployment can point at a
@@ -32,12 +32,13 @@ from sync.runner.provider import DEFAULT_MODEL, resolve_provider
 
 
 def configured_model() -> str:
-    """The model this runner will drive.
+    """The model this runner will drive, or a refusal if none is connected.
 
-    Kept as a function because callers and tests import it; `sync.runner.provider` is where the
-    decision now lives, so the model and the endpoint cannot be resolved by two different rules.
+    `sync.runner.provider` owns the decision so the model, the endpoint and the credential cannot
+    be resolved by three different rules. This raises rather than defaulting: the owner's ruling
+    of 2026-08-19 is that a deployment configuring nothing must not spend whoever installed it.
     """
-    return resolve_provider().model
+    return require_provider().model or ""
 
 # ClaudeAgentOptions has no raw max_tokens knob -- the SDK manages its own
 # multi-turn budget -- so the project's max_tokens=64000 binding does not
@@ -76,6 +77,27 @@ SETTING_SOURCES: list[str] = []
 HookFactory = Callable[[str, list[str]], dict[str, list[Any]]]
 
 
+def _subprocess_env(provider) -> dict[str, str]:
+    """What the SDK's subprocess needs, and nothing else.
+
+    An explicit mapping rather than a partial one: naming `ANTHROPIC_API_KEY` here with the user's
+    own key is what stops the subprocess falling back to whatever credential happens to be in the
+    operator's environment -- the inheritance the provider module exists to prevent, arriving
+    through the back door.
+    """
+    import os
+
+    from sync.runner.provider import API_KEY_VAR
+
+    env: dict[str, str] = {}
+    if provider.base_url:
+        env["ANTHROPIC_BASE_URL"] = provider.base_url
+    key = (os.environ.get(API_KEY_VAR) or "").strip()
+    if key:
+        env["ANTHROPIC_API_KEY"] = key
+    return env
+
+
 class ClaudeSdkRunner:
     """Drives the Claude Agent SDK until it stops, and raises unless it stopped cleanly."""
 
@@ -94,7 +116,7 @@ class ClaudeSdkRunner:
         # A hook cannot abandon a run -- an exception raised inside one is answered to the
         # CLI, not to this frame -- so the caller's hooks record their refusals here instead.
         refusals: list[str] = []
-        provider = resolve_provider()
+        provider = require_provider()
         options = ClaudeAgentOptions(
             cwd=repo_path,
             model=provider.model,
@@ -107,7 +129,11 @@ class ClaudeSdkRunner:
             # rather than through an option field, because the SDK has none: `sandbox.py`
             # records `options.env` as the channel. An empty mapping when nothing is
             # configured, so a default deployment passes nothing rather than an empty base URL.
-            env=({"ANTHROPIC_BASE_URL": provider.base_url} if provider.base_url else {}),
+            # The user's own credential and endpoint reach the SDK's CLI subprocess through the
+            # environment, because the SDK has no option field for either -- `sandbox.py` records
+            # `options.env` as the channel. **The key is passed, never stored**: it is read from
+            # the operator's environment at call time and lives nowhere in this process.
+            env=_subprocess_env(provider),
             hooks={
                 event: [HookMatcher(matcher=None, hooks=callbacks)]
                 for event, callbacks in self._hooks_for(identity, refusals).items()
