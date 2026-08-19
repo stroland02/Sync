@@ -862,6 +862,18 @@ export interface DetectorAccountabilityResponse {
   /** The repository this roll-up covers, or `null` for the fleet. See `OverviewResponse`. */
   repo_id: string | null
   detectors: DetectorRow[]
+  /**
+   * Every open finding counted once by the rung behind it, across all detectors — not the sum
+   * of the per-detector `by_rung` maps, which double-count nothing but answer a different
+   * question (per detector, rather than over the scope).
+   *
+   * **Every rung in the vocabulary is a key even at nought**, because `detector_accountability`
+   * seeds the tally from `FINDING_RUNGS` rather than from the rows it found. So a rung missing
+   * here is a defect, where in almost every other payload on this console a missing key is an
+   * absence. Declared late: the route has always sent it and this type did not say so, which is
+   * the drift `console-dev-loop.md` warns a green build cannot catch.
+   */
+  by_rung: Record<string, number>
   total_open_findings: number
 }
 

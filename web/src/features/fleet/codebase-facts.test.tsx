@@ -87,6 +87,14 @@ function detectorsPayload(rows: DetectorAccountabilityResponse["detectors"]): De
   return {
     repo_id: "org/one",
     detectors: rows,
+    // Folded from the rows rather than written flat, so a fixture cannot claim a scope-wide
+    // rung tally its own detectors do not support.
+    by_rung: rows.reduce<Record<string, number>>((tally, row) => {
+      for (const [rung, count] of Object.entries(row.by_rung)) {
+        tally[rung] = (tally[rung] ?? 0) + count
+      }
+      return tally
+    }, {}),
     total_open_findings: rows.reduce((sum, row) => sum + row.total, 0),
   }
 }

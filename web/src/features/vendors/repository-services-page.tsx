@@ -44,6 +44,7 @@ import {
 } from "@/components/data-table"
 import { KpiStrip } from "@/components/kpi-strip"
 import { RankedBars } from "@/components/ranked-bars"
+import { IndexFreshness } from "@/features/vendors/index-freshness"
 import { Absent, Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Badge } from "@/vendor/supabase/ui/badge"
@@ -168,6 +169,12 @@ export function RepositoryServicesPage() {
             .sort((a, b) => b.value - a.value)}
           unit="call sites"
         />
+      )}
+
+      {/* Dashboard N3, beside the call-site ranking: what the index bound, and when it last
+          looked. Two questions about the same pass, and neither answers the other. */}
+      {scopeMatches && coverageState.kind === "ready" && Object.keys(lastIndexed).length > 0 && (
+        <IndexFreshness lastIndexed={lastIndexed} />
       )}
 
       {coverageState.kind === "unrouted" && (

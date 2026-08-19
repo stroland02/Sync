@@ -47,6 +47,7 @@ import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
 import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { DismissedTally } from "@/features/findings/dismissed-tally"
+import { FindingsKpis } from "@/features/findings/findings-kpis"
 import { ErrorState, LoadingState } from "@/components/states"
 import { MetricPanel } from "@/components/metric-panel"
 import {
@@ -201,6 +202,11 @@ function FindingsBody({
             }
 
   return (
+    <>
+      {/* Dashboard F1, above the triage control: what the tabs and the table do not carry --
+          how many detectors stood behind the answer, and when this workspace was last indexed.
+          The second is what makes an empty table readable as clean rather than as unchecked. */}
+      <FindingsKpis page={page} detectorNames={detectorNames} />
     <TriageTabs
       legend="Findings by kind"
       noun="open findings"
@@ -242,5 +248,6 @@ function FindingsBody({
         />
       </MetricPanel>
     </TriageTabs>
+    </>
   )
 }

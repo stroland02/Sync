@@ -58,6 +58,7 @@ import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
+import { DetectorsDashboards } from "@/features/detectors/detectors-dashboards"
 import { ControlBar } from "@/layouts/control-bar"
 
 
@@ -88,6 +89,11 @@ export function DetectorsPage() {
           </div>
         </ControlBar>
       </div>
+
+      {/* Dashboards D1 and D2. This screen carried one chart and a table; the strip says how much
+          was attributed and to how many detectors, and the ranking says which detector is loudest
+          -- which the rung chart beneath deliberately does not answer. */}
+      <DetectorsDashboards repoId={repoId} />
 
       {/* What the screen measures beside what it refuses to measure and what it cannot see. A
           reader who takes the rung breakdown as a ranking has misread the screen, and the column
