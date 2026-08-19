@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The indexing canvas, owner decision 8 (2026-08-18): a repository's own file tree, with an edge
  * from each file to the vendors its call sites bind -- `src/api/billing.ts ──▶ stripe`, framed as
  * the reader's own codebase rather than as Sync's internal model of it. Replaces

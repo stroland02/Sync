@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The API services one repository calls.
  *
  * The owner asked for *"an api services page that list all the different services"*. Two answers

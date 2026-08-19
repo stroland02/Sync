@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Signals: a catalogue of what is attached to one repository's graph, grouped by the role it plays.
  *
  * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:435` places this

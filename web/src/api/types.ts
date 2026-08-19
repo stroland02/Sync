@@ -425,6 +425,32 @@ export interface PatchResponse {
   absent_because: string | null
 }
 
+/**
+ * `GET /api/findings/{finding_id}/dismissal`.
+ *
+ * `dismissed: false` with a null reason is the same payload for a finding nobody has ever
+ * touched and for one that was dismissed and then restored -- the store's own docstring says
+ * so, and `history_count` is what tells them apart. A screen that renders the flag without the
+ * count states a true fact misleadingly, which is why the reader returns both.
+ */
+export interface DismissalState {
+  dismissed: boolean
+  reason: string | null
+  actor: string | null
+  history_count: number
+}
+
+/**
+ * `GET /api/findings/dismissals`.
+ *
+ * `counts` holds only reasons that occur. A reason absent and a reason at nought are different
+ * claims and the query makes only the first, so a view must not render a missing key as a zero.
+ */
+export interface DismissalTally {
+  counts: Record<string, number>
+  total: number
+}
+
 export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null

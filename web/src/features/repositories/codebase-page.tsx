@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Codebase: the selected repository, and the root of everything beneath it.
  *
  * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:397` names this

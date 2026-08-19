@@ -43,8 +43,8 @@ import type { ReactNode } from "react"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { useFinding, useWorkflow } from "@/api/queries"
-import type { FindingDetail } from "@/api/types"
+import { useDismissal, useFinding, useWorkflow } from "@/api/queries"
+import type { DismissalState, FindingDetail } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -173,6 +173,7 @@ function findingFacts(
   data: FindingDetail | null,
   failure: ReactNode | null,
   remediation: RemediationState,
+  dismissal: DismissalState | null | "pending" | "failed",
 ): Fact[] {
   function fact(render: (found: FindingDetail) => ReactNode): ReactNode {
     if (data !== null) return render(data)
@@ -258,7 +259,56 @@ function findingFacts(
       value: fact((found) => <RungBadge rung={found.finding.binding_source} />),
     },
     { label: "Remediation", value: remediationFact(remediation) },
+    { label: "Standing", value: standingFact(dismissal) },
   ]
+}
+
+/**
+ * Whether a human has ruled on this finding, as the rail's last row.
+ *
+ * Read-only, on the owner's ruling of 2026-08-19: the route accepts a POST and this screen does
+ * not send one. What it owes is the standing, because without it a finding somebody deliberately
+ * set aside and a finding nobody has opened render as the same screen.
+ *
+ * **`history_count` is rendered whenever it is not one, in both branches.** The store's own
+ * docstring is explicit that `dismissed: false` covers "never touched" and "dismissed, then
+ * restored" alike, and those are different facts about how settled a judgement is. A count on the
+ * dismissed branch and none on the restored branch would hide the flip in exactly the direction
+ * that flatters the system.
+ *
+ * `<Absent>` on failure rather than silence: a rail row that disappears when a request fails
+ * reads as "nobody has dismissed this", which is a claim this screen would not have earned.
+ */
+function standingFact(dismissal: DismissalState | null | "pending" | "failed"): ReactNode {
+  if (dismissal === "pending") return <Pending />
+  if (dismissal === "failed") return <Absent>the API did not answer</Absent>
+  if (dismissal === null || !dismissal.dismissed) {
+    return (
+      <div className="flex flex-col gap-field">
+        <span>Open — nobody has dismissed this</span>
+        {dismissal !== null && dismissal.history_count > 0 && (
+          <span className="text-meta text-ink-muted">
+            Dismissed and restored {dismissal.history_count === 1 ? "once" : `${dismissal.history_count} times`} before
+            now. The current standing is open; the changes of mind are the history behind it.
+          </span>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-field">
+      <span>
+        Dismissed as <span className="font-mono">{dismissal.reason}</span>
+      </span>
+      <span className="text-meta text-ink-muted">
+        Recorded by <span className="font-mono">{dismissal.actor ?? "an actor the row did not name"}</span>
+        {dismissal.history_count > 1 && (
+          <> — one of {dismissal.history_count} rulings on this finding, and the one standing now.</>
+        )}
+        {dismissal.history_count <= 1 && <>. Dismissing is a command-line action; this console reads it.</>}
+      </span>
+    </div>
+  )
 }
 
 export interface FindingPageProps {
@@ -286,6 +336,14 @@ function FindingDetailPage({
 }) {
   const query = useFinding(findingId)
   const run = useWorkflow(findingId)
+  // Not gated on `query`: `finding_dismissal` is durable and `finding` is re-derived, so a
+  // finding this page 404s on can still carry a standing somebody recorded.
+  const dismissalQuery = useDismissal(findingId)
+  const dismissal: DismissalState | null | "pending" | "failed" = dismissalQuery.isPending
+    ? "pending"
+    : dismissalQuery.isError
+      ? "failed"
+      : dismissalQuery.data
   const remediation = describeRemediation({
     data: run.data,
     missing: run.isError && run.error instanceof NotFoundError,
@@ -321,7 +379,7 @@ function FindingDetailPage({
       rail={
         <div className="flex min-w-0 flex-col gap-section">
           <FactList
-            facts={findingFacts(repoId, findingId, query.isSuccess ? query.data : null, failure, remediation)}
+            facts={findingFacts(repoId, findingId, query.isSuccess ? query.data : null, failure, remediation, dismissal)}
           />
           <p className="text-body text-ink-muted">
             What this call site calls, and how the system knows it does.

@@ -109,9 +109,29 @@ def _web_sources(pattern: str) -> list[str]:
 
 
 def _fake_runs_reader(
-    *, repo_id: str | None = None, limit: int = 50, offset: int = 0
+    *, repo_id: str | None = None, limit: int = 50, offset: int = 0, outcome: str | None = None
 ) -> dict[str, Any]:
     return {"items": [], "total": 0, "next_offset": None}
+
+
+def _fake_page(rows: list[dict[str, Any]], limit: int, offset: int) -> dict[str, Any]:
+    """A page envelope that actually honours the cursor, so the guard can prove one."""
+    window = rows[offset : offset + limit]
+    nxt = offset + limit
+    return {"items": window, "total": len(rows), "next_offset": nxt if nxt < len(rows) else None}
+
+
+def _fake_call_sites_reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
+    rows = [{"path": "a.ts", "line": 1}, {"path": "b.ts", "line": 2}]
+    return {
+        **_fake_page(rows, kwargs.get("limit", 50) or 50, kwargs.get("offset", 0) or 0),
+        "vendors": [],
+    }
+
+
+def _fake_integration_changes_reader(**kwargs: Any) -> dict[str, Any]:
+    rows = [{"change_id": "c-1"}, {"change_id": "c-2"}]
+    return _fake_page(rows, kwargs.get("limit", 50) or 50, kwargs.get("offset", 0) or 0)
 
 
 def _fake_corpus_reader(*, repo_id: str | None = None) -> dict[str, Any]:
@@ -340,6 +360,7 @@ def _build_app(
     workflow_reader=lambda finding_id: None,
     patch_reader=lambda finding_id: None,
     dismissal_reader=lambda finding_id: {"dismissed": False, "reason": None, "actor": None, "history_count": 0},
+    dismissal_tally_reader=lambda: {"counts": {}, "total": 0},
     dismissal_writer=lambda finding_id, *, reason, actor: None,
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
@@ -363,6 +384,16 @@ def _build_app(
     context_reader=_fake_context_reader,
     context_writer=_fake_context_writer,
     findings_reader=None,
+    # The two paged routes that reach `create_app` as optional readers. Defaulted here because
+    # `_LIMIT_OFFSET_COLLECTIONS` names them, and a reader left at `None` answers 501 -- which
+    # the collection guard would report as a pagination failure rather than as an unconfigured
+    # deployment, sending the next reader after a cursor bug that is not there.
+    #
+    # Two rows rather than none, and the guard is why: it proves `limit` by asking for one item
+    # out of several, so a fixture offering nothing cannot distinguish a route that honours the
+    # cursor from one that ignores it. An empty fake would pass the shape check and prove nothing.
+    call_sites_reader=_fake_call_sites_reader,
+    integration_changes_reader=_fake_integration_changes_reader,
     settings_reader=_fake_settings_reader,
     settings_writer=_fake_settings_writer,
     api_password: str | None = None,
@@ -380,6 +411,7 @@ def _build_app(
         workflow_reader=workflow_reader,
         patch_reader=patch_reader,
         dismissal_reader=dismissal_reader,
+        dismissal_tally_reader=dismissal_tally_reader,
         dismissal_writer=dismissal_writer,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
@@ -402,6 +434,8 @@ def _build_app(
         change_units_reader=change_units_reader,
         context_reader=context_reader,
         context_writer=context_writer,
+        call_sites_reader=call_sites_reader,
+        integration_changes_reader=integration_changes_reader,
         findings_reader=findings_reader,
         settings_reader=settings_reader,
         settings_writer=settings_writer,
@@ -937,7 +971,9 @@ def test_repositories_route_returns_the_readers_payload_unaltered():
 def _recording_runs_reader():
     calls: list[dict[str, Any]] = []
 
-    def reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    def reader(
+        *, repo_id: str | None = None, limit: int = 50, offset: int = 0, outcome: str | None = None
+    ) -> dict[str, Any]:
         calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
@@ -1542,7 +1578,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         workflow_reads.append(finding_id)
         return {"nodes": [], "outcome": None, "abandon_reason": None}
 
-    def runs_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+    def runs_reader(
+        *, repo_id: str | None = None, limit: int = 50, offset: int = 0, outcome: str | None = None
+    ):
         runs_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
@@ -1608,6 +1646,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         workflow_reader=workflow_reader,
         patch_reader=lambda finding_id: None,
         dismissal_reader=lambda finding_id: {"dismissed": False, "reason": None, "actor": None, "history_count": 0},
+        dismissal_tally_reader=lambda: {"counts": {}, "total": 0},
         dismissal_writer=lambda finding_id, *, reason, actor: None,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
@@ -1787,6 +1826,14 @@ _LIMIT_OFFSET_COLLECTIONS = {
     # Every open finding grouped into a change unit (`sync.dashboard.fleet.change_units`) --
     # already page-shaped, and grows with the graph's own open findings.
     "/api/change-units",
+    # Every change every watched vendor has published, newest first. Grows with the vendors'
+    # own release cadence and with how long this deployment has been watching, so it is
+    # unbounded in exactly the way a feed is.
+    "/api/integration-changes",
+    # One repository's call sites. This is the largest collection the product has -- one row
+    # per place the codebase calls a vendor, which on a real customer repository is the raw
+    # material of the graph rather than a summary of it.
+    "/api/repositories/{repo_id:path}/call-sites",
 }
 
 # Two routes carry more than one paginated list on the same screen, and `_limit_param`'s own
@@ -1839,6 +1886,27 @@ _NOT_COLLECTIONS = {
     # payload rather than a list to page through -- what a reader needs is whether somebody
     # changed their mind, not every time they did.
     "/api/findings/{finding_id}/dismissal",
+    # A distribution over the closed dismissal-reason vocabulary, so it is bounded by that
+    # vocabulary rather than by how many findings exist -- the same argument the severity
+    # roll-up and `/api/findings/over-time` carry. Paging it would truncate the picture while
+    # looking complete.
+    "/api/findings/dismissals",
+    # A fixed checklist. `sync.dashboard.setup.setup_checklist` probes six prerequisites and
+    # returns six items -- the length is written in the module, not in the data.
+    "/api/setup",
+    # One repository's technical census: a handful of totals over its own tree. Bounded by the
+    # census's own shape rather than by how large the repository is.
+    "/api/repositories/{repo_id:path}/facts",
+    # One repository's API topology -- four counts and three short rankings, each already
+    # truncated by the query that builds it. Paging a ranking is what makes a top-five read as
+    # a whole distribution.
+    "/api/repositories/{repo_id:path}/topology",
+    # Every integration this deployment *can* watch, which is bounded by the adapters that
+    # exist in `sync.signals` rather than by anything the graph accumulates -- the same
+    # argument `/api/adapters` carries.
+    "/api/integrations",
+    # One adapter's staging configuration. A single record keyed by the vendor in the path.
+    "/api/adapters/{vendor_id}/staging",
     # One run's diff, not a page of them. The finding names the run, and a diff has no
     # second half to fetch.
     "/api/findings/{finding_id}/patch",
@@ -1985,7 +2053,7 @@ def test_every_collection_route_accepts_limit_and_offset():
         }
 
     def runs_reader(
-        *, repo_id: str | None = None, limit: int = 50, offset: int = 0
+        *, repo_id: str | None = None, limit: int = 50, offset: int = 0, outcome: str | None = None
     ) -> dict[str, Any]:
         return _paged(run_items, limit, offset)
 
@@ -2179,14 +2247,18 @@ def _normalized(path: str) -> str:
 # it the day its panel lands and `client.ts` fetches the path, so this set cannot quietly become
 # a place routes go to be exempted from the drift guard forever.
 _NOT_YET_FETCHED_BY_CONSOLE = {
-    # The write path exists; decision 45's console half -- dismissed findings staying listed
-    # and filtered out by default -- is a separate item.
-    "/api/findings/{param}/dismissal",
+    # `/api/findings/{param}/dismissal` was here and its receipt is spent: the Finding page's
+    # Standing row fetches it as of CI-W488. Only the GET is wired -- the owner ruled on
+    # 2026-08-19 that the console reads dismissals and never writes one -- and that is the
+    # ordinary state of a route this guard holds, because the guard reads fetched paths and
+    # is indifferent to method.
     "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
     "/api/repos/{param}/findings",
-    "/api/repositories/{param}/settings",
+    # `/api/repositories/{param}/settings` was here and its receipt is spent: the Settings
+    # screen's panels fetch it. It only ever looked unconsumed because this guard read
+    # `client.ts` alone and those panels own their own requests.
     "/api/repos/{param}/settings",
 }
 
@@ -2200,16 +2272,39 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED))
     app_paths = {_normalized(route.path) for route in app.routes}
 
-    source = _web_source("src/api/client.ts")
-    fetched_literals = re.findall(r'[`"](/api[^`"]*)[`"]', source)
-    # A streaming route is never read by `fetch`. It is opened with `new EventSource(...)`, and
-    # that call does not live in `client.ts` because an EventSource is a subscription with a
-    # lifetime rather than a request -- it belongs to the hook that owns it. Without this the
-    # guard would report a genuinely consumed route as unconsumed forever, and the exemption
-    # covering for it would become permanent, which is the rot the exemption set warns about.
-    for module in _web_sources("src/features/**/use-*.ts"):
-        fetched_literals += re.findall(r'`(/api[^`]*)`', module)
-    console_paths = {_normalized(literal) for literal in fetched_literals}
+    # **Every console source, not `client.ts` alone.** This read `client.ts` plus the streaming
+    # hooks, and seven routes landed fetched-but-invisible to it -- `/api/setup`, the census, the
+    # call-sites page, the changes feed, the catalogue, the topology and adapter staging are each
+    # fetched from the component that owns them rather than through the shared client, so the
+    # guard reported all seven as unconsumed and the failure read as missing panels that exist.
+    #
+    # The property this holds is that *the console* fetches what the app declares. Which module
+    # issues the request is a code-organisation question, and pinning the guard to one file made
+    # it answer a narrower question than its own name. Widening it is what lets the exemption set
+    # stay honest: an entry there now means nothing anywhere fetches the route.
+    #
+    # Tests are excluded because a fixture URL is not a consumer -- `seed-repo-a` and `org/x` are
+    # invented paths, and counting them would let a route be "consumed" by its own mock.
+    web_root = Path(__file__).resolve().parent.parent / "web"
+    if not web_root.is_dir():
+        pytest.skip("web/ is absent; this checkout carries no console")
+    fetched_literals: list[str] = []
+    for pattern in ("src/**/*.ts", "src/**/*.tsx"):
+        for path in sorted(web_root.glob(pattern)):
+            if ".test." in path.name:
+                continue
+            source = path.read_text(encoding="utf-8")
+            # Interpolations are collapsed *before* the literal is matched, not after. A template
+            # like `/api/.../${encodeURIComponent(repoId ?? "")}/graph` carries a quote inside the
+            # interpolation, so a regex looking for the closing backtick stops early and yields a
+            # truncated path that matches no route -- which the guard then reports as a path the
+            # console fetches and the app never declares. Collapsing first leaves a literal with
+            # no delimiter inside it.
+            source = re.sub(r"\$\{[^{}]*\}", "{param}", source)
+            fetched_literals += re.findall(r'[`"](/api[^`"]*)[`"]', source)
+    # A query string is not part of the route. `?repo_id=` is how a screen scopes a request and
+    # Starlette's path never carries it.
+    console_paths = {_normalized(literal.split("?", 1)[0]) for literal in fetched_literals}
 
     stale_exemptions = _NOT_YET_FETCHED_BY_CONSOLE - app_paths
     assert not stale_exemptions, (
@@ -2739,3 +2834,31 @@ def test_the_events_route_is_scoped_by_the_path_and_not_a_query_string():
         client.get("/api/repositories/org%2Fpayments/events")
 
     assert seen == ["org/payments"]
+
+
+def test_the_dismissal_tally_is_reachable_and_not_shadowed_by_the_finding_route():
+    """`/api/findings/dismissals` is a tally across findings, and it must be declared before
+    `/api/findings/{finding_id}`.
+
+    Starlette matches in declaration order, so a literal path under a segment that also has a
+    parameterised route is shadowed unless it is declared first -- `/api/findings/over-time`
+    already carries that constraint and this route inherits it. Shadowing would not error: the
+    finding route would answer with a 404 for a finding called "dismissals", which reads as
+    "no such finding" rather than as a routing mistake.
+    """
+    seen: list[bool] = []
+
+    def reader():
+        seen.append(True)
+        return {"counts": {"wont_fix": 2}, "total": 2}
+
+    app = _build_app(
+        surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
+        dismissal_tally_reader=reader,
+    )
+
+    response = TestClient(app).get("/api/findings/dismissals")
+
+    assert seen == [True], "the finding route shadowed the tally"
+    assert response.status_code == 200
+    assert response.json() == {"counts": {"wont_fix": 2}, "total": 2}

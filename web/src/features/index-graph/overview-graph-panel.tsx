@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The dependency graph the Overview draws.
  *
  * Owner decision 2 puts this panel beside the fact tiles on the first screen, which makes it not

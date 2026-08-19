@@ -18,6 +18,8 @@ import type {
   ChangeUnitsPage,
   CorpusSummary,
   DetectorAccountabilityResponse,
+  DismissalState,
+  DismissalTally,
   FindingDetail,
   IndexCoverageResponse,
   NotFoundBody,
@@ -271,6 +273,39 @@ export function fetchWorkflow(
   signal?: AbortSignal,
 ): Promise<WorkflowState> {
   return getJson<WorkflowState>(`/api/workflows/${encodeURIComponent(findingId)}`, signal)
+}
+
+/**
+ * Whether a human has dismissed this finding, and how often that has flipped.
+ *
+ * Read-only from the console, on the owner's ruling of 2026-08-19: the route accepts a POST and
+ * this client does not send one, so dismissing stays a CLI action. What the console owes is the
+ * standing, because a finding somebody dismissed and a finding nobody has looked at render
+ * identically without it.
+ *
+ * `finding_dismissal` is durable and `finding` is re-derived, so this answers for a finding the
+ * finding route 404s on. That is the same independence `fetchWorkflow` has from the graph, and
+ * the view must not gate this query on the finding query succeeding.
+ */
+export function fetchDismissal(
+  findingId: string,
+  signal?: AbortSignal,
+): Promise<DismissalState> {
+  return getJson<DismissalState>(
+    `/api/findings/${encodeURIComponent(findingId)}/dismissal`,
+    signal,
+  )
+}
+
+/**
+ * Dismissed findings across the graph, tallied by the reason standing against each.
+ *
+ * Unscoped by repository, and that is the route rather than an omission here: `finding_dismissal`
+ * carries a finding id and no `repo_id`. The screen must say so rather than let a figure on a
+ * workspace-scoped page read as that workspace's.
+ */
+export function fetchDismissalTally(signal?: AbortSignal): Promise<DismissalTally> {
+  return getJson<DismissalTally>("/api/findings/dismissals", signal)
 }
 
 /**

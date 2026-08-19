@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Metrics: the workspace's measured trends, in one place — the owner's naming scheme of
  * 2026-08-18 gives charts their own rail entry beside Findings' list.
  *

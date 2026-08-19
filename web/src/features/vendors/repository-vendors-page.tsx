@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The vendors attached to one repository — integration grid and table view.
  *
  * The owner's instruction was a vendors page listing *"all the vendors part of that codebase"*, at

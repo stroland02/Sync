@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The codebase map: a force-directed graph of files, the operations they call, and the
  * integrations behind them. Owner ruling, 2026-08-18 — d3-force is the map's layout.
  *

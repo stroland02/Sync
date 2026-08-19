@@ -135,6 +135,20 @@ def app_factory() -> Starlette:
         state = store.dismissal_state(finding_id)
         return {**state, "history_count": store.dismissal_history_count(finding_id)}
 
+    def dismissal_tally_reader():
+        """Dismissed findings by reason, with the total the console renders beside them.
+
+        The total is summed here rather than counted separately so the two cannot disagree: a
+        second query would count at a different instant, and a tally whose parts do not add to
+        its total is the kind of wrong that reads as a rounding artefact.
+
+        `counts` carries only reasons that occur, and the store's docstring is explicit that a
+        reason absent and a reason at nought are different claims it cannot make. The console
+        must not render an absent reason as a zero.
+        """
+        counts = store.dismissal_reason_counts()
+        return {"counts": counts, "total": sum(counts.values())}
+
     def dismissal_writer(finding_id: str, *, reason, actor: str) -> None:
         store.record_dismissal(finding_id, reason=reason, actor=actor)
 
@@ -375,6 +389,7 @@ def app_factory() -> Starlette:
         workflow_reader=workflow_reader,
         patch_reader=patch_reader,
         dismissal_reader=dismissal_reader,
+        dismissal_tally_reader=dismissal_tally_reader,
         dismissal_writer=dismissal_writer,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,

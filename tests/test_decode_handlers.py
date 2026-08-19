@@ -1142,8 +1142,24 @@ _GUARDS_A_READ = (
     # `ValueError` on a reason outside the closed vocabulary, from a string already in memory.
     # It needs no decode handler and could never produce one.
     "sync/api/app.py::create_app.set_dismissal::ValueError",
+    # `set_staging` is the same two-clause shape as `set_dismissal` above and the reasoning
+    # transfers exactly: the first guards `await request.json()`, a boundary read that can meet
+    # bytes that are not UTF-8, and `body must be JSON` is the true answer to a malformed
+    # encoding as much as to malformed syntax; the second guards `staging_writer`, which
+    # validates a dict already in memory and reads nothing.
+    "sync/api/app.py::create_app.set_staging::ValueError",
     "sync/api/app.py::create_app.set_repo_context::ValueError",
     "sync/api/app.py::create_app.set_settings::ValueError",
+    # Two reads of `provenance.json` out of the vendor cache, each `json.loads` over a
+    # `read_text(encoding="utf-8")`. Undecodable bytes ARE reachable -- the file is written by an
+    # adapter staging run and a truncated or half-written one is exactly what this guards -- and
+    # subsuming is deliberate in both. Neither caller is reporting on the file: `_staged` answers
+    # "is this vendor staged, and at what tag" and `_vendor_cache_item` builds a setup-checklist
+    # line. A provenance file that cannot be decoded and one that is not valid JSON are the same
+    # answer to both questions, which is "staged, tag unknown" -- and that is what they return
+    # rather than a failure, because an unreadable tag does not unstage an adapter.
+    "sync/dashboard/catalog.py::_staged::OSError+ValueError",
+    "sync/dashboard/setup.py::_vendor_cache_item::OSError+ValueError",
     "sync/cli.py::benchmark::KeyError+LookupError+ValueError",
     "sync/index/python_lang.py::PythonAdapter._syntax_errors::ValueError",
 )

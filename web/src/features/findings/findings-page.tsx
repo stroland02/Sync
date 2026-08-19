@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Findings: what is broken in this workspace.
  *
  * **The console did not have this screen.** Five destinations sat in the rail — Overview, API
@@ -46,6 +46,7 @@ import { useDetectors, useWorkspaceFindings } from "@/api/queries"
 import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
 import { PageTabs, metricsTabs } from "@/components/page-tabs"
+import { DismissedTally } from "@/features/findings/dismissed-tally"
 import { ErrorState, LoadingState } from "@/components/states"
 import { MetricPanel } from "@/components/metric-panel"
 import {
@@ -97,6 +98,12 @@ export function FindingsPage() {
         <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
+
+      {/* What a human has already ruled on, beside what is still open. The table below lists
+          open findings only, so without this a finding somebody deliberately set aside reads
+          as one nobody has looked at. It states its own fleet scope, which is why it can sit
+          on a workspace-scoped screen at all. */}
+      <DismissedTally />
 
       {query.isPending || detectors.isPending ? (
         <LoadingState what={`open findings in ${repoId}`} />

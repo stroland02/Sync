@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Settings → Pages: how each screen works, in its long form.
  *
  * Owner direction, 2026-08-18: the screens themselves keep the data and the load-bearing

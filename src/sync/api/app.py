@@ -53,6 +53,11 @@ PatchReader = Callable[[str], Optional[dict[str, Any]]]
 
 # Whether a finding stands dismissed, and how many times somebody has changed their mind.
 DismissalReader = Callable[[str], dict[str, Any]]
+# Currently-dismissed findings tallied by the reason standing against each, across the graph.
+# Takes no finding: this is the aggregate the per-finding reader above cannot produce, and it
+# counts the latest ruling per finding rather than every row -- a finding dismissed, restored
+# and dismissed again is one dismissal now, not three.
+DismissalTallyReader = Callable[[], dict[str, Any]]
 # Dismiss with a reason from the closed vocabulary, or restore by passing `reason=None`. The
 # vocabulary is NOT restated here: `record_dismissal` owns it and raises naming it, and a
 # second copy in the transport is the fact written twice that would disagree first.
@@ -214,6 +219,7 @@ def create_app(
     events_reader: EventsReader,
     patch_reader: PatchReader,
     dismissal_reader: DismissalReader,
+    dismissal_tally_reader: DismissalTallyReader,
     dismissal_writer: DismissalWriter,
     detector_reader: DetectorReader,
     adapters_reader: AdaptersReader,
@@ -425,6 +431,15 @@ def create_app(
     async def get_dismissal(request: Request) -> JSONResponse:
         """Whether this finding stands dismissed right now, and how often that has flipped."""
         return JSONResponse(dismissal_reader(request.path_params["finding_id"]))
+
+    async def dismissal_tally(request: Request) -> JSONResponse:
+        """Currently-dismissed findings, tallied by the reason standing against each.
+
+        Unpaginated, and in `_NOT_COLLECTIONS` for the reason the severity roll-up is: this is a
+        distribution over a closed reason vocabulary, so it is bounded by that vocabulary rather
+        than by how many findings exist. A page of a distribution reads as the whole one.
+        """
+        return JSONResponse(dismissal_tally_reader())
 
     async def set_dismissal(request: Request) -> JSONResponse:
         """Dismiss a finding with a reason, or restore it by sending `reason: null`.
@@ -797,6 +812,7 @@ def create_app(
         # Before `{finding_id}`: Starlette matches in declaration order, so a literal
         # segment registered after a path parameter is swallowed by it.
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
+        Route("/api/findings/dismissals", dismissal_tally, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
         Route("/api/findings/{finding_id}/dismissal", get_dismissal, methods=["GET"]),

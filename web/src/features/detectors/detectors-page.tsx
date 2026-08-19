@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Which detector said what, and on what evidence.
  *
  * The console renders findings today and never who raised one or what kind of claim it

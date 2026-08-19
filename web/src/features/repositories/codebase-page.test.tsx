@@ -1,4 +1,4 @@
-﻿/**
+/**
  * A level says what contains it.
  *
  * The companion to `vendors/vendor-page.test.tsx`: these were the two routes of nine that rendered

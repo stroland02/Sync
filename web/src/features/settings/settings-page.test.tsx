@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Settings test suite for sub-navigation, card-scoped settings, refusal contracts, and about platform panel.
  */
 

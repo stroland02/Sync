@@ -14,6 +14,7 @@ import {
   fetchChangeUnits,
   fetchCorpus,
   fetchDetectors,
+  fetchDismissal,
   fetchFinding,
   fetchOverview,
   fetchRepositories,
@@ -206,6 +207,20 @@ export function usePatch(findingId: string) {
   return useQuery({
     queryKey: ["findings", findingId, "patch"],
     queryFn: ({ signal }) => fetchPatch(findingId, signal),
+  })
+}
+
+/**
+ * A finding's dismissal standing.
+ *
+ * Not gated on `useFinding`, deliberately: `finding_dismissal` outlives the re-derived `finding`
+ * row, so this answers for a finding whose own route 404s. It does not poll -- nothing in the
+ * console writes a dismissal, so there is no change for a poll to catch.
+ */
+export function useDismissal(findingId: string) {
+  return useQuery({
+    queryKey: ["findings", findingId, "dismissal"],
+    queryFn: ({ signal }) => fetchDismissal(findingId, signal),
   })
 }
 

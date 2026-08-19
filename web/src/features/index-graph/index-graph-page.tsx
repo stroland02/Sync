@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The indexing canvas as a page: `FileTreeCanvas` fed `GET /api/repositories/{repo_id}/graph`
  * through `useRepositoryGraph`, the same route `overview-graph-panel.tsx` draws its own copy of
  * the graph from.

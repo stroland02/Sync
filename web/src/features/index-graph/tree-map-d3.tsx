@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The file tree, laid out by d3 — the second half of the owner's ruling that both codebase
  * views are d3-drawn.
  *

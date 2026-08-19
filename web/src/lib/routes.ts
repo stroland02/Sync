@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The route registry: the single source of truth for every destination this console
  * declares. `App.tsx` builds its `<Route>` elements from this array, the persistent
  * navigation renders from it, and the command palette searches it. A route that is not an

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Settings: what this deployment watches, and what it lets you configure.
  *
  * A left sub-nav showing one group at a time, per owner decision 17, which also fixes the order:

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * API topology: the shape of this codebase's API surface, measured from its own call sites.
  *
  * The owner's ask of 2026-08-18 — topology, complexity, composition — answered from what the
