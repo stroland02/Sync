@@ -80,7 +80,7 @@ export function MetricPanel({
   className?: string
 }) {
   return (
-    <Card className={cn("flex min-w-0 flex-col", className)}>
+    <Card className={cn("flex h-full min-w-0 flex-col", className)}>
       <CardHeader>
         <div className="flex items-center gap-row">
           <h2 className="text-section">{label}</h2>

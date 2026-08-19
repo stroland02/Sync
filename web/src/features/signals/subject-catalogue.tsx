@@ -134,7 +134,7 @@ export function SubjectCatalogue({ repoId }: { repoId: string }) {
         />
       ) : (
         <>
-          <div className="grid gap-section sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid auto-rows-fr gap-section sm:grid-cols-2 xl:grid-cols-3">
             {vendors.map((vendor) => (
               <SubjectCard key={vendor.vendorId} vendor={vendor} repoId={repoId} />
             ))}

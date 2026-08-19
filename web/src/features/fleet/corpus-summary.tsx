@@ -105,7 +105,7 @@ export function CorpusSummaryCard() {
               <Suspense fallback={null}>
                 <CorpusChart data={query.data} />
               </Suspense>
-              <div className="grid gap-section sm:grid-cols-3">
+              <div className="grid auto-rows-fr gap-section sm:grid-cols-3">
                 <TallyTable heading="By disposition" tally={query.data.by_terminal_status} />
                 <TallyTable heading="By strategy" tally={query.data.by_strategy} />
                 <TallyTable heading="By tier" tally={query.data.by_tier} />

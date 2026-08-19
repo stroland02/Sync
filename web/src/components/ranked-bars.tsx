@@ -100,7 +100,7 @@ export function RankedBars({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-section rounded-surface border border-line bg-surface p-section",
+        "flex h-full min-w-0 flex-col gap-section rounded-surface border border-line bg-surface p-section",
         className
       )}
     >

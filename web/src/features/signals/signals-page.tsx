@@ -199,7 +199,7 @@ function SignalsDetail({ repoId }: { repoId: string }) {
           2026-08-18 layout extraction. `xl:` guards the same content from collapsing three
           data-heavy cards into an unreadable single column below that breakpoint -- the mock
           renders at a fixed desktop width and does not have to make that call. */}
-      <div className="grid gap-section xl:grid-cols-3">
+      <div className="grid auto-rows-fr gap-section xl:grid-cols-3">
         <RoleGroup role={VENDOR_ROLE}>
           <SubjectCatalogue repoId={repoId} />
         </RoleGroup>

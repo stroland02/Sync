@@ -162,7 +162,7 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           reader chose from rather than what the screen is about. The route, the hierarchy and
           `GRAPH_LEVELS` are untouched: that amendment is the specification's and has not landed,
           and `.claude/rules/console-hierarchy.md` makes the ordering the whole rule. */}
-      <div className="grid gap-section xl:grid-cols-2">
+      <div className="grid auto-rows-fr gap-section xl:grid-cols-2">
         <CodebaseFactsBand />
         <OverviewGraphRegion />
       </div>
@@ -189,7 +189,7 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           sentence ends "the panel beside them names what none of these figures can tell you at
           all"; W362 left both panels stacked inside one wrapper, so that clause described a layout
           that did not exist. The band is what makes it true again. */}
-      <div className="grid gap-section xl:grid-cols-2">
+      <div className="grid auto-rows-fr gap-section xl:grid-cols-2">
         <div className="min-w-0">
           <FactTile
             label="Health score policy"

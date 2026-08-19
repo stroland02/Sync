@@ -149,7 +149,7 @@ export function CodebaseFactsCard({ repoId }: { repoId: string }) {
         <div className="flex min-w-0 flex-col gap-section">
           <div className="flex flex-col gap-row">
             <h3 className="furniture text-meta text-ink-muted">History</h3>
-            <div className="grid grid-cols-2 gap-section">
+            <div className="grid auto-rows-fr grid-cols-2 gap-section">
               <GitFact
                 label="Commits"
                 value={facts.git.commit_count?.toLocaleString() ?? "—"}

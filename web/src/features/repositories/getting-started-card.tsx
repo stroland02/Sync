@@ -80,7 +80,7 @@ export function GettingStartedCard({ repoId }: { repoId: string }) {
         />
       )}
       {query.isSuccess && (
-        <div className="grid gap-row border-t border-line pt-section sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid auto-rows-fr gap-row border-t border-line pt-section sm:grid-cols-2 xl:grid-cols-3">
           {query.data.items.map((item) => (
             <div key={item.id} className="flex min-w-0 flex-col gap-field">
               <div className="flex flex-wrap items-center gap-row">

@@ -340,7 +340,7 @@ export function NodeEvidence({
   return (
     <div className="mt-section flex flex-col gap-section">
       {(scalars.length > 0 || unnamed.length > 0) && (
-        <dl className="grid gap-section sm:grid-cols-2">
+        <dl className="grid auto-rows-fr gap-section sm:grid-cols-2">
           {scalars.map((field) => (
             <Row key={field.key} label={field.label} help={field.help}>
               <FieldValue field={field} value={evidence[field.key]} />

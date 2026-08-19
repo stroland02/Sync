@@ -56,7 +56,7 @@ export function KpiStrip({
       {items.map((item) => (
         <div
           key={item.label}
-          className="flex flex-col rounded-surface border border-line bg-surface p-section"
+          className="flex h-full flex-col rounded-surface border border-line bg-surface p-section"
         >
           <FactTile
             label={item.label}

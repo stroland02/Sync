@@ -200,7 +200,7 @@ function DetectorCard({ row }: { row: DetectorRow }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-section">
         <RungBarRows tally={row.by_rung} tooltipFor={rungTooltip} />
-        <div className="grid gap-section sm:grid-cols-2">
+        <div className="grid auto-rows-fr gap-section sm:grid-cols-2">
           <TallyTable heading="By claim" tally={row.by_claim} />
           <TallyTable heading="By severity" tally={row.by_severity} />
         </div>
@@ -232,7 +232,7 @@ function RungTally({ composition }: { composition: Composition }) {
   return (
     <div className="flex min-w-0 flex-col gap-field rounded-surface border border-line bg-card p-section">
       <h3 className="furniture text-meta text-ink-muted">By rung, across every detector</h3>
-      <div className="grid gap-section sm:grid-cols-5">
+      <div className="grid auto-rows-fr gap-section sm:grid-cols-5">
         {composition.series.map((entry) => (
           <div key={entry.rung} className="border-l border-ink-muted pl-field">
             <div className="font-mono text-meta text-muted-foreground" title={rungTooltip(entry.rung)}>
