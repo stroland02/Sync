@@ -14,6 +14,7 @@ import { Link } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { hasLiveRun, useRuns } from "@/api/queries"
+import { RunsKpis } from "@/features/runs/runs-kpis"
 import type { RunDisposition, RunRow, RunsPage } from "@/api/types"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { useFacetParam } from "@/lib/use-facet-param"
@@ -133,6 +134,11 @@ export function RunsCard() {
     <div className="flex flex-col gap-section">
       {query.isPending && <LoadingState what="the fleet's runs" />}
       {query.error && <ErrorState error={query.error} what="the fleet's runs" onRetry={() => void query.refetch()} />}
+
+      {/* Dashboard R1, inside this component because the runs query lives here -- a strip
+          mounted beside it on the page would issue the same read a second time. Same source as
+          the rail's counts, so the two cannot disagree. */}
+      {query.isSuccess && <RunsKpis page={query.data} />}
 
       {query.isSuccess && (
         <div className="grid gap-section lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">

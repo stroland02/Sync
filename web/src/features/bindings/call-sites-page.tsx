@@ -39,6 +39,7 @@ import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { ErrorState, LoadingState } from "@/components/states"
+import { CallSitesDashboards } from "@/features/bindings/call-sites-dashboards"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -143,6 +144,11 @@ export function CallSitesPage() {
   return (
     <section className="flex min-w-0 flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Call sites" }]} />
+
+      {/* Dashboards C1, C2, C3. Its own read on its own key, deliberately outside the table's
+          success branch: the topology answers a different question over the same rows, and a
+          failure to page the table is no reason to withhold the shape of what was indexed. */}
+      <CallSitesDashboards repoId={repoId} />
 
       {query.isPending && <LoadingState what={`the call sites in ${repoId}`} />}
       {query.isError && (

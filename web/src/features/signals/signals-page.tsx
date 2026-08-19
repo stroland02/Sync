@@ -79,7 +79,10 @@
 
 import { useParams } from "react-router"
 
+import { useRepositoryObserved } from "@/api/queries"
+import { ErrorState, LoadingState } from "@/components/states"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
+import { SignalsKpis } from "@/features/signals/signals-kpis"
 import type { ReactNode } from "react"
 
 import { InfoHint } from "@/components/info-hint"
@@ -147,10 +150,34 @@ export function SignalsPage() {
   return <SignalsDetail repoId={repoId} />
 }
 
+/**
+ * The strip's own read, kept out of `SignalsDetail` so a telemetry route that does not answer
+ * costs the tiles and not the three role panels beneath, which read different routes entirely.
+ */
+function SignalsKpisRegion({ repoId }: { repoId: string }) {
+  const query = useRepositoryObserved(repoId)
+  if (query.isPending) return <LoadingState what="the observed telemetry totals" />
+  if (query.isError) {
+    return (
+      <ErrorState
+        error={query.error}
+        what="the observed telemetry totals"
+        onRetry={() => void query.refetch()}
+      />
+    )
+  }
+  return <SignalsKpis observed={query.data} />
+}
+
 function SignalsDetail({ repoId }: { repoId: string }) {
   return (
     <section className="flex flex-col gap-8">
       <PageTabs label="Logs" tabs={logsTabs(repoId)} />
+
+      {/* Dashboard S1. Every tile distinguishes "no source attached" from "attached and quiet",
+          which is the distinction this whole rung exists to make and the one an empty page
+          otherwise erases. */}
+      <SignalsKpisRegion repoId={repoId} />
 
       {/* What the screen draws moves behind the ⓘ (owner direction 2026-08-18); the sentence
           that stays visible is the absence-versus-zero one, because which roles have anything
