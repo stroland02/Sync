@@ -2389,6 +2389,69 @@ class GraphStore:
             values,
         )
 
+    def outcomes_by_day(self) -> list[dict]:
+        """Repair attempts tallied by the day recorded and the terminal status reached.
+
+        **Grain: one row per attempt, not per finding.** A finding retried three times is three
+        attempts here, which is `migration_outcome`'s declared grain and the figure a reader
+        comparing this against the findings count needs stated — the console states it.
+
+        **`created_at`, never `pr_merged_at`.** A series keyed on the merge date would silently
+        drop every attempt that never opened a pull request, which is most of them and the half a
+        reader most needs. This counts attempts as they happened.
+
+        **Rehearsals excluded**, matching `migration_outcomes`: a rehearsal is halted before the
+        remote and belongs in the table but nowhere a rate or an activity figure is computed.
+
+        **A day with no attempt emits no row.** Nothing records that the pipeline was idle rather
+        than not running, so a zero would assert the first.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT (created_at AT TIME ZONE 'UTC')::date AS day,
+                   terminal_status                       AS status,
+                   count(*)                              AS n
+              FROM migration_outcome
+             WHERE NOT is_rehearsal
+             GROUP BY 1, 2
+             ORDER BY 1, 2
+            """
+        ).fetchall()
+
+        days: list[dict] = []
+        for row in rows:
+            day = row["day"].isoformat()
+            if not days or days[-1]["day"] != day:
+                days.append({"day": day, "counts": {}})
+            days[-1]["counts"][row["status"] or "in_flight"] = int(row["n"])
+        return days
+
+    def attempts_by_tier(self) -> dict[int, dict[str, int]]:
+        """Repair attempts by the tier that produced them, and what each attempt reached.
+
+        The routing question: tier 0 is the mechanical path and the higher tiers cost more, so
+        which tier a solution came from is what says whether routing is working. Deliberately not
+        a success *rate* per tier — that is `corpus_health`'s `merge_rate_by_tier`, computed over
+        a denominator this count does not have.
+
+        **A tier absent here never ran.** The grouping returns groups that exist, so a caller
+        must not fill a missing tier with a zero: tier 3 having no attempts and tier 3 attempting
+        and failing are different facts, and only the second is a result.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT tier, terminal_status AS status, count(*) AS n
+              FROM migration_outcome
+             WHERE NOT is_rehearsal
+             GROUP BY tier, terminal_status
+             ORDER BY tier, terminal_status
+            """
+        ).fetchall()
+        tally: dict[int, dict[str, int]] = {}
+        for row in rows:
+            tally.setdefault(int(row["tier"]), {})[row["status"] or "in_flight"] = int(row["n"])
+        return tally
+
     def migration_outcomes(self, *, repo_id: str | None = None) -> list[MigrationOutcome]:
         """Every production attempt, in corpus order.
 

@@ -38,6 +38,7 @@ export function RankedBars({
   unit,
   colourByKey = true,
   max: cap = 10,
+  scale = "linear",
   className,
 }: {
   label: string
@@ -50,12 +51,29 @@ export function RankedBars({
   colourByKey?: boolean
   /** How many rows are drawn before the rest are summarised rather than silently dropped. */
   max?: number
+  /**
+   * `"log"` where the set spans orders of magnitude, on the owner's ruling of 2026-08-19.
+   *
+   * Measured against this deployment: 8,576 warnings, 108 breaking, 39 deprecation. Linear, the
+   * two that matter are one pixel each and read as a rendering fault -- the same illegibility
+   * that made the provenance ring look unbuilt. Log makes them comparable.
+   *
+   * **It is opt-in and it is announced.** A log axis a reader takes for linear is worse than no
+   * chart, because every comparison they make is wrong by a factor they cannot see. The caption
+   * gains a sentence naming the scale, and the counts are printed beside every bar under either
+   * scale, so the exact values never depend on reading a length.
+   */
+  scale?: "linear" | "log"
   className?: string
 }) {
   const ink = seriesScale(rows.map((row) => row.key))
   const shown = rows.slice(0, cap)
   const rest = rows.slice(cap)
   const largest = Math.max(...rows.map((row) => row.value), 1)
+  // log1p rather than log: a member at zero is a legitimate measurement in several of these
+  // sets, and log(0) is negative infinity. `log1p` maps 0 to 0 and keeps the ordering.
+  const project = (value: number) =>
+    scale === "log" ? Math.log1p(value) / Math.log1p(largest) : value / largest
   const restTotal = rest.reduce((sum, row) => sum + row.value, 0)
 
   return (
@@ -67,7 +85,19 @@ export function RankedBars({
     >
       <div className="flex flex-col gap-field">
         <h3 className="text-section">{label}</h3>
-        <p className="max-w-prose text-meta text-ink-muted">{caption}</p>
+        <p className="max-w-prose text-meta text-ink-muted">
+          {caption}
+          {scale === "log" && (
+            <>
+              {" "}
+              <span className="text-ink">
+                Bar lengths are on a logarithmic scale
+              </span>{" "}
+              — this set spans orders of magnitude, and on a linear scale the smaller members
+              would be a single pixel. Compare the printed counts, not the lengths.
+            </>
+          )}
+        </p>
       </div>
 
       <div className="flex min-w-0 flex-col gap-row">
@@ -89,7 +119,7 @@ export function RankedBars({
               <div
                 className={cn("h-full rounded-control", !colourByKey && "bg-line-strong")}
                 style={{
-                  width: `${Math.max((row.value / largest) * 100, 1.5)}%`,
+                  width: `${Math.max(project(row.value) * 100, 1.5)}%`,
                   backgroundColor: colourByKey ? ink(row.key) : undefined,
                 }}
               />

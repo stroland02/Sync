@@ -240,6 +240,7 @@ def create_app(
     integration_changes_reader: Callable[..., dict[str, Any]] | None = None,
     topology_reader: Callable[[str], dict[str, Any]] | None = None,
     changes_over_time_reader: Callable[..., dict[str, Any]] | None = None,
+    remediation_activity_reader: Callable[[], dict[str, Any]] | None = None,
     catalogue_reader: Callable[..., dict[str, Any]] | None = None,
     api_password: str | None = None,
 ) -> Starlette:
@@ -411,6 +412,14 @@ def create_app(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
+
+    async def remediation_activity(request: Request) -> JSONResponse:
+        """Dashboards L2, L3 and T4. Fleet-wide: `migration_outcome` stores no repository."""
+        if remediation_activity_reader is None:
+            return JSONResponse(
+                {"error": "Remediation activity reader not configured"}, status_code=501
+            )
+        return JSONResponse(remediation_activity_reader())
 
     async def changes_over_time(request: Request) -> JSONResponse:
         """Dashboard T3. Narrowed by vendor rather than by repository, matching the feed it
@@ -823,6 +832,7 @@ def create_app(
         # segment registered after a path parameter is swallowed by it.
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
         Route("/api/integration-changes/over-time", changes_over_time, methods=["GET"]),
+        Route("/api/corpus/activity", remediation_activity, methods=["GET"]),
         Route("/api/findings/dismissals", dismissal_tally, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),

@@ -262,3 +262,57 @@ def test_corpus_health_sql_aggregates_match_python_computation(store: GraphStore
     assert sql_axes.wall_ms_per_merged_patch.n == py_axes.wall_ms_per_merged_patch.n
 
 
+
+
+def test_outcomes_by_day_buckets_attempts_on_the_day_they_were_recorded(store: GraphStore):
+    """L2 and T4's source: repair attempts tallied by day and terminal status.
+
+    Bucketed in SQL for the reason every other series on this console is: the runs feed pages
+    newest-first, so a fold over one page would draw the most recent page and label it the
+    history.
+
+    `created_at` rather than `pr_merged_at`: this counts attempts as they happened, and a series
+    keyed on the merge date would silently exclude every attempt that never opened a pull
+    request -- which is most of them, and the half a reader most needs to see.
+    """
+    store.record_migration_outcome(_outcome(finding_id="f-1", terminal_status="pr_opened"))
+    store.record_migration_outcome(
+        _outcome(finding_id="f-2", attempt_index=0, terminal_status="abandoned")
+    )
+
+    series = store.outcomes_by_day()
+
+    assert len(series) == 1, "both attempts landed on one day"
+    assert series[0]["counts"] == {"pr_opened": 1, "abandoned": 1}
+
+
+def test_outcomes_by_day_excludes_a_rehearsal(store: GraphStore):
+    """A rehearsal is halted before the remote and never counts toward a rate.
+
+    `migration_outcomes` filters them out rather than handing the dimension to every caller, and
+    a time series is exactly a place where including them would overstate activity.
+    """
+    store.record_migration_outcome(_outcome(finding_id="f-1", terminal_status="pr_opened"))
+    store.record_migration_outcome(
+        _outcome(finding_id="f-2", terminal_status="pr_opened", is_rehearsal=True)
+    )
+
+    series = store.outcomes_by_day()
+
+    assert series[0]["counts"] == {"pr_opened": 1}
+
+
+def test_attempts_by_tier_counts_each_tier_that_occurs(store: GraphStore):
+    """L3's source: which repair tier produced each outcome.
+
+    A tier absent from this tally never ran, and is not a tier measured at nought -- the grouping
+    returns groups that exist, and a view must not fill a missing tier with a zero.
+    """
+    store.record_migration_outcome(_outcome(finding_id="f-1", tier=0, terminal_status="pr_opened"))
+    store.record_migration_outcome(_outcome(finding_id="f-2", tier=0, terminal_status="abandoned"))
+    store.record_migration_outcome(_outcome(finding_id="f-3", tier=2, terminal_status="pr_opened"))
+
+    tally = store.attempts_by_tier()
+
+    assert tally == {0: {"pr_opened": 1, "abandoned": 1}, 2: {"pr_opened": 1}}
+    assert 1 not in tally

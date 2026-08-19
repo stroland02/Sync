@@ -391,6 +391,7 @@ def app_factory() -> Starlette:
         changes_over_time_reader=lambda *, vendor_id=None: graph_views.changes_over_time(
             store, vendor_id=vendor_id
         ),
+        remediation_activity_reader=lambda: fleet.remediation_activity(store),
         dismissal_reader=dismissal_reader,
         dismissal_tally_reader=dismissal_tally_reader,
         dismissal_writer=dismissal_writer,

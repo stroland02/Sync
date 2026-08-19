@@ -13,6 +13,7 @@ import { useParams } from "react-router"
 import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
 import { ChangesOverTimeCard } from "@/features/dashboards/changes-over-time-card"
 import { TrendsKpis } from "@/features/dashboards/trends-kpis"
+import { AttemptsOverTime } from "@/features/workflows/remediation-activity"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
 import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -39,6 +40,11 @@ export function MetricsPage() {
         <FindingsOverTimeCard />
         <ChangesOverTimeCard />
       </div>
+      {/* Dashboard T4, the third subject on this screen: what Sync's own pipeline attempted.
+          The three series answer what the vendors published, what Sync found, and what Sync did
+          about it -- in that causal order, which is why they read down the page rather than
+          summarising each other. */}
+      <AttemptsOverTime />
       <ObservedVolumeCard />
     </section>
   )

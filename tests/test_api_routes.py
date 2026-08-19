@@ -1945,6 +1945,10 @@ _NOT_COLLECTIONS = {
     # per day something was detected and `counts` one per vendor that published that day --
     # bounded by the calendar and by the watched vendor set, not by how many changes exist.
     "/api/integration-changes/over-time",
+    # Dashboards L2/L3/T4: `days` is one entry per day something was attempted and `by_tier`
+    # one per tier that ran -- bounded by the calendar and by the tier ladder, not by how
+    # many attempts exist.
+    "/api/corpus/activity",
     # A stream is not a page. It has no total to report and no offset to advance, and it ends when
     # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
     # mean here.

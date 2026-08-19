@@ -18,11 +18,18 @@
  * rankings, and this is both: the vendors are ranked and each bar is a mix. A donut per vendor
  * would be a dozen donuts nobody can compare, so it stays in the bar family and the stack
  * carries the mix — one row per integration, ordered by how much each published.
+ *
+ * **The severity ranking is drawn on a log scale, announced.** Measured against this deployment:
+ * 8,576 warnings, 108 breaking, 39 deprecation. Linear, the two a reader cares about are one
+ * pixel each — the same illegibility that made the provenance ring look unbuilt, and the reason
+ * the owner ruled log for skewed sets. The stacked per-integration rows below stay linear, because
+ * a stack is a composition and a log stack does not sum to anything.
  */
 
 import { InfoHint } from "@/components/info-hint"
 import { KpiStrip } from "@/components/kpi-strip"
 import { MetricPanel } from "@/components/metric-panel"
+import { RankedBars } from "@/components/ranked-bars"
 import { RelativeTime } from "@/components/relative-time"
 import { Absent } from "@/components/status"
 import { seriesScale } from "@/lib/palette"
@@ -95,6 +102,32 @@ export function ChangesKpis({ facets }: { facets: ChangesFacets }) {
  * is a handful of rectangles whose widths are ratios, and pulling in a canvas, a resize observer
  * and a theme bridge for that geometry buys nothing. Anything that grows an axis goes to ECharts.
  */
+/**
+ * The whole record split by severity, ranked — G3's other half, and the one a reader triages by.
+ *
+ * Separate from the per-integration stack because the questions differ: this is *how much of what
+ * the vendors publish is breaking*, the stack is *which vendor publishes it*. Log-scaled and said
+ * so, since the set spans three orders of magnitude.
+ */
+export function SeverityMix({ facets }: { facets: ChangesFacets }) {
+  const rows = Object.entries(facets.by_severity)
+    .map(([key, value]) => ({ key, value }))
+    .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))
+
+  if (rows.length === 0) return null
+
+  return (
+    <RankedBars
+      label="Severity as published"
+      caption="Every change the graph holds, by the severity its vendor gave it — counted across the whole record rather than the narrowed table. Severity is the vendor's own: a change published as breaking breaks this codebase only where a call site binds to it."
+      rows={rows}
+      unit="changes"
+      colourByKey={false}
+      scale="log"
+    />
+  )
+}
+
 export function SeverityPerIntegration({ facets }: { facets: ChangesFacets }) {
   const rows = Object.entries(facets.by_vendor_severity)
     .map(([vendor, mix]) => ({

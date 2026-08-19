@@ -39,7 +39,12 @@ import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { PageTabs, integrationsTabs } from "@/components/page-tabs"
-import { ChangesKpis, type ChangesFacets, SeverityPerIntegration } from "@/features/vendors/changes-dashboards"
+import {
+  ChangesKpis,
+  type ChangesFacets,
+  SeverityMix,
+  SeverityPerIntegration,
+} from "@/features/vendors/changes-dashboards"
 import { RelativeTime } from "@/components/relative-time"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -210,7 +215,10 @@ export function IntegrationChangesPage() {
           {/* Dashboards G1 and G3, off facets the page already fetched -- neither costs a
               request, and both describe the whole record rather than the narrowed table. */}
           <ChangesKpis facets={facetsOf(query.data)} />
-          <SeverityPerIntegration facets={facetsOf(query.data)} />
+          <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
+            <SeverityMix facets={facetsOf(query.data)} />
+            <SeverityPerIntegration facets={facetsOf(query.data)} />
+          </div>
         </>
       )}
 

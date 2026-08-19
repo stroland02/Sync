@@ -601,3 +601,24 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
         "axes": axis_list,
     }
 
+
+
+def remediation_activity(store: GraphStore) -> dict:
+    """Dashboards L2, L3 and T4: what the repair pipeline attempted, over time and by tier.
+
+    One view rather than three routes, because all three are groupings of one table read at one
+    grain and splitting them would be three round trips for one answer. The console renders them
+    as separate panels; that is a layout decision and not a reason for three endpoints.
+
+    **One row is one attempt.** `migration_outcome`'s grain, restated here because every figure
+    below inherits it: a finding retried three times contributes three attempts, so a total here
+    is larger than the finding count on every other screen and neither is wrong.
+
+    **Fleet-wide, and it cannot be otherwise.** `migration_outcome` stores no `repo_id` -- the
+    schema decision that makes the table safe to aggregate across customers -- so there is no
+    narrower answer being withheld. The console says so on screen rather than implying a scope.
+    """
+    return {
+        "days": store.outcomes_by_day(),
+        "by_tier": {str(tier): counts for tier, counts in store.attempts_by_tier().items()},
+    }

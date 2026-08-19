@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { KpiStrip } from "@/components/kpi-strip"
+import { AttemptsByTier, AttemptsOverTime } from "@/features/workflows/remediation-activity"
 import { MetricPanel } from "@/components/metric-panel"
 import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
@@ -90,6 +91,15 @@ export function SolutionsPage() {
           ]}
         />
       )}
+
+      {/* Dashboards L2 and L3. Outside the runs query's success branch on purpose: they read
+          the corpus rather than the runs feed, so a runs failure is no reason to withhold how
+          the pipeline got here. Both state their own fleet scope, since the corpus table stores
+          no repository. */}
+      <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
+        <AttemptsOverTime />
+        <AttemptsByTier />
+      </div>
 
       {query.isSuccess && (
         <MetricPanel
