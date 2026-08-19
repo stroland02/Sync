@@ -77,6 +77,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { type Fact, FactList } from "@/components/fact-list"
 import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
 import { RungBadge } from "@/components/provenance"
@@ -593,8 +594,12 @@ function BindingSurfaceDetail({
                         <TableCell className="font-mono text-meta">
                           <Formatted value={formatTimestamp(change.detected_at)} />
                         </TableCell>
-                        <TableCell>{change.kind}</TableCell>
-                        <TableCell>{change.severity}</TableCell>
+                        <TableCell>
+                          <ChangeKindTag kind={change.kind} />
+                        </TableCell>
+                        <TableCell>
+                          <SeverityTag severity={change.severity} />
+                        </TableCell>
                         <TableCell className="font-mono">
                           <Formatted value={orAbsent(change.path_ptr)} />
                         </TableCell>

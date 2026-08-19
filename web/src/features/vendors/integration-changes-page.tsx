@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
@@ -299,11 +300,11 @@ export function IntegrationChangesPage() {
                         {change.operation_id}
                       </Link>
                     </TableCell>
-                    <TableCell className="font-mono text-meta">{change.kind}</TableCell>
                     <TableCell>
-                      <span className="furniture rounded-control border border-line px-field py-field text-meta text-ink-muted">
-                        {change.severity}
-                      </span>
+                      <ChangeKindTag kind={change.kind} />
+                    </TableCell>
+                    <TableCell>
+                      <SeverityTag severity={change.severity} />
                     </TableCell>
                     <TableCell className="font-mono text-meta text-ink-muted">
                       {change.from_version} → {change.to_version}

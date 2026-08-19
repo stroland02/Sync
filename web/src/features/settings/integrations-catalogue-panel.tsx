@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { AdapterTierTag } from "@/components/tag"
 import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
 import { type CatalogueRow, fetchCatalogue } from "@/features/vendors/catalogue"
@@ -112,7 +113,9 @@ export function IntegrationsCataloguePanel({ repoId }: { repoId: string }) {
                   </span>
                 )}
               </TableCell>
-              <TableCell className="font-mono text-meta text-ink-muted">{row.tier}</TableCell>
+              <TableCell>
+                <AdapterTierTag tier={row.tier} />
+              </TableCell>
               <TableCell className="font-mono text-meta text-ink-muted">
                 {packages(row) || "—"}
               </TableCell>

@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { SeverityTag } from "@/components/tag"
 import { RungBadge } from "@/components/provenance"
 import { Formatted } from "@/components/status"
 import { bindingSurfaceHref, findingHref } from "@/lib/hrefs"
@@ -57,7 +58,9 @@ export function FindingsTable({
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.finding_id}>
-            <TableCell>{row.severity}</TableCell>
+            <TableCell>
+              <SeverityTag severity={row.severity} />
+            </TableCell>
             <TableCell>
               <RungBadge rung={row.binding_source} />
             </TableCell>
