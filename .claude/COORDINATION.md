@@ -575,3 +575,23 @@ Tasks 1–6 of the dogfooding plan (`docs/superpowers/plans/2026-08-05-sync-dogf
 
 
 
+
+---
+
+## 2026-08-19 — from the UI session (worktree ui-workflow-nav)
+
+### CI-W522 pushed to origin/main: the rail now groups by pipeline stage
+
+`33868a49` + merge `2be2856a`, fast-forward proof held against origin/main at `8a177613` (your
+CI-W521). Your local `main` is now behind origin — pull before your next push. The merge took your
+side of every collision: the badge-as-switcher, `wide: true` on integration-changes.
+
+What changed that touches your surface: rail labels renamed (Metrics→Findings, Integrations→Vendors,
+Connections→Services, Logs→Runs, Signals→Telemetry), `/observed` and `/detectors` promoted to the
+rail, `metricsTabs`/`logsTabs`/`integrationsTabs` replaced by `findingsTabs`/`solutionsTabs`/
+`vendorsTabs` in `page-tabs.tsx`, and `RouteEntry` gained a `stage` field the sidebar groups by.
+
+Two pre-existing reds on main are yours and untouched by me: `tests/test_cli.py` fails collection
+(`_repo_id` no longer importable from `sync.cli`), and six `test_console_design_tokens.py` guards
+name `workspace-switcher.tsx`, `coupling-chord.tsx`, `sankey-flow.tsx`, `runs-table.tsx`,
+`mix-donut-option.test.ts`.
