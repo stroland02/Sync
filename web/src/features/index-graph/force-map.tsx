@@ -50,7 +50,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force"
 import { select } from "d3-selection"
-import { zoom as d3zoom, zoomIdentity, type ZoomTransform } from "d3-zoom"
+import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom"
 
 import type { RepositoryGraphBinding } from "@/api/types"
 import { Button } from "@/components/ui/button"
@@ -167,9 +167,12 @@ export function radiusFor(node: ForceNode): number {
 export function ForceMap({
   rows,
   className,
+  fill = false,
 }: {
   rows: RepositoryGraphBinding[]
   className?: string
+  /** Fill the height its container gives, rather than the card's own 44rem. */
+  fill?: boolean
 }) {
   const { nodes, links } = useMemo(() => buildForceGraph(rows), [rows])
   // One scale over the vendors present, so a vendor wears the same colour here as in every
@@ -182,6 +185,9 @@ export function ForceMap({
   const [selected, setSelected] = useState<ForceNode | null>(null)
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
   const svgRef = useRef<SVGSVGElement>(null)
+  // The behaviour itself, so a control reuses the one bound to the element rather than
+  // building a second that d3 does not consider current.
+  const behaviourRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
 
   // The layout, computed once per graph and settled before it is shown. `stop()` before the
   // loop is what makes this deterministic rather than a race with the animation frame.
@@ -224,33 +230,85 @@ export function ForceMap({
     setSettled({ nodes: simNodes, links: simLinks })
   }, [nodes, links])
 
+  /**
+   * The transform that frames the settled graph.
+   *
+   * The simulation has no bounds of its own — forces push nodes wherever they balance, which
+   * is regularly outside the viewBox — so a fixed viewBox drew a map with its edges cropped and
+   * no way to reach them. This measures what settled and frames it, which is the fit the reader
+   * should open at.
+   */
+  const fitTransform = useMemo(() => {
+    if (settled === null || settled.nodes.length === 0) return zoomIdentity
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const node of settled.nodes) {
+      const radius = radiusFor(node)
+      minX = Math.min(minX, (node.x ?? 0) - radius)
+      minY = Math.min(minY, (node.y ?? 0) - radius)
+      maxX = Math.max(maxX, (node.x ?? 0) + radius)
+      maxY = Math.max(maxY, (node.y ?? 0) + radius)
+    }
+    // Room for the labels that hang off a node's right edge, which the radius does not cover.
+    const pad = 90
+    const width = maxX - minX + pad * 2
+    const height = maxY - minY + pad * 2
+    const scale = Math.min(WIDTH / width, HEIGHT / height, 1.6)
+    return zoomIdentity
+      .translate(
+        (WIDTH - (maxX + minX) * scale) / 2,
+        (HEIGHT - (maxY + minY) * scale) / 2
+      )
+      .scale(scale)
+  }, [settled])
+
   // Pan and zoom, owned by d3 rather than by hand-rolled pointer arithmetic: wheel, drag,
   // pinch and double-click all arrive already correct, and the transform is the one piece of
   // state React needs to know about.
+  //
+  // **Keyed on `settled`, and that is the whole of a bug worth naming.** This effect ran once
+  // on mount, when the component was still rendering the settling placeholder rather than the
+  // svg — so `svgRef.current` was null, the behaviour bound to nothing, and the map could not
+  // be zoomed at all. An effect that reaches for a ref must run when that ref is filled.
   useEffect(() => {
     const element = svgRef.current
-    if (element === null) return
+    if (element === null || settled === null) return
     const behaviour = d3zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.15, 8])
+      .scaleExtent([0.05, 12])
       .on("zoom", (event) => setTransform(event.transform))
+    behaviourRef.current = behaviour
     const selection = select(element)
     selection.call(behaviour)
+    // The opening frame is applied through the behaviour rather than to state alone, so d3's
+    // own notion of the current transform matches the one on screen — set only in state, the
+    // first wheel tick would jump back to identity.
+    selection.call(behaviour.transform, fitTransform)
     return () => {
       selection.on(".zoom", null)
+      behaviourRef.current = null
     }
-  }, [])
+  }, [settled, fitTransform])
 
   function resetView() {
     const element = svgRef.current
-    if (element === null) return
-    const behaviour = d3zoom<SVGSVGElement, unknown>().scaleExtent([0.15, 8])
-    select(element).call(behaviour.transform, zoomIdentity)
-    setTransform(zoomIdentity)
+    const behaviour = behaviourRef.current
+    if (element === null || behaviour === null) return
+    select(element).call(behaviour.transform, fitTransform)
+  }
+
+  /** The buttons drive d3's own `scaleBy`, so wheel and button share one transform. */
+  function scaleBy(factor: number) {
+    const element = svgRef.current
+    const behaviour = behaviourRef.current
+    if (element === null || behaviour === null) return
+    select(element).call(behaviour.scaleBy, factor)
   }
 
   if (settled === null) {
     return (
-      <div className={cn("flex h-[44rem] items-center justify-center rounded-surface border border-line bg-background", className)}>
+      <div className={cn("flex items-center justify-center rounded-surface border border-line bg-background", fill ? "h-full" : "h-[44rem]", className)}>
         <p className="text-meta text-ink-muted">Settling the map…</p>
       </div>
     )
@@ -258,7 +316,7 @@ export function ForceMap({
 
   if (settled.nodes.length === 0) {
     return (
-      <div className={cn("flex h-[44rem] items-center justify-center rounded-surface border border-line bg-background p-section", className)}>
+      <div className={cn("flex items-center justify-center rounded-surface border border-line bg-background p-section", fill ? "h-full" : "h-[44rem]", className)}>
         <p className="max-w-prose text-center text-body text-ink-muted">
           Nothing was passed to this map. That is a statement about what this view was given,
           not about what the index holds.
@@ -270,14 +328,14 @@ export function ForceMap({
   const byId = new Map(settled.nodes.map((node) => [node.id, node] as const))
 
   return (
-    <div className={cn("relative overflow-hidden rounded-surface border border-line bg-background", className)}>
+    <div className={cn("relative overflow-hidden rounded-surface border border-line bg-background", fill && "h-full", className)}>
       <svg
         ref={svgRef}
         role="group"
         aria-label={FORCE_MAP_LABEL}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="xMidYMid meet"
-        className="block h-[44rem] w-full cursor-grab touch-none select-none"
+        className={cn("block w-full cursor-grab touch-none select-none", fill ? "h-full" : "h-[44rem]")}
       >
         <g transform={transform.toString()}>
           <g>
@@ -371,11 +429,18 @@ export function ForceMap({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
         <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
-          <Button variant="outline" size="sm" onClick={resetView}>
-            Reset view
+          <Button variant="outline" size="sm" onClick={() => scaleBy(1.5)}>
+            Zoom in
           </Button>
-          <span className="px-field text-meta text-ink-muted">
-            {settled.nodes.length} nodes · scroll to zoom · drag to pan
+          <Button variant="outline" size="sm" onClick={() => scaleBy(1 / 1.5)}>
+            Zoom out
+          </Button>
+          <Button variant="outline" size="sm" onClick={resetView}>
+            Fit
+          </Button>
+          <span className="px-field text-meta text-ink-muted tabular-nums">
+            {settled.nodes.length} nodes · {Math.round(transform.k * 100)}% · scroll to zoom,
+            drag to pan
           </span>
         </div>
 

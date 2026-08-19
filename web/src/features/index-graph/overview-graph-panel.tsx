@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The dependency graph the Overview draws.
  *
  * Owner decision 2 puts this panel beside the fact tiles on the first screen, which makes it not
@@ -21,7 +21,7 @@ import { Link } from "react-router"
 
 import { useRepositoryGraph } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
+import { ForceMap } from "@/features/index-graph/force-map"
 
 export function PartialGraphNotice({ drawn, total }: { drawn: number; total: number }) {
   return (
@@ -78,7 +78,7 @@ export function OverviewGraphPanel({ repoId }: { repoId: string }) {
         />
       ) : (
         <>
-          <FileTreeCanvas rows={payload.bindings} knownVendorIds={payload.vendors.map((v) => v.vendor_id)} />
+          <ForceMap rows={payload.bindings} />
           {payload.truncated && (
             <PartialGraphNotice drawn={payload.bindings.length} total={payload.total_bindings} />
           )}

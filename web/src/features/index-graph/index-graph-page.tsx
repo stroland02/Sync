@@ -30,7 +30,7 @@ import { useParams } from "react-router"
 import { useRepositoryGraph } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Button } from "@/components/ui/button"
-import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
+import { TreeMapD3 } from "@/features/index-graph/tree-map-d3"
 import { ForceMap } from "@/features/index-graph/force-map"
 import { classifyIndexState } from "@/features/index-graph/index-state"
 import { IndexStreamBanner } from "@/features/index-graph/index-stream-banner"
@@ -82,7 +82,7 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
   const state = classifyIndexState(graph)
 
   return (
-    <section className="flex flex-col gap-8">
+    <section className="flex min-h-[calc(100svh-8rem)] flex-col gap-8">
       <IndexStreamBanner
         indexedCount={stream.indexedCount}
         status={stream.status}
@@ -149,14 +149,17 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
             </Button>
           </div>
 
-          {view === "map" ? (
-            <ForceMap rows={graph.bindings} />
-          ) : (
-            <FileTreeCanvas
-              rows={graph.bindings}
-              knownVendorIds={graph.vendors.map((v) => v.vendor_id)}
-            />
-          )}
+          {/* The full graph takes the page, on the owner's direction: this route exists
+              because the Overview's panel is too small for a real codebase, so a canvas here
+              that was also boxed would be the same picture at the same size. `min-h-0` is
+              what lets the flex child actually shrink to the height it is given. */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {view === "map" ? (
+              <ForceMap rows={graph.bindings} fill />
+            ) : (
+              <TreeMapD3 rows={graph.bindings} fill />
+            )}
+          </div>
           <OffPathNote graph={graph} total={state.offPathTotal} />
         </>
       )}
