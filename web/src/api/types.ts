@@ -178,6 +178,14 @@ export interface IndexRunSummary {
  * and it is the one to weigh the row by. The envelope's field describes the page.
  */
 export interface RiskRow {
+  /**
+   * The finding's display name — `stripe-postcharges-4b1c9e`.
+   *
+   * Derived in the payload by `sync.core.naming.finding_name`, never here: this table, the CLI
+   * and a pull-request body must call one finding by one name, and three derivations is where
+   * they would start to differ. `finding_id` stays the addressable thing.
+   */
+  name: string
   file: string
   line: number
   symbol: string | null
