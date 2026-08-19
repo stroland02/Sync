@@ -1747,3 +1747,57 @@ def test_severity_by_vendor_omits_a_severity_a_vendor_never_published(store):
 
     assert crossed == {"stripe": {"warning": 1}}
     assert "breaking" not in crossed["stripe"]
+
+
+def _detected_on(store, change, day: datetime) -> None:
+    """Stamp a change's detection date.
+
+    `upsert_vendor_change` takes no `detected_at` -- the column is the database's `now()`, which
+    is correct for production and useless for a series test. Adding a parameter to the writer
+    that only a test would ever pass is an abstraction with no caller behind it, so the date is
+    set here instead.
+    """
+    change_id = store.upsert_vendor_change(change)
+    store._connect().execute(
+        "UPDATE vendor_change SET detected_at = %s WHERE id = %s", (day, change_id)
+    )
+
+
+def test_changes_by_day_and_vendor_buckets_on_the_detection_date(store):
+    """T3's source: integration changes tallied by the day Sync detected them, per vendor.
+
+    Bucketed in SQL rather than folded from a page, because a series derived from one page of
+    rows is the series of whichever rows the ordering reached -- and this feed's ordering is
+    newest-first, so a client-side fold would draw the most recent page and label it the history.
+    """
+    early = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
+    late = datetime(2026, 8, 3, 22, 0, tzinfo=timezone.utc)
+    _detected_on(store, _change(vendor_id="stripe"), early)
+    _detected_on(store, _change(vendor_id="stripe", operation_id="PostCharges"), early)
+    _detected_on(store, _change(vendor_id="twilio", operation_id="GetCalls"), late)
+
+    series = store.changes_by_day_and_vendor()
+
+    assert series == [
+        {"day": "2026-08-01", "vendor_id": "stripe", "n": 2},
+        {"day": "2026-08-03", "vendor_id": "twilio", "n": 1},
+    ]
+
+
+def test_changes_by_day_emits_no_row_for_a_day_nothing_was_detected(store):
+    """A day with no change is absent, never a zero.
+
+    Nothing in the graph records that an adapter ran, so a gap is a day nothing was recorded --
+    which may be a day no vendor published or a day nothing fetched, and those are different
+    facts. Emitting a zero would assert the first.
+    """
+    _detected_on(store, _change(vendor_id="stripe"), datetime(2026, 8, 1, tzinfo=timezone.utc))
+    _detected_on(
+        store,
+        _change(vendor_id="stripe", operation_id="PostCharges"),
+        datetime(2026, 8, 5, tzinfo=timezone.utc),
+    )
+
+    days = [row["day"] for row in store.changes_by_day_and_vendor()]
+
+    assert days == ["2026-08-01", "2026-08-05"]

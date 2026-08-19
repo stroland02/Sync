@@ -11,6 +11,7 @@
 import { useParams } from "react-router"
 
 import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
+import { ChangesOverTimeCard } from "@/features/dashboards/changes-over-time-card"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
 import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -24,7 +25,14 @@ export function MetricsPage() {
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Metrics" }]} />
       <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
-      <FindingsOverTimeCard />
+      {/* Two subjects, deliberately adjacent (T2 and T3). The findings series is what Sync
+          produced; the changes series is what the vendors published. A day with changes and no
+          findings is the product working rather than a gap, and neither chart says that on its
+          own — they say it by sitting together. */}
+      <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
+        <FindingsOverTimeCard />
+        <ChangesOverTimeCard />
+      </div>
       <ObservedVolumeCard />
     </section>
   )

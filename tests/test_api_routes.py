@@ -1941,6 +1941,10 @@ _NOT_COLLECTIONS = {
     # not by how many findings exist. Paging a distribution truncates the picture while looking
     # complete, which is the reason `/api/overview` is unpaginated too.
     "/api/findings/over-time",
+    # Dashboard T3, and the same argument `/api/findings/over-time` carries: `days` is one entry
+    # per day something was detected and `counts` one per vendor that published that day --
+    # bounded by the calendar and by the watched vendor set, not by how many changes exist.
+    "/api/integration-changes/over-time",
     # A stream is not a page. It has no total to report and no offset to advance, and it ends when
     # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
     # mean here.

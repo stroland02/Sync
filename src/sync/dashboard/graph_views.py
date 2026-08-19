@@ -980,3 +980,35 @@ def findings_by_kind_over_time(store: GraphStore, *, repo_id: str | None = None)
         "total": sum(row["n"] for row in rows),
         "still_open": store.findings_still_open_count(repo_id=repo_id),
     }
+
+
+def changes_over_time(store: GraphStore, *, vendor_id: str | None = None) -> dict:
+    """Dashboard T3: what the watched integrations published, by the day Sync detected it.
+
+    The shape is `findings_by_kind_over_time`'s and so are its rules -- one entry per day that
+    has something, counts keyed by the member that occurred, and no zero filled in for a member
+    that did not. What differs is what the series is *about*, and it is worth stating because the
+    two charts sit on one screen: this one is the vendors' activity, and the findings series is
+    Sync's. A day of many changes and no findings is a day the vendors moved and nothing they
+    moved touched this codebase.
+
+    **Not repository-scoped**, matching the feed it summarises. A change is a fact about the
+    vendor; where it meets a codebase is a finding, which is the other series.
+
+    `vendors` echoes the set that appears anywhere in the window, so a reader can tell a vendor
+    that published nothing on a given day from one that is not in the series at all.
+    """
+    rows = store.changes_by_day_and_vendor(vendor_id=vendor_id)
+
+    days: list[dict] = []
+    for row in rows:
+        if not days or days[-1]["day"] != row["day"]:
+            days.append({"day": row["day"], "counts": {}})
+        days[-1]["counts"][row["vendor_id"]] = row["n"]
+
+    return {
+        "vendor_id": vendor_id,
+        "vendors": sorted({row["vendor_id"] for row in rows}),
+        "days": days,
+        "total": sum(row["n"] for row in rows),
+    }

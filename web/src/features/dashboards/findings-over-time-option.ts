@@ -23,7 +23,7 @@
  */
 
 import type { FindingsOverTimeResponse } from "@/api/types"
-import { escapeHtml } from "@/components/charts/chart-text"
+import { buildDayStackOption } from "@/components/charts/day-stack-option"
 import type { ChartTokens } from "@/components/charts/echart"
 import type { EChartsOption } from "echarts-for-react"
 
@@ -31,52 +31,13 @@ export function buildFindingsOverTimeOption(
   payload: FindingsOverTimeResponse,
   tokens: ChartTokens,
 ): EChartsOption {
-  const days = payload.days.map((entry) => entry.day)
-
-  // Only severities that actually occur get a band. A band of zeroes across every day would put
-  // a name in the legend for a measurement nobody took.
-  const present = payload.severities.filter((severity) =>
-    payload.days.some((entry) => (entry.counts[severity] ?? 0) > 0),
+  // Delegated to the shared builder at the second use of this shape (`day-stack-option.ts`).
+  // Everything that made this chart honest lives there now and is stated once: no band for a
+  // severity that never occurs, no zero filled in for a day the payload omits, no legend below
+  // two bands. What stays here is what is particular to findings -- the vocabulary and its
+  // order, which is the payload's `severities` and not this file's opinion.
+  return buildDayStackOption(
+    { days: payload.days, members: payload.severities, stackId: "findings" },
+    tokens,
   )
-
-  return {
-    grid: { left: 8, right: 16, top: present.length > 1 ? 32 : 8, bottom: 8, containLabel: true },
-    // Decision 58: no legend unless there is more than one series. With a single severity the
-    // legend names the obvious, and the space it takes is space the bars could have had.
-    ...(present.length > 1
-      ? { legend: { textStyle: { color: tokens.inkSecondary }, top: 0 } }
-      : {}),
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "shadow" },
-      formatter: (params: unknown) => {
-        const points = params as Array<{ axisValue: string; seriesName: string; value: number }>
-        if (points.length === 0) return ""
-        const lines = points
-          .filter((point) => point.value > 0)
-          .map((point) => `${escapeHtml(point.seriesName)}: <strong>${point.value}</strong>`)
-        return `${escapeHtml(points[0].axisValue)}<br/>${lines.join("<br/>")}`
-      },
-    },
-    xAxis: {
-      type: "category",
-      data: days,
-      axisLine: { lineStyle: { color: tokens.axis } },
-      axisTick: { show: false },
-      axisLabel: { color: tokens.inkMuted },
-    },
-    yAxis: {
-      type: "value",
-      minInterval: 1,
-      axisLine: { lineStyle: { color: tokens.axis } },
-      axisLabel: { color: tokens.inkMuted },
-    },
-    series: present.map((severity, index) => ({
-      name: severity,
-      type: "bar" as const,
-      stack: "findings",
-      data: payload.days.map((entry) => entry.counts[severity] ?? 0),
-      itemStyle: { color: tokens.series[index % tokens.series.length] },
-    })),
-  }
 }

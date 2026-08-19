@@ -388,6 +388,9 @@ def app_factory() -> Starlette:
         surface=surface,
         workflow_reader=workflow_reader,
         patch_reader=patch_reader,
+        changes_over_time_reader=lambda *, vendor_id=None: graph_views.changes_over_time(
+            store, vendor_id=vendor_id
+        ),
         dismissal_reader=dismissal_reader,
         dismissal_tally_reader=dismissal_tally_reader,
         dismissal_writer=dismissal_writer,

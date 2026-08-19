@@ -239,6 +239,7 @@ def create_app(
     call_sites_reader: Callable[..., dict[str, Any]] | None = None,
     integration_changes_reader: Callable[..., dict[str, Any]] | None = None,
     topology_reader: Callable[[str], dict[str, Any]] | None = None,
+    changes_over_time_reader: Callable[..., dict[str, Any]] | None = None,
     catalogue_reader: Callable[..., dict[str, Any]] | None = None,
     api_password: str | None = None,
 ) -> Starlette:
@@ -409,6 +410,15 @@ def create_app(
             frames(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
+    async def changes_over_time(request: Request) -> JSONResponse:
+        """Dashboard T3. Narrowed by vendor rather than by repository, matching the feed it
+        summarises: what a vendor published is a fact about the vendor."""
+        if changes_over_time_reader is None:
+            return JSONResponse({"error": "Changes series reader not configured"}, status_code=501)
+        return JSONResponse(
+            changes_over_time_reader(vendor_id=request.query_params.get("vendor_id"))
         )
 
     async def findings_over_time(request: Request) -> JSONResponse:
@@ -812,6 +822,7 @@ def create_app(
         # Before `{finding_id}`: Starlette matches in declaration order, so a literal
         # segment registered after a path parameter is swallowed by it.
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
+        Route("/api/integration-changes/over-time", changes_over_time, methods=["GET"]),
         Route("/api/findings/dismissals", dismissal_tally, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),

@@ -2027,6 +2027,55 @@ class GraphStore:
             for row in rows
         ]
 
+    def changes_by_day_and_vendor(self, *, vendor_id: str | None = None) -> list[dict]:
+        """Every integration change, tallied by the day Sync detected it and the vendor.
+
+        **Bucketed in SQL rather than folded from a page**, which is the whole reason this exists:
+        the changes feed orders newest-first and pages, so a client-side fold would draw the most
+        recent page and label it the history. `findings_recorded_by_day_and_severity` is the same
+        shape for the same reason.
+
+        **`detected_at` is when Sync noticed, never when the vendor published.** Nothing in this
+        graph carries a publication date -- the vendor's own timeline is not something Sync can
+        observe -- and a reader looking at dated bars of API changes supplies one unless the
+        screen says otherwise.
+
+        **A day with no change emits no row.** Nothing records that an adapter ran, so a gap is a
+        day nothing was recorded, which may be a day no vendor published or a day nothing fetched.
+        Emitting a zero would assert the first.
+
+        **Not repository-scoped, for the reason the feed is not**: what a vendor published is a
+        fact about the vendor, and it becomes a fact about a codebase only where a call site binds
+        to it. `vendor_id` narrows to one vendor's own series, which is a different question.
+
+        One caveat travels with any count over this table: `oasdiff`-derived rows do not converge
+        across runs (`CLAUDE.md`'s named idempotency exemption), so a day's height over that
+        source is at-least-once rather than a measurement.
+        """
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if vendor_id is not None:
+            clauses.append("vendor_id = %s")
+            parameters.append(vendor_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        rows = self._connect().execute(
+            f"""
+            SELECT (detected_at AT TIME ZONE 'UTC')::date AS day,
+                   vendor_id                              AS vendor_id,
+                   count(*)                               AS n
+              FROM vendor_change
+             {where}
+             GROUP BY 1, 2
+             ORDER BY 1, 2
+            """,
+            parameters,
+        ).fetchall()
+        return [
+            {"day": row["day"].isoformat(), "vendor_id": row["vendor_id"], "n": int(row["n"])}
+            for row in rows
+        ]
+
     def findings_rung_counts(self, *, repo_id: str | None = None) -> dict[str, int]:
         """Every finding the graph holds, tallied by the rung it rests on.
 
