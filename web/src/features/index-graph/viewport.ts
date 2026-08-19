@@ -70,14 +70,39 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(Math.max(value, low), high)
 }
 
+/** How large a row may render before zooming in further only wastes the canvas. */
+export const MAX_LEGIBLE_ROW_PX = 72
+
 /**
- * Zoom about the view's own centre, bounded at both ends.
+ * Zoom about the view's own centre, bounded in the units a reader sees.
  *
- * The limits are relative to the fitted view rather than absolute, so they mean the same thing on
- * a graph with three nodes and on one with three hundred.
+ * **The limits used to be multiples of the fitted view, and that is the defect this replaces.**
+ * `fit / 4` is plenty of zoom on a graph with three nodes and nowhere near enough on one with
+ * three hundred: the cap scaled with the problem, so a large codebase could never be zoomed to
+ * a legible scale at all — measured by the owner on a tree whose rows fitted at about three
+ * pixels. Expressed in pixels per row instead, "as far in as is useful" and "no further out
+ * than the whole graph" mean the same thing on every codebase.
+ *
+ * `scale` carries the row unit and the canvas height; omitted, the old relative bounds apply,
+ * which keeps a caller that has no canvas measurement working rather than unbounded.
  */
-export function zoomViewport(view: Viewport, factor: number, fit: Viewport): Viewport {
-  const width = clamp(view.width / factor, fit.width / MAX_ZOOM_IN, fit.width * MAX_ZOOM_OUT)
+export function zoomViewport(
+  view: Viewport,
+  factor: number,
+  fit: Viewport,
+  scale?: { rowHeight: number; canvasHeightPx: number },
+): Viewport {
+  let low = fit.width / MAX_ZOOM_IN
+  let high = fit.width * MAX_ZOOM_OUT
+  if (scale !== undefined) {
+    const aspect = view.width / view.height
+    // A view this tall renders one row at MAX_LEGIBLE_ROW_PX; anything narrower is more zoom
+    // than the picture can use.
+    low = ((scale.rowHeight * scale.canvasHeightPx) / MAX_LEGIBLE_ROW_PX) * aspect
+    // Out to the whole graph and no further: past the fit there is nothing left to reveal.
+    high = Math.max(fit.width, low)
+  }
+  const width = clamp(view.width / factor, low, high)
   const height = view.height * (width / view.width)
   const centreX = view.x + view.width / 2
   const centreY = view.y + view.height / 2

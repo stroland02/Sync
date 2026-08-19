@@ -31,7 +31,7 @@ import { BINDING_SOURCES, type RepositoryGraphBinding } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { describeRung } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { buildFileTree } from "@/features/index-graph/file-tree-graph"
+import { buildFileTree, foldersAtDepth, visiblePath } from "@/features/index-graph/file-tree-graph"
 import { buildOperationGraph, type CallBindingRow } from "@/features/index-graph/operation-graph"
 import {
   fitViewport,
@@ -57,6 +57,10 @@ export const EMPTY_GRAPH_NOTE =
 const CANVAS_HEIGHT = "h-[36rem]"
 /** The same 36rem, in the pixels the legibility arithmetic is done in. */
 const CANVAS_HEIGHT_PX = 576
+/** Past this many call sites the tree opens folded; below it, folding helps nobody. */
+const AGGREGATE_ABOVE = 40
+/** How deep the default fold reaches: the top level stays open, everything under it folds. */
+const DEFAULT_FOLD_DEPTH = 1
 
 function rowToBinding(row: RepositoryGraphBinding): CallBindingRow {
   return {
@@ -67,7 +71,14 @@ function rowToBinding(row: RepositoryGraphBinding): CallBindingRow {
   }
 }
 
-function NodeLabel({ node }: { node: FileTreeLayoutNode }) {
+function NodeLabel({
+  node,
+  foldedCount,
+}: {
+  node: FileTreeLayoutNode
+  /** How many call sites this folder stands for while folded, or undefined when open. */
+  foldedCount?: number
+}) {
   if (node.kind === "operation") {
     // The operation carries the vendor's name as well as its own: two vendors may both publish
     // `Charge`, and a node showing only the id would read as one operation in two places.
@@ -92,8 +103,15 @@ function NodeLabel({ node }: { node: FileTreeLayoutNode }) {
         node.kind === "folder" ? "furniture text-meta text-ink-muted" : "font-mono text-body"
       )}
     >
-      {node.kind === "folder" ? "▸" : "•"}
+      {/* The glyph says which way the fold goes, so a folded folder is legible as folded
+          rather than as an empty directory. */}
+      {node.kind === "folder" ? (foldedCount === undefined ? "▾" : "▸") : "•"}
       <span className="min-w-0 truncate">{node.name}</span>
+      {foldedCount !== undefined && (
+        <span className="shrink-0 tabular-nums text-ink-muted">
+          {foldedCount} {foldedCount === 1 ? "call site" : "call sites"}
+        </span>
+      )}
     </div>
   )
 }
@@ -154,10 +172,42 @@ export function FileTreeCanvas({
   className?: string
 }) {
   const bindings = useMemo(() => rows.map(rowToBinding), [rows])
-  const tree = useMemo(() => buildFileTree(bindings.map((b) => b.file)), [bindings])
+
+  // The full tree, computed once: what a reader could expand into, and the source of the
+  // default fold below.
+  const fullTree = useMemo(() => buildFileTree(bindings.map((b) => b.file)), [bindings])
+  // A large tree opens folded past its first level -- the aggregation every large-graph tool
+  // does. Small trees open whole, because folding three folders helps nobody.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() =>
+    bindings.length > AGGREGATE_ABOVE
+      ? new Set(foldersAtDepth(buildFileTree(bindings.map((b) => b.file)), DEFAULT_FOLD_DEPTH))
+      : new Set()
+  )
+
+  // How many call sites each collapsed folder now stands for, so a folded node says what it
+  // is hiding rather than looking like an empty directory.
+  const foldedCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const binding of bindings) {
+      const at = visiblePath(binding.file, collapsed)
+      if (at !== binding.file) counts.set(at, (counts.get(at) ?? 0) + 1)
+    }
+    return counts
+  }, [bindings, collapsed])
+
+  // Bindings re-attached to the nearest visible ancestor: collapsing changes the picture's
+  // resolution, never its claims.
+  const visibleBindings = useMemo(
+    () => bindings.map((b) => ({ ...b, file: visiblePath(b.file, collapsed) })),
+    [bindings, collapsed]
+  )
+  const tree = useMemo(
+    () => buildFileTree(visibleBindings.map((b) => b.file)),
+    [visibleBindings]
+  )
   const graph = useMemo(
-    () => buildOperationGraph(bindings, knownVendorIds),
-    [bindings, knownVendorIds]
+    () => buildOperationGraph(visibleBindings, knownVendorIds),
+    [visibleBindings, knownVendorIds]
   )
   const layout = useMemo(() => layoutOperationGraph(tree, graph), [tree, graph])
   const fit = useMemo(() => fitViewport(layout.bounds), [layout.bounds])
@@ -222,35 +272,14 @@ export function FileTreeCanvas({
     [graph.fileEdges, graph.vendorEdges]
   )
 
+  const foldable = useMemo(() => foldersAtDepth(fullTree, DEFAULT_FOLD_DEPTH), [fullTree])
+  const zoom = { rowHeight: ROW_HEIGHT, canvasHeightPx: CANVAS_HEIGHT_PX }
+
   return (
     <section className={cn("flex min-w-0 flex-col gap-section", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-section">
-        <div className="flex flex-wrap items-center gap-field">
-          <Button variant="outline" size="sm" onClick={() => setPanned(zoomViewport(view, 2, fit))}>
-            Zoom in
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPanned(zoomViewport(view, 0.5, fit))}>
-            Zoom out
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPanned(readable)}>
-            Readable view
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPanned(fit)}>
-            Fit whole tree
-          </Button>
-        </div>
-        <p className="max-w-prose text-meta text-ink-muted">
-          {SCOPE_NOTE}
-          {clipped && (
-            <>
-              {" "}
-              This tree is larger than one screen can render legibly, so it opens at the top at
-              a scale where a row still reads — pan, or use the minimap, to reach the rest.
-            </>
-          )}
-        </p>
-      </div>
-
+      {/* Every control lives inside the card, floating over the picture — the owner's
+          instruction, and the convention every node canvas follows: a toolbar above the frame
+          reads as page furniture rather than as part of the map. */}
       <div className="relative min-w-0 overflow-hidden rounded-surface border border-line bg-background">
         <svg
           aria-label={CANVAS_LABEL}
@@ -274,11 +303,44 @@ export function FileTreeCanvas({
             })}
           </g>
           <g>
-            {shown.map((node) => (
-              <foreignObject key={node.id} x={node.x} y={node.y} width={node.width} height={node.height}>
-                <NodeLabel node={node} />
-              </foreignObject>
-            ))}
+            {shown.map((node) => {
+              const path = node.kind === "folder" || node.kind === "file" ? node.path : null
+              const folded = path !== null && collapsed.has(path)
+              const foldable_here = node.kind === "folder"
+              return (
+                <foreignObject
+                  key={node.id}
+                  x={node.x}
+                  y={node.y}
+                  width={node.width}
+                  height={node.height}
+                  // A folder opens or closes on click — expand-on-demand, the rule every large
+                  // graph tool follows. Stops the pointer from starting a pan so a click that
+                  // means "open this" is never read as a drag.
+                  onPointerDown={
+                    foldable_here
+                      ? (event) => {
+                          event.stopPropagation()
+                        }
+                      : undefined
+                  }
+                  onClick={
+                    foldable_here && path !== null
+                      ? () =>
+                          setCollapsed((current) => {
+                            const next = new Set(current)
+                            if (next.has(path)) next.delete(path)
+                            else next.add(path)
+                            return next
+                          })
+                      : undefined
+                  }
+                  className={foldable_here ? "cursor-pointer" : undefined}
+                >
+                  <NodeLabel node={node} foldedCount={folded ? foldedCounts.get(path) : undefined} />
+                </foreignObject>
+              )
+            })}
           </g>
         </svg>
 
@@ -286,10 +348,78 @@ export function FileTreeCanvas({
           <p className="absolute inset-0 flex items-center justify-center p-section text-center text-body text-ink-muted">{EMPTY_GRAPH_NOTE}</p>
         )}
 
-        <div className="absolute right-0 bottom-0 p-section">
+        {/* Top-left: the view controls, over the canvas. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPanned(zoomViewport(view, 1.6, fit, zoom))}
+            >
+              Zoom in
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPanned(zoomViewport(view, 0.625, fit, zoom))}
+            >
+              Zoom out
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPanned(readable)}>
+              Readable
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPanned(fit)}>
+              Fit all
+            </Button>
+          </div>
+
+          {/* Top-right: the aggregation controls, because folding is what makes a large tree
+              readable at all and it belongs beside the zoom rather than under the picture. */}
+          {foldable.length > 0 && (
+            <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCollapsed(new Set(foldable))}
+                disabled={collapsed.size === foldable.length}
+              >
+                Fold folders
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCollapsed(new Set())}
+                disabled={collapsed.size === 0}
+              >
+                Expand all
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="pointer-events-none absolute right-0 bottom-0 p-row">
           <Minimap nodes={layout.nodes} frame={fit} view={view} />
         </div>
       </div>
+
+      <p className="max-w-prose text-meta text-ink-muted">
+        {SCOPE_NOTE}
+        {collapsed.size > 0 && (
+          <>
+            {" "}
+            {collapsed.size} {collapsed.size === 1 ? "folder is" : "folders are"} folded, each
+            standing for the call sites inside it — click one to open it. Nothing is hidden by
+            folding: a folded folder carries its subtree&rsquo;s edges.
+          </>
+        )}
+        {clipped && collapsed.size === 0 && (
+          <>
+            {" "}
+            This tree is larger than one screen can render legibly, so it opens at the top at a
+            scale where a row still reads — pan, or use the minimap, to reach the rest.
+          </>
+        )}
+      </p>
 
       {graph.unroutable.length > 0 && (
         <p className="text-meta text-ink-muted leading-relaxed">
