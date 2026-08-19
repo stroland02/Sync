@@ -42,15 +42,19 @@ function renderVendor(path: string) {
  * Asserted on document order rather than on which components exist, because both orders render
  * exactly the same set of cards.
  */
-describe("VendorPage's order, per decision 29", () => {
-  it("leads with what this vendor costs, before what it has done", () => {
+describe("VendorPage's order, per the owner's re-ruling of 2026-08-19", () => {
+  it("leads with what this vendor changed, before what it costs", () => {
+    // Supersedes decision 29, which led with exposure. The owner reversed it looking at the
+    // running page: the exposure table's rung and traffic columns are constants until telemetry
+    // attaches, so the page opened on its emptiest answer while the vendor's history — the thing
+    // that changes — sat at the bottom.
     renderVendor("/repositories/seed-console/vendors/stripe")
 
     const exposure = screen.getByTestId("vendor-exposure")
     const history = screen.getByTestId("vendor-history")
 
-    // DOCUMENT_POSITION_FOLLOWING: history comes after exposure in document order.
-    expect(exposure.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    // DOCUMENT_POSITION_FOLLOWING: exposure comes after history in document order.
+    expect(history.compareDocumentPosition(exposure) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     )
   })

@@ -85,17 +85,19 @@ export function VendorExposureCard({
     >
       <Table>
           <TableHeader>
+            {/* No Repositories column: this card always asks with a `repoId`, so the payload's
+                `repository_count` is 1 on every row by construction — a constant is not a
+                column. The unscoped payload keeps the field for callers that ask fleet-wide. */}
             <TableRow>
               <TableHead>Operation</TableHead>
               <TableHead>Call sites</TableHead>
-              <TableHead>Repositories</TableHead>
               <TableHead>Rung</TableHead>
               <TableHead>Traffic</TableHead>
             </TableRow>
           </TableHeader>
           {operations.length === 0 ? (
             <TableEmptyState
-              columns={5}
+              columns={4}
               headline={`This codebase does not call ${vendorId}.`}
               detail="The index found no current call site naming this vendor. A call the last pass stopped finding is not counted here, so a vendor this codebase used to call reads the same as one it never did."
             />
@@ -112,7 +114,6 @@ export function VendorExposureCard({
                   </Link>
                 </TableCell>
                 <TableCell className="font-mono">{operation.call_site_count}</TableCell>
-                <TableCell className="font-mono">{operation.repository_count}</TableCell>
                 <TableCell>
                   <Badge>{operation.binding_rung}</Badge>
                 </TableCell>

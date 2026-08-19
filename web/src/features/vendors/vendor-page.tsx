@@ -1,15 +1,16 @@
 /**
- * One API service: what is at risk across the codebase, and what the vendor changed.
+ * One API service: what the vendor changed, and what is at risk across the codebase.
  *
- * **Owner decision 29 sets the order, and the mock draws the opposite one.** `03-vendor` leads
- * with what the vendor changed and puts open findings at the bottom. The decision leads with
- * exposure — what this vendor costs this codebase — and puts the vendor's history below it as the
- * reason those findings appeared. The settled authority order puts a decision above the mock, so
- * the conflict is resolved that way and recorded rather than left for the next reader to
- * rediscover.
+ * **The owner re-ruled the order on 2026-08-19, superseding decision 29.** That decision led
+ * with exposure — what this vendor costs this codebase — with the vendor's history at the
+ * bottom. Looking at the running page reversed it: until telemetry attaches, the exposure
+ * table's rung and traffic columns are constants, so the page opened on its emptiest answer
+ * while the changes feed — the thing that moves — sat below the fold. The mock (`03-vendor`)
+ * drew this order all along; the ruling is recorded here so the next reader sees a decision
+ * rather than a drift back to the mock.
  *
- * Top to bottom: the operations this codebase calls, then the findings open against them, then
- * what the vendor published beside where it was read from.
+ * Top to bottom: what the vendor published beside where it was read from, then the operations
+ * this codebase calls, then the findings open against them.
  */
 
 import { useParams } from "react-router"
@@ -47,12 +48,10 @@ export function VendorPage() {
             facts={[
               { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
               {
-                label: "Repository scope",
-                value: <span className="font-mono">{repoId}</span>,
-              },
-              {
+                // One scope fact, not two: "Repository scope" and "Findings counted over"
+                // carried the same value under different labels, which reads as two facts.
                 label: "Findings counted over",
-                value: repoId,
+                value: <span className="font-mono">{repoId}</span>,
               },
               {
                 label: "Changes counted over",
@@ -64,18 +63,12 @@ export function VendorPage() {
       >
         <div className="flex min-w-0 flex-col gap-section">
           <p className="max-w-prose text-body text-muted-foreground">
-            Open findings for {vendorId} in <span className="font-mono">{repoId}</span> alone. The
-            vendor changes below are the exception and say so: what {vendorId} published is a fact
-            about the vendor, not about this workspace.
+            What {vendorId} published, then what it touches here. The changes are a fact about the
+            vendor, never about this workspace; the exposure and findings beneath them are counted
+            over <span className="font-mono">{repoId}</span> alone.
           </p>
         </div>
       </DetailGrid>
-
-      <div className="flex flex-col gap-8" data-testid="vendor-exposure">
-        <VendorExposureCard vendorId={vendorId} repoId={repoId} />
-        <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
-        <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
-      </div>
 
       {/* No `items-start`: the two cards share this row, and stretching them to one height is
           what keeps the pairing legible as a pairing rather than as two blocks that happen to
@@ -86,6 +79,12 @@ export function VendorPage() {
       >
         <VendorChangesCard vendorId={vendorId} repoId={repoId} />
         <VendorSourcesCard vendorId={vendorId} repoId={repoId} />
+      </div>
+
+      <div className="flex flex-col gap-8" data-testid="vendor-exposure">
+        <VendorExposureCard vendorId={vendorId} repoId={repoId} />
+        <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
+        <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
       </div>
     </section>
   )
