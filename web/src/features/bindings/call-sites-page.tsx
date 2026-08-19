@@ -47,7 +47,12 @@ import {
   type ColumnSpec,
 } from "@/components/column-visibility"
 import { CallSitesDashboards } from "@/features/bindings/call-sites-dashboards"
-import { CallSiteDrawer } from "@/features/bindings/call-site-drawer"
+import { CallSiteDetail } from "@/features/bindings/call-site-drawer"
+import {
+  DetailLayout,
+  useSelectionKeys,
+  useSelectionParam,
+} from "@/components/detail-layout"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -168,9 +173,10 @@ export function CallSitesPage() {
   // is the owner's report of 2026-08-19. One write does both.
   const [vendorId, setSelectedVendor] = useFilterParam("call_sites_vendor", ["call_sites_offset"])
   const [pathPrefix] = useFacetParam("call_sites_path")
-  // The open row lives in the URL, which is the half of Nango's drawer convention that matters:
-  // a reader handing a colleague a link hands them the row they are looking at, not the page.
-  const [openSite, setOpenSite] = useFacetParam("call_sites_open")
+  // The open row lives in the URL -- Nango's convention -- and is written as a history push, so
+  // Back closes the panel rather than leaving the screen. `useFacetParam` did not push, which
+  // would have made Back skip past the whole table.
+  const [openSite, setOpenSite] = useSelectionParam("call_sites_open")
   const columns = useColumnVisibility("call-sites", CALL_SITE_COLUMNS)
   const query = useQuery({
     queryKey: ["call-sites", repoId ?? "", vendorId, pathPrefix, offset],
@@ -178,6 +184,16 @@ export function CallSitesPage() {
       fetchCallSites(repoId ?? "", { vendorId, pathPrefix, offset }, signal),
     enabled: repoId !== undefined,
   })
+
+  const rows = query.data?.items ?? []
+  const selectedSite = rows.find((row) => row.id === openSite) ?? null
+  // Arrow keys move down the list with the panel open, which is the affordance a beside-the-list
+  // panel exists for -- and the reason a modal would have been the wrong form.
+  useSelectionKeys(
+    rows.map((row) => row.id),
+    selectedSite === null ? null : selectedSite.id,
+    setOpenSite,
+  )
 
   if (repoId === undefined) return <UnknownRoute />
 
@@ -219,169 +235,173 @@ export function CallSitesPage() {
             )
           })()}
 
-          <MetricPanel
-            label="Call sites"
-            hint={
-              <InfoHint label="About call sites">
-                Every place this codebase calls an integration&rsquo;s API, as the last index
-                pass found it. A site the pass stopped finding is retracted and absent here —
-                it is not a place this codebase calls the vendor, though a finding raised
-                against it stays addressable. There is no rung column: a rung describes a
-                binding, and the binding surface is where one is shown.
-              </InfoHint>
-            }
-            metric={{
-              value: query.data.total.toLocaleString(),
-              unit:
-                vendorId === null
-                  ? `call site${query.data.total === 1 ? "" : "s"} in ${repoId}`
-                  : `call site${query.data.total === 1 ? "" : "s"} calling ${vendorId}`,
-            }}
-          >
-            {/* The reader chooses which of the fifteen recorded fields to see. Above the table
-                rather than in a settings screen: the choice belongs where its effect is. */}
-            <div className="flex justify-end">
-              <ColumnVisibilityMenu
-                columns={CALL_SITE_COLUMNS}
-                isVisible={columns.isVisible}
-                onToggle={columns.toggle}
-              />
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {columns.isVisible("path") && <TableHead>File</TableHead>}
-                  {columns.isVisible("symbol") && <TableHead>Symbol</TableHead>}
-                  {columns.isVisible("vendor") && <TableHead>Integration</TableHead>}
-                  {columns.isVisible("operation") && <TableHead>Operation</TableHead>}
-                  {columns.isVisible("loops") && <TableHead>Loops</TableHead>}
-                  {columns.isVisible("args") && <TableHead>Arguments sent</TableHead>}
-                  {columns.isVisible("reads") && <TableHead>Response fields read</TableHead>}
-                  {columns.isVisible("sdk") && <TableHead>SDK version</TableHead>}
-                  {columns.isVisible("indexed") && <TableHead>Indexed</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {query.data.items.length === 0 && (
-                  <TableEmptyRow colSpan={columns.visible.size}>
-                    {vendorId !== null && query.data.unfiltered_total > 0 ? (
-                      <>
-                        <span className="text-ink">No call site matches this narrowing.</span>{" "}
-                        The index holds {query.data.unfiltered_total.toLocaleString()} call
-                        sites here and none of them calls {vendorId} — clear the rail&rsquo;s
-                        selection to see them.
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-ink">No call site in this codebase.</span> The
-                        index answered and found no call to any integration it can watch — a
-                        measured zero if a pass has run, and nothing at all if none has. The
-                        Overview&rsquo;s Getting started says which.
-                      </>
-                    )}
-                  </TableEmptyRow>
-                )}
-                {query.data.items.map((site) => (
-                  <TableRow
-                    key={site.id}
-                    onClick={() => setOpenSite(site.id)}
-                    className="cursor-pointer"
-                  >
-                    {columns.isVisible("path") && (
-                      <TableCell className="font-mono text-meta">
-                        <span className="break-all">{site.path}</span>
-                        <span className="text-ink-muted">
-                          :{site.line}:{site.col}
-                        </span>
-                      </TableCell>
-                    )}
-                    {columns.isVisible("symbol") && (
-                      <TableCell className="font-mono">{site.symbol}</TableCell>
-                    )}
-                    {columns.isVisible("vendor") && (
-                      <TableCell className="font-mono text-meta">{site.vendor_id}</TableCell>
-                    )}
-                    {columns.isVisible("operation") && (
-                    <TableCell className="font-mono text-meta">
-                      {/* The binding surface is where this site's rung and its vendor changes
-                          live — the operation is the address of that screen. */}
-                      <Link
-                        to={`/repositories/${encodeURIComponent(repoId)}/bindings/vendors/${encodeURIComponent(site.vendor_id)}/operations/${encodeURIComponent(site.operation_id)}`}
-                        className="underline underline-offset-2"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {site.operation_id}
-                      </Link>
-                    </TableCell>
-                    )}
-                    {columns.isVisible("loops") && (
-                      <TableCell className="font-mono text-meta tabular-nums">
-                        {site.loop_depth}
-                      </TableCell>
-                    )}
-                    {columns.isVisible("args") && (
-                      <TableCell className="text-meta text-ink-muted">
-                        {/* Keys only, never values -- `graph-grain.md`'s shapes-not-values rule,
-                            and the empty case says which nothing it is. */}
-                        {site.args_keys.length === 0 ? (
-                          <Absent>none recorded</Absent>
-                        ) : (
-                          <span className="font-mono">{site.args_keys.join(", ")}</span>
-                        )}
-                      </TableCell>
-                    )}
-                    {columns.isVisible("reads") && (
-                      <TableCell className="text-meta text-ink-muted">
-                        {site.response_fields_read.length === 0 ? (
-                          <Absent>none recorded</Absent>
-                        ) : (
-                          <span className="font-mono">{site.response_fields_read.join(", ")}</span>
-                        )}
-                      </TableCell>
-                    )}
-                    {columns.isVisible("sdk") && (
-                      <TableCell className="font-mono text-meta">
-                        {site.sdk_version ? site.sdk_version : <Absent>not recorded</Absent>}
-                      </TableCell>
-                    )}
-                    {columns.isVisible("indexed") && (
-                      <TableCell className="text-meta text-ink-muted">
-                        {site.indexed_at === null ? (
-                          <Absent>no date</Absent>
-                        ) : (
-                          <RelativeTime iso={site.indexed_at} />
-                        )}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <FooterBar
-              offset={offset}
-              limit={LIMIT}
-              shown={query.data.items.length}
-              total={query.data.total}
-              nextOffset={query.data.next_offset}
-              busy={query.isFetching}
-              unfilteredTotal={vendorId !== null ? query.data.unfiltered_total : undefined}
-              onOffsetChange={setOffset}
-            />
-            <p className="max-w-prose text-meta text-muted-foreground">
-              Loops is how many loops enclose the call, from the code itself: zero is once per
-              unit of work, one is a page of results becoming one call each, two is quadratic.
-              A loop that never runs still counts — this is what the code says, not what ran.
-            </p>
-          </MetricPanel>
-
-          {/* The row's detail, opened from the row and addressable from the URL -- Nango's
-              convention (`references/notes/nango-integration-architecture.md` §4), taken because
-              15 recorded fields do not fit a scannable row and a reader handing a colleague a
-              link should be handing them the row they are looking at. */}
-          <CallSiteDrawer
-            site={query.data.items.find((row) => row.id === openSite) ?? null}
+          {/* The detail sits beside the table rather than over it (M15 Task 2): a reader
+              working down 165 rows should not close one row to reach the next. */}
+          <DetailLayout
+            title={selectedSite ? `${selectedSite.path}:${selectedSite.line}` : ""}
             onClose={() => setOpenSite(null)}
+            detail={selectedSite ? <CallSiteDetail site={selectedSite} /> : null}
+            list={
+              <>
+            <MetricPanel
+              label="Call sites"
+              hint={
+                <InfoHint label="About call sites">
+                  Every place this codebase calls an integration&rsquo;s API, as the last index
+                  pass found it. A site the pass stopped finding is retracted and absent here —
+                  it is not a place this codebase calls the vendor, though a finding raised
+                  against it stays addressable. There is no rung column: a rung describes a
+                  binding, and the binding surface is where one is shown.
+                </InfoHint>
+              }
+              metric={{
+                value: query.data.total.toLocaleString(),
+                unit:
+                  vendorId === null
+                    ? `call site${query.data.total === 1 ? "" : "s"} in ${repoId}`
+                    : `call site${query.data.total === 1 ? "" : "s"} calling ${vendorId}`,
+              }}
+            >
+              {/* The reader chooses which of the fifteen recorded fields to see. Above the table
+                  rather than in a settings screen: the choice belongs where its effect is. */}
+              <div className="flex justify-end">
+                <ColumnVisibilityMenu
+                  columns={CALL_SITE_COLUMNS}
+                  isVisible={columns.isVisible}
+                  onToggle={columns.toggle}
+                />
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {columns.isVisible("path") && <TableHead>File</TableHead>}
+                    {columns.isVisible("symbol") && <TableHead>Symbol</TableHead>}
+                    {columns.isVisible("vendor") && <TableHead>Integration</TableHead>}
+                    {columns.isVisible("operation") && <TableHead>Operation</TableHead>}
+                    {columns.isVisible("loops") && <TableHead>Loops</TableHead>}
+                    {columns.isVisible("args") && <TableHead>Arguments sent</TableHead>}
+                    {columns.isVisible("reads") && <TableHead>Response fields read</TableHead>}
+                    {columns.isVisible("sdk") && <TableHead>SDK version</TableHead>}
+                    {columns.isVisible("indexed") && <TableHead>Indexed</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {query.data.items.length === 0 && (
+                    <TableEmptyRow colSpan={columns.visible.size}>
+                      {vendorId !== null && query.data.unfiltered_total > 0 ? (
+                        <>
+                          <span className="text-ink">No call site matches this narrowing.</span>{" "}
+                          The index holds {query.data.unfiltered_total.toLocaleString()} call
+                          sites here and none of them calls {vendorId} — clear the rail&rsquo;s
+                          selection to see them.
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-ink">No call site in this codebase.</span> The
+                          index answered and found no call to any integration it can watch — a
+                          measured zero if a pass has run, and nothing at all if none has. The
+                          Overview&rsquo;s Getting started says which.
+                        </>
+                      )}
+                    </TableEmptyRow>
+                  )}
+                  {query.data.items.map((site) => (
+                    <TableRow
+                      key={site.id}
+                      onClick={() => setOpenSite(site.id)}
+                      className="cursor-pointer"
+                    >
+                      {columns.isVisible("path") && (
+                        <TableCell className="font-mono text-meta">
+                          <span className="break-all">{site.path}</span>
+                          <span className="text-ink-muted">
+                            :{site.line}:{site.col}
+                          </span>
+                        </TableCell>
+                      )}
+                      {columns.isVisible("symbol") && (
+                        <TableCell className="font-mono">{site.symbol}</TableCell>
+                      )}
+                      {columns.isVisible("vendor") && (
+                        <TableCell className="font-mono text-meta">{site.vendor_id}</TableCell>
+                      )}
+                      {columns.isVisible("operation") && (
+                      <TableCell className="font-mono text-meta">
+                        {/* The binding surface is where this site's rung and its vendor changes
+                            live — the operation is the address of that screen. */}
+                        <Link
+                          to={`/repositories/${encodeURIComponent(repoId)}/bindings/vendors/${encodeURIComponent(site.vendor_id)}/operations/${encodeURIComponent(site.operation_id)}`}
+                          className="underline underline-offset-2"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {site.operation_id}
+                        </Link>
+                      </TableCell>
+                      )}
+                      {columns.isVisible("loops") && (
+                        <TableCell className="font-mono text-meta tabular-nums">
+                          {site.loop_depth}
+                        </TableCell>
+                      )}
+                      {columns.isVisible("args") && (
+                        <TableCell className="text-meta text-ink-muted">
+                          {/* Keys only, never values -- `graph-grain.md`'s shapes-not-values rule,
+                              and the empty case says which nothing it is. */}
+                          {site.args_keys.length === 0 ? (
+                            <Absent>none recorded</Absent>
+                          ) : (
+                            <span className="font-mono">{site.args_keys.join(", ")}</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {columns.isVisible("reads") && (
+                        <TableCell className="text-meta text-ink-muted">
+                          {site.response_fields_read.length === 0 ? (
+                            <Absent>none recorded</Absent>
+                          ) : (
+                            <span className="font-mono">{site.response_fields_read.join(", ")}</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {columns.isVisible("sdk") && (
+                        <TableCell className="font-mono text-meta">
+                          {site.sdk_version ? site.sdk_version : <Absent>not recorded</Absent>}
+                        </TableCell>
+                      )}
+                      {columns.isVisible("indexed") && (
+                        <TableCell className="text-meta text-ink-muted">
+                          {site.indexed_at === null ? (
+                            <Absent>no date</Absent>
+                          ) : (
+                            <RelativeTime iso={site.indexed_at} />
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <FooterBar
+                offset={offset}
+                limit={LIMIT}
+                shown={query.data.items.length}
+                total={query.data.total}
+                nextOffset={query.data.next_offset}
+                busy={query.isFetching}
+                unfilteredTotal={vendorId !== null ? query.data.unfiltered_total : undefined}
+                onOffsetChange={setOffset}
+              />
+              <p className="max-w-prose text-meta text-muted-foreground">
+                Loops is how many loops enclose the call, from the code itself: zero is once per
+                unit of work, one is a page of results becoming one call each, two is quadratic.
+                A loop that never runs still counts — this is what the code says, not what ran.
+              </p>
+            </MetricPanel>
+              </>
+            }
           />
+
+
         </div>
       )}
     </section>
