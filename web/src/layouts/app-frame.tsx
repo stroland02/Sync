@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import {
+  ChartLine,
   CircleUserRound,
   FileWarning,
   FolderTree,
@@ -12,6 +13,7 @@ import {
   Plug,
   Radar,
   Radio,
+  ScrollText,
   Settings,
   Workflow,
   Wrench,
@@ -36,7 +38,6 @@ import {
   boundParams,
   destinationHref,
   isActiveMenuItem,
-  type GraphLevel,
   type RouteEntry,
 } from "@/lib/routes"
 import {
@@ -53,6 +54,10 @@ import {
 
 const DESTINATION_ICON: Record<string, LucideIcon> = {
   "/repositories/:repoId": Radar,
+  "/repositories/:repoId/runs": ScrollText,
+  "/repositories/:repoId/metrics": ChartLine,
+  "/repositories/:repoId/solutions": GitPullRequest,
+  "/repositories/:repoId/findings": FileWarning,
   "/repositories/:repoId/services": Plug,
   "/repositories/:repoId/vendors": FolderTree,
   "/repositories/:repoId/observed": Radio,
@@ -75,6 +80,84 @@ const SETTINGS_NOTE =
 
 /** Where a row goes when its own subject is not bound: the screen a codebase is selected on. */
 const SUBJECT_PICKER = "/"
+
+/**
+ * The Sync logomark: two arcs closing a loop between two terminal nodes — the product in one
+ * shape, a graph kept in sync. Drawn here rather than shipped as an asset: it is ours
+ * (`interface-originality.md`), it is one path set, and `currentColor` keeps it on the
+ * palette's own ink at every size.
+ */
+function SyncMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <g fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <path d="M19.5 8.5A8.2 8.2 0 0 0 5.2 7.1" />
+        <path d="M4.5 15.5a8.2 8.2 0 0 0 14.3 1.4" />
+      </g>
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+      <circle cx="4.6" cy="7.4" r="1.6" fill="currentColor" />
+      <circle cx="19.4" cy="16.6" r="1.6" fill="currentColor" />
+    </svg>
+  )
+}
+
+/**
+ * The identity facts both sides of the chassis render: which workspace, and who the forge
+ * credential speaks as. One hook so the sidebar's account row and the top bar's environment
+ * badge cannot disagree — the query key is shared and cached well past the navigation rate,
+ * because the server side shells out to `gh` for it.
+ */
+function useChassisIdentity(pathname: string) {
+  const routeBound = boundParams(pathname)
+  const repositories = useRepositories()
+  const repoIds = repositories.data?.repo_ids ?? []
+  const soleRepoId = repoIds.length === 1 ? repoIds[0] : null
+  const bound =
+    routeBound.repoId === undefined && soleRepoId !== null
+      ? { ...routeBound, repoId: soleRepoId }
+      : routeBound
+  const setupQuery = useQuery({
+    queryKey: ["setup", "chassis"],
+    queryFn: ({ signal }) => fetchSetup(null, signal),
+    staleTime: 5 * 60_000,
+  })
+  return {
+    bound,
+    workspace: bound.repoId ?? null,
+    forgeLogin: setupQuery.data?.operator.forge_login ?? null,
+    pending: setupQuery.isPending,
+  }
+}
+
+/**
+ * The environment, in the cross's top-right quadrant by the owner's direction: the workspace's
+ * git name, the deployment, and the forge credential, as one truncating link into Connections.
+ */
+function EnvironmentBadge() {
+  const { pathname } = useLocation()
+  const { workspace, forgeLogin, pending } = useChassisIdentity(pathname)
+  return (
+    <Link
+      to="/settings?group=github-connection"
+      className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
+      title="Connections — Settings"
+    >
+      {workspace !== null && (
+        <>
+          <span className="min-w-0 truncate font-mono text-ink" title={workspace}>
+            {workspace}
+          </span>
+          <span aria-hidden="true">·</span>
+        </>
+      )}
+      <span className="shrink-0">local dev</span>
+      <span aria-hidden="true">·</span>
+      <span className="shrink-0">
+        {pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
+      </span>
+    </Link>
+  )
+}
 
 
 
@@ -142,48 +225,11 @@ function DestinationRow({
  * holds its subject and is absent here. Absent is honest; present and inert reads as broken.
  */
 function navRoutes(): RouteEntry[] {
-  return ROUTES.filter((route) => route.nav)
-}
-
-/** The graph levels the navigable destinations sit at, in registry order, without repeats. */
-function navLevels(): GraphLevel[] {
-  const seen: GraphLevel[] = []
-  for (const route of navRoutes()) {
-    if (!seen.includes(route.level)) seen.push(route.level)
-  }
-  return seen
-}
-
-function LevelGroup({
-  level,
-  pathname,
-  bound,
-  minimised,
-}: {
-  level: GraphLevel
-  pathname: string
-  bound: Record<string, string>
-  minimised: boolean
-}) {
-  const routes = navRoutes().filter((route) => route.level === level)
-  if (routes.length === 0) return null
-
-  return (
-    <SidebarGroup className="px-row py-0">
-      <SidebarGroupContent>
-        <SidebarMenu className="gap-0">
-          {routes.map((route) => (
-            <DestinationRow
-              key={route.path}
-              route={route}
-              pathname={pathname}
-              bound={bound}
-              minimised={minimised}
-            />
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+  // The owner's reading order, 2026-08-18, held by `navOrder` rather than by registry
+  // position — the rail stopped grouping by level, so its order is a declared product
+  // decision and an entry without one sorts last, loudly at the bottom rather than lost.
+  return ROUTES.filter((route) => route.nav).sort(
+    (a, b) => (a.navOrder ?? Number.MAX_SAFE_INTEGER) - (b.navOrder ?? Number.MAX_SAFE_INTEGER),
   )
 }
 
@@ -209,31 +255,12 @@ function LevelGroup({
  * content column never moves under a pointer that was only passing through.
  */
 function AppSidebar({ pathname }: { pathname: string }) {
-  const routeBound = boundParams(pathname)
   // The install story: this console is set up beside one codebase, so when the graph holds
   // exactly one repository the sidebar binds every destination through it rather than sending
   // unbound rows to the picker — a reader is never asked to choose among one. Several
   // repositories keep the picker, because choosing among several is the operator's act, and
   // an unanswered repositories query binds nothing rather than guessing.
-  const repositories = useRepositories()
-  const repoIds = repositories.data?.repo_ids ?? []
-  const soleRepoId = repoIds.length === 1 ? repoIds[0] : null
-  const bound =
-    routeBound.repoId === undefined && soleRepoId !== null
-      ? { ...routeBound, repoId: soleRepoId }
-      : routeBound
-  const workspace = bound.repoId ?? null
-
-  // The chassis identity facts: which environment this console serves and who the forge
-  // credential speaks as. One setup probe, cached well past the navigation rate — the server
-  // side shells out to `gh`, and a sidebar that re-probed a credential on every route change
-  // would be paying a subprocess for a fact that changes at human speed.
-  const setupQuery = useQuery({
-    queryKey: ["setup", "chassis"],
-    queryFn: ({ signal }) => fetchSetup(null, signal),
-    staleTime: 5 * 60_000,
-  })
-  const forgeLogin = setupQuery.data?.operator.forge_login ?? null
+  const { bound, workspace, forgeLogin, pending: identityPending } = useChassisIdentity(pathname)
   // The pin is a stored preference with no control any more: the owner removed the button because
   // hovering is the mechanism, and two ways to open one panel is what made this hard to reason
   // about. It is still read, so a reader who set it before this change is not overruled by it, and
@@ -307,58 +334,24 @@ function AppSidebar({ pathname }: { pathname: string }) {
         className="absolute inset-y-0 left-0 overflow-hidden border-r border-line bg-sidebar"
       >
         <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
-          {/* The whole header is one cell: exactly the top bar's 48px, closed by the shared
-              hairline. The sidebar border and the top bar border form a cross, and the owner's
-              ruling assigns its quadrants -- the environment lives ABOVE the line in this cell,
-              and the destination buttons start AT the line, so nothing above ever shifts them.
-              Two compact lines inside the cell: the wordmark, then the environment -- deployment
-              and forge credential -- as one truncating link. `px-section` keeps the cell's text
-              on the same 16px left edge the rows below sit on; the workspace rides the cell's
-              title, because three lines do not fit in 48px and the Overview names it in full. */}
+          {/* The top-left cell of the cross: the logomark alone, at exactly the top bar's 48px,
+              closed by the shared hairline. The environment moved to the cross's top-right (the
+              top bar) on the owner's direction, so nothing here ever shifts the rows below. */}
           <SidebarHeader className="gap-0 p-0">
             <div
-              className="flex h-12 shrink-0 flex-col justify-center gap-field border-b border-line px-section"
+              className="flex h-12 shrink-0 items-center gap-row border-b border-line px-section"
               title={workspace ?? undefined}
             >
-              <div className="flex min-w-0 items-center gap-field leading-none">
-                <span
-                  className={
-                    minimised
-                      ? "sr-only"
-                      : "font-semibold text-emphasis tracking-tight text-foreground"
-                  }
-                >
-                  sync
-                </span>
-                <span
-                  className={
-                    minimised
-                      ? "sr-only"
-                      : "font-mono text-meta uppercase tracking-wider text-muted-foreground"
-                  }
-                >
-                  console
-                </span>
-              </div>
-              <Link
-                to="/settings?group=github-connection"
+              <SyncMark className="size-5 shrink-0 text-foreground" />
+              <span
                 className={
                   minimised
                     ? "sr-only"
-                    : "flex min-w-0 items-center gap-row text-meta leading-none text-ink-muted hover:text-ink"
+                    : "font-semibold text-emphasis tracking-tight text-foreground"
                 }
-                title="Connections - Settings"
               >
-                <span className="shrink-0">local dev</span>
-                <span aria-hidden="true">&middot;</span>
-                <span className="min-w-0 truncate">
-                  {setupQuery.isPending
-                    ? "git: asking..."
-                    : forgeLogin !== null
-                      ? `git: ${forgeLogin}`
-                      : "git: not connected"}
-                </span>
-              </Link>
+                Sync
+              </span>
             </div>
           </SidebarHeader>
           {/* No scrollbar — owner review item 3, and the compaction above is what makes it honest
@@ -368,17 +361,23 @@ function AppSidebar({ pathname }: { pathname: string }) {
               destination is unreachable and no route test would catch it, which is a worse fault
               than a scrollbar the owner did not want. */}
           <SidebarContent className="gap-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* One flat set, grouped by the level each destination sits at. The workspace is
-              chosen above; everything here is that workspace's. */}
-          {navLevels().map((level) => (
-            <LevelGroup
-              key={level}
-              level={level}
-              pathname={pathname}
-              bound={bound}
-              minimised={minimised}
-            />
-          ))}
+          {/* One flat set in the owner's declared order. The workspace is chosen above;
+              everything here is that workspace's. */}
+          <SidebarGroup className="px-row py-0">
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-0">
+                {navRoutes().map((route) => (
+                  <DestinationRow
+                    key={route.path}
+                    route={route}
+                    pathname={pathname}
+                    bound={bound}
+                    minimised={minimised}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
           </SidebarContent>
 
@@ -409,7 +408,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
                     minimised ? "sr-only" : "min-w-0 truncate font-mono text-meta text-ink-muted"
                   }
                 >
-                  {setupQuery.isPending ? "asking…" : (forgeLogin ?? "no forge account")}
+                  {identityPending ? "asking…" : (forgeLogin ?? "no forge account")}
                 </span>
               </div>
               {DESTINATIONS.map((entry) => (
@@ -529,8 +528,11 @@ export function AppFrame() {
               continuous with the sidebar's wordmark row. */}
           <header
             role="banner"
-            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-end gap-section border-b border-line bg-background px-section"
+            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
           >
+            <div className="flex min-w-0 flex-1 items-center">
+              <EnvironmentBadge />
+            </div>
             <CommandPaletteTrigger />
           </header>
 

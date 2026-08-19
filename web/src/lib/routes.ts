@@ -45,6 +45,8 @@ import { BindingSurfacePage } from "@/features/bindings/binding-surface-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
 import { FindingsPage } from "@/features/findings/findings-page"
+import { MetricsPage } from "@/features/dashboards/metrics-page"
+import { SolutionsPage } from "@/features/workflows/solutions-page"
 import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
 import { CodebasePage } from "@/features/repositories/codebase-page"
 import { PullRequestPage } from "@/features/pullrequests/pull-request-page"
@@ -91,6 +93,13 @@ export interface RouteEntry {
    * that vanishes is honest about being unavailable, one that absorbs the press reads as broken.
    */
   nav: boolean
+  /**
+   * The rail's own ordering, owner-ruled 2026-08-18: Overview, Findings, Integrations,
+   * Connections, Logs, Metrics, Solutions, then the rest. Explicit because the rail no longer
+   * groups by level — the reading order is a product decision, not an accident of registry
+   * position — and an entry without one sorts after every entry that has one.
+   */
+  navOrder?: number
   /** What an operator opens this screen to find out, in one sentence. */
   question: string
   /**
@@ -114,11 +123,38 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId",
     reachedFrom: "a workspace in the switcher",
     nav: true,
+    navOrder: 1,
     label: "Overview",
     level: "Codebase",
     question: "What does Sync see in this workspace, and what does it not?",
     params: ["repoId"],
     element: CodebasePage,
+  },
+  {
+    // Metrics: the workspace's charts, its own rail entry by the owner's naming scheme. An
+    // aggregate over levels the console already has, not a rung -- `GRAPH_LEVELS` untouched.
+    path: "/repositories/:repoId/metrics",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    navOrder: 6,
+    label: "Metrics",
+    level: "Codebase",
+    question: "What are this workspace's measured trends -- findings over time, observed volume?",
+    params: ["repoId"],
+    element: MetricsPage,
+  },
+  {
+    // Solutions: every run that reached a pull request, the owner's page of 2026-08-18. An
+    // aggregate over Solution Workflow and Pull Request, not a rung.
+    path: "/repositories/:repoId/solutions",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    navOrder: 7,
+    label: "Solutions",
+    level: "Solution Workflow",
+    question: "Which remediations reached the forge, and where is each one's evidence?",
+    params: ["repoId"],
+    element: SolutionsPage,
   },
   {
     path: "/repositories/:repoId/graph",
@@ -147,6 +183,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/runs",
     reachedFrom: "a workspace in the switcher",
     nav: true,
+    navOrder: 5,
     label: "Logs",
     level: "Solution Workflow",
     question:
@@ -164,9 +201,11 @@ export const ROUTES: readonly RouteEntry[] = [
     // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
     path: "/repositories/:repoId/findings",
     reachedFrom: "a workspace in the switcher",
-    // "Metrics" by the same ruling: the measured state of the workspace, its own rail entry.
+    // Findings keeps its name and sits above Integrations by the owner's ordering; Metrics is
+    // its own charts page below.
     nav: true,
-    label: "Metrics",
+    navOrder: 2,
+    label: "Findings",
     level: "Finding",
     question: "What is broken in this workspace, and what is each finding bound to?",
     params: ["repoId"],
@@ -176,6 +215,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/services",
     reachedFrom: "a workspace in the switcher",
     nav: true,
+    navOrder: 4,
     // "Connections" by the owner's naming ruling, 2026-08-18. The LEVEL keeps the
     // specification's words -- presentation vocabulary renames freely, levels do not.
     label: "Connections",
@@ -189,6 +229,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/vendors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
+    navOrder: 3,
     // "Integrations" by the owner's naming ruling, 2026-08-18. Same split as above.
     label: "Integrations",
     level: "API Services",
@@ -200,6 +241,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/observed",
     reachedFrom: "a workspace in the switcher",
     nav: true,
+    navOrder: 8,
     label: "Signals",
     level: "Signals",
     question:
@@ -211,6 +253,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/detectors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
+    navOrder: 9,
     label: "Detectors",
     level: "Errors & Incidents",
     question: "Which detector is producing this workspace's false positives?",

@@ -1,0 +1,144 @@
+/**
+ * Solutions: every run that reached a pull request, and the door into each one's workflow —
+ * the owner's page, named 2026-08-18: "shows the PR information and the solution workflow".
+ *
+ * The rows are `/api/runs` narrowed to `outcome=opened` — the disposition filter built for the
+ * Logs rail, reused rather than a new route, so this list and the Logs screen cannot disagree
+ * about what opened. One row per attempt holds here exactly as it does on Logs; a finding
+ * whose retry also opened is two solutions, and the footnote says so once.
+ *
+ * Each row links to the finding's Solution Workflow and its Pull Request screen — the deep
+ * levels the specification already owns. This page aggregates over them and is not a new
+ * level; `.claude/rules/console-hierarchy.md` is explicit that an aggregate is not a rung.
+ */
+
+import { Link, useParams } from "react-router"
+
+import { DEFAULT_LIMIT } from "@/api/client"
+import { useRuns } from "@/api/queries"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmptyRow,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/data-table"
+import { MetricPanel } from "@/components/metric-panel"
+import { ErrorState, LoadingState } from "@/components/states"
+import { RelativeTime } from "@/components/relative-time"
+import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { FooterBar } from "@/layouts/footer-bar"
+import { UnknownRoute } from "@/layouts/unknown-route"
+import { useOffsetParam } from "@/lib/use-offset-param"
+
+export function SolutionsPage() {
+  const { repoId } = useParams<{ repoId: string }>()
+  const [offset, setOffset] = useOffsetParam("solutions_offset")
+  const query = useRuns({ limit: DEFAULT_LIMIT, offset, outcome: "opened" })
+
+  if (repoId === undefined) return <UnknownRoute />
+
+  return (
+    <section className="flex flex-col gap-8">
+      <Breadcrumbs trail={[{ label: "Solutions" }]} />
+
+      {query.isPending && <LoadingState what="the opened pull requests" />}
+      {query.isError && (
+        <ErrorState
+          error={query.error}
+          what="the opened pull requests"
+          onRetry={() => void query.refetch()}
+        />
+      )}
+
+      {query.isSuccess && (
+        <MetricPanel
+          label="Solutions"
+          metric={{
+            value: query.data.total.toLocaleString(),
+            unit: `run${query.data.total === 1 ? "" : "s"} that opened a pull request`,
+          }}
+          caption={
+            <p className="max-w-prose">
+              Every remediation that reached the forge, newest first. The workflow link is the
+              run&rsquo;s own evidence — what each node did — and the pull request link is the
+              diff beside the branch it went to.
+            </p>
+          }
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Finding</TableHead>
+                <TableHead>Opened</TableHead>
+                <TableHead>Solution workflow</TableHead>
+                <TableHead>Pull request</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {query.data.items.length === 0 && (
+                <TableEmptyRow colSpan={4}>
+                  <span className="text-ink">No run has opened a pull request yet.</span> The
+                  checkpointer was asked and holds no run with the opened outcome — remediation
+                  that abandons or is still in flight appears on Logs, not here.
+                </TableEmptyRow>
+              )}
+              {query.data.items.map((run) => {
+                const scoped = run.repo_id !== null
+                const workflowHref = scoped
+                  ? `/repositories/${encodeURIComponent(run.repo_id!)}/findings/${encodeURIComponent(run.finding_id)}/workflow`
+                  : null
+                return (
+                  <TableRow key={run.thread_id}>
+                    <TableCell className="font-mono">{run.finding_id}</TableCell>
+                    <TableCell className="font-mono text-meta">
+                      <RelativeTime iso={run.last_checkpoint_at} />
+                    </TableCell>
+                    <TableCell>
+                      {workflowHref !== null ? (
+                        <Link to={workflowHref} className="underline underline-offset-2">
+                          the run, node by node
+                        </Link>
+                      ) : (
+                        <span className="text-meta text-ink-muted">
+                          not addressable — the checkpoint names no repository
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {workflowHref !== null ? (
+                        <Link
+                          to={`${workflowHref}/pull-request`}
+                          className="underline underline-offset-2"
+                        >
+                          the diff and its branch
+                        </Link>
+                      ) : (
+                        <span className="text-meta text-ink-muted">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          <FooterBar
+            offset={offset}
+            limit={DEFAULT_LIMIT}
+            shown={query.data.items.length}
+            total={query.data.total}
+            nextOffset={query.data.next_offset}
+            busy={query.isFetching}
+            onOffsetChange={setOffset}
+          />
+          <p className="max-w-prose text-meta text-muted-foreground">
+            One row per attempt, as on Logs: a finding whose retry also opened counts twice
+            here, and neither row is wrong.
+          </p>
+        </MetricPanel>
+      )}
+    </section>
+  )
+}
