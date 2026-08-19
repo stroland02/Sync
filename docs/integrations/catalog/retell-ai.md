@@ -1,18 +1,32 @@
 # Retell AI
 
-> Status: **recognized** -- Sync can name this dependency in your repository, and does not watch it yet. That is a statement of absence, not a lesser kind of coverage.
+> Status: **supported** -- a registered `generated` adapter serves `retell-ai`.
 
-## What your lockfile declares
+## Quickstart
 
-- **npm**: `retell-sdk`
-- **pypi**: `retell-sdk`
+From nothing to this vendor's findings, on your own repository. The full journey, including what the remediation loop needs, is in [Getting started](../../getting-started.md).
 
-## Adding it
+```bash
+npm start                                  # bring Sync up; it sets up everything
+uv run sync index --repo <your-remote>     # read your call sites into the graph
+uv run sync run --vendor retell-ai \
+    --from-version <pinned> --to-version <target> --repo <your-remote>
+```
 
-If this vendor's SDK is built by a supported generator, watching it is one entry in [`generated-vendors.yaml`](../../../generated-vendors.yaml). Otherwise, a coded adapter depends on `sync.core` alone -- [Writing a vendor adapter](../../writing-a-vendor-adapter.md) is the guide, and Sync does not watch this vendor until one exists.
+The console then shows every call site bound to Retell AI operations, each finding with the provenance rung it arrived at.
+
+## What Sync watches
+
+Sync reads the manifest this vendor's SDK generator commits to `RetellAI/retell-typescript-sdk`, fetches the specification the manifest names when its hash moves, and diffs pinned versions with oasdiff. No agreement with the vendor is required and none can be withdrawn: the manifest is what the generator writes for its own reasons.
+
+Source: [`src/sync/signals/generated/`](../../../src/sync/signals/generated/), configured by one entry in [`generated-vendors.yaml`](../../../generated-vendors.yaml)
 
 ## What Sync does not watch
 
-Everything, for this vendor, today. The entry above exists so the absence is named instead of silent.
+Stated because absence claimed as coverage is the failure this product replaces:
+
+- **Runtime behavior the specification does not carry.** A latency regression or a semantic change behind an unchanged schema is invisible to this adapter; attach telemetry to observe it, and Sync will keep the two kinds of evidence apart.
+- **Anything requiring this vendor's credentials.** Sync holds no customer secrets, so nothing here calls the vendor's API on your behalf.
+- **Versions outside the two you pin.** A diff is between the versions a run names; Sync does not interpolate what happened between them.
 
 Official documentation: [https://docs.retellai.com](https://docs.retellai.com)

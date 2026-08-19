@@ -198,3 +198,40 @@
     python:
       distribution: mistralai
       module: mistralai
+
+# --- promoted from vendor-promotions.yaml on the owner's approval, 2026-08-18 (CI-W495) -----
+# Each manifest path re-fetched at write time, the same standard as every entry above; the
+# Python module names were read out of each package's own PyPI README rather than assumed.
+
+- vendor_id: perplexity
+  repo: perplexityai/perplexity-py
+  manifest: .stats.yml
+  sdk_bindings:
+    typescript:
+      package: "@perplexity-ai/perplexity_ai"
+    python:
+      # The names diverge: the distribution is `perplexityai`, the import is `perplexity`
+      # (`from perplexity import Perplexity`, the package's own README).
+      distribution: perplexityai
+      module: perplexity
+
+- vendor_id: ragie
+  repo: ragieai/ragie-python
+  manifest: .speakeasy/workflow.yaml
+  sdk_bindings:
+    typescript:
+      package: ragie
+    python:
+      distribution: ragie
+      module: ragie
+
+- vendor_id: retell-ai
+  repo: RetellAI/retell-typescript-sdk
+  manifest: .stats.yml
+  sdk_bindings:
+    typescript:
+      package: retell-sdk
+    python:
+      # Distribution `retell-sdk`, import `retell` (the package's own README).
+      distribution: retell-sdk
+      module: retell

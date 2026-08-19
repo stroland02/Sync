@@ -20,6 +20,9 @@ Missing a vendor entirely? [Writing a vendor adapter](../../writing-a-vendor-ada
 | [OpenAI](openai.md) | generated | ai |
 | [Openlayer](openlayer.md) | generated | ai |
 | [Orb](orb.md) | generated | invoicing |
+| [Perplexity](perplexity.md) | generated | dev-tools, ai |
+| [Ragie](ragie.md) | generated | dev-tools, ai |
+| [Retell AI](retell-ai.md) | generated | dev-tools, ai |
 | [Stripe](stripe.md) | coded | payment |
 | [Twilio](twilio.md) | coded | communication |
 | [Vercel](vercel.md) | generated | infrastructure |
@@ -74,17 +77,14 @@ Missing a vendor entirely? [Writing a vendor adapter](../../writing-a-vendor-ada
 | [OneLogin](onelogin.md) | dev-tools, iam |
 | [Oracle Cloud Identity](oracle-cloud-identity.md) | dev-tools, iam |
 | [PagerDuty](pagerduty.md) | dev-tools |
-| [Perplexity](perplexity.md) | dev-tools, ai |
 | [Phrase](phrase.md) | dev-tools |
 | [PingOne](pingone.md) | dev-tools, iam |
 | [Pipedream](pipedream.md) | dev-tools, infrastructure |
 | [PostHog](posthog.md) | dev-tools, analytics |
-| [Ragie](ragie.md) | dev-tools, ai |
 | [Recall.ai](recall-ai.md) | dev-tools, communication |
 | [Render](render.md) | dev-tools, infrastructure |
 | [Replicate](replicate.md) | dev-tools, ai |
 | [Resend](resend.md) | dev-tools, communication |
-| [Retell AI](retell-ai.md) | dev-tools, ai |
 | [Rootly](rootly.md) | dev-tools, infrastructure |
 | [Salesforce](salesforce.md) | crm |
 | [SendGrid](sendgrid.md) | communication |

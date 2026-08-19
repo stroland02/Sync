@@ -515,9 +515,6 @@
   display_name: Perplexity
   categories: [dev-tools, ai]
   docs_url: https://docs.perplexity.ai
-  packages:
-    npm: ["@perplexity-ai/perplexity_ai"]
-    pypi: [perplexityai]
 
 - vendor_id: phrase
   display_name: Phrase
@@ -554,9 +551,6 @@
   display_name: Ragie
   categories: [dev-tools, ai]
   docs_url: https://docs.ragie.ai
-  packages:
-    npm: [ragie]
-    pypi: [ragie]
 
 - vendor_id: recall-ai
   display_name: Recall.ai
@@ -585,9 +579,6 @@
   display_name: Retell AI
   categories: [dev-tools, ai]
   docs_url: https://docs.retellai.com
-  packages:
-    npm: [retell-sdk]
-    pypi: [retell-sdk]
 
 - vendor_id: rootly
   display_name: Rootly

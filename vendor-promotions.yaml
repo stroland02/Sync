@@ -9,18 +9,3 @@
   repo: elevenlabs/elevenlabs-python
   manifest: .fernignore
   language: python
-- vendor_id: perplexity
-  kind: stainless
-  repo: perplexityai/perplexity-py
-  manifest: .stats.yml
-  language: python
-- vendor_id: ragie
-  kind: speakeasy
-  repo: ragieai/ragie-python
-  manifest: .speakeasy/workflow.yaml
-  language: python
-- vendor_id: retell-ai
-  kind: stainless
-  language: typescript
-  manifest: .stats.yml
-  repo: RetellAI/retell-typescript-sdk

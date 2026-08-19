@@ -191,6 +191,22 @@ VENDOR_CASES: dict[str, VendorCase] = {
     ),
     "openai": VendorCase(stage=_stage_nothing, known_symbol="openai.responses.create"),
     "cloudflare": VendorCase(stage=_stage_nothing, known_symbol="cloudflare.zones.list"),
+    # The nine CI-W464 registered plus the three promoted on the owner's approval (CI-W495),
+    # each in the pattern this dict's own comment prescribes: `_stage_nothing` and a plausible
+    # customer symbol, so the lookup that raises has an answer and the resolve census below
+    # records what an unstaged adapter actually does instead of leaving it to be inferred.
+    "browserbase": VendorCase(stage=_stage_nothing, known_symbol="browserbase.sessions.create"),
+    "finch": VendorCase(stage=_stage_nothing, known_symbol="finch.hris.directory.list"),
+    "groq": VendorCase(stage=_stage_nothing, known_symbol="groq.chat.completions.create"),
+    "increase": VendorCase(stage=_stage_nothing, known_symbol="increase.accounts.list"),
+    "lithic": VendorCase(stage=_stage_nothing, known_symbol="lithic.cards.create"),
+    "mistral": VendorCase(stage=_stage_nothing, known_symbol="mistral.chat.complete"),
+    "modern-treasury": VendorCase(stage=_stage_nothing, known_symbol="modern_treasury.payment_orders.create"),
+    "openlayer": VendorCase(stage=_stage_nothing, known_symbol="openlayer.inference_pipelines.data.stream"),
+    "orb": VendorCase(stage=_stage_nothing, known_symbol="orb.subscriptions.create"),
+    "perplexity": VendorCase(stage=_stage_nothing, known_symbol="perplexity.chat.completions.create"),
+    "ragie": VendorCase(stage=_stage_nothing, known_symbol="ragie.documents.create"),
+    "retell-ai": VendorCase(stage=_stage_nothing, known_symbol="retell.call.create"),
     "vercel": VendorCase(
         stage=_stage_vercel,
         known_symbol="vercel.aliases.getAlias",
@@ -247,7 +263,25 @@ def _built(vendor_id: str, cache_dir: Path):
 # `unbindable_reason`, `cli._binding_lines` prints it before the finding count, and
 # `test_a_registered_vendor_that_binds_nothing_declares_why` below holds the two sides in step.
 # Reporting the gap is not closing it -- closing it needs a staged checkout.
-UNSTAGED_SDK_SOURCE = {"cloudflare", "openai"}
+UNSTAGED_SDK_SOURCE = {
+    "cloudflare",
+    "openai",
+    # CI-W464's nine and CI-W495's three promotions: registered from their manifests, with no
+    # SDK source staged in this repository yet -- the census below fails the moment any of
+    # them starts resolving, which is the signal to delete its entry here.
+    "browserbase",
+    "finch",
+    "groq",
+    "increase",
+    "lithic",
+    "mistral",
+    "modern-treasury",
+    "openlayer",
+    "orb",
+    "perplexity",
+    "ragie",
+    "retell-ai",
+}
 
 _UNRESOLVED_RULE = "the adapter did not resolve the symbol the kit was given."
 

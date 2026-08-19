@@ -221,3 +221,8 @@ surprises:
   4. **Notification: GitHub-native.** The verified pull request is itself the notification for
      remediated changes; non-PR findings open a GitHub issue on the watched repository. This is
      B94's first delivery destination; outbound webhooks remain open question 2.
+- **2026-08-18 (owner).** The watch loop stays **manual** on this machine for now: no scheduled
+  task is armed. The clock becomes a *product surface* instead -- users arm and configure the
+  run-loop scheduler on the integrations page where connections are set up, which folds build
+  item 4 into item 6 (the policy UI) for the console lane. `sync watch --once` remains the
+  contract underneath either way.
