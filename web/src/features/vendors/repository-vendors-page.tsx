@@ -36,6 +36,8 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { PageTabs, integrationsTabs } from "@/components/page-tabs"
+import { FindingsPerIntegration } from "@/features/vendors/findings-per-integration"
+import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 
 
@@ -96,6 +98,12 @@ export function RepositoryVendorsPage() {
     <section className="flex min-w-0 flex-col gap-8">
       <PageTabs label="Integrations" tabs={integrationsTabs(repoId ?? "")} />
 
+      {/* Dashboard I1. Above the scope check on purpose: the catalogue is its own read with its
+          own scope, so it stays true when the overview beneath arrives computed for a different
+          one — and a page whose only content is a mismatch notice tells a reader nothing about
+          what this deployment can watch. */}
+      {repoId !== undefined && <IntegrationsKpis repoId={repoId} />}
+
       {!scopeMatches ? (
         <EmptyState
           headline="This answer was computed for a different scope."
@@ -113,6 +121,9 @@ export function RepositoryVendorsPage() {
         />
       ) : (
         <div className="flex flex-col gap-section">
+          {/* Dashboard I3, above the controls: the table below sorts and pages, so the largest
+              contributor is not reliably on screen there. This ranks the whole set once. */}
+          {repoId !== undefined && <FindingsPerIntegration repoId={repoId} />}
           {/* Controls Bar: Filter tabs & View toggle */}
           <div className="flex flex-wrap items-center justify-between gap-field pb-field border-b border-line">
             <div className="flex items-center gap-field overflow-x-auto">

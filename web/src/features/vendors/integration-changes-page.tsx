@@ -39,6 +39,7 @@ import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { PageTabs, integrationsTabs } from "@/components/page-tabs"
+import { ChangesKpis, type ChangesFacets, SeverityPerIntegration } from "@/features/vendors/changes-dashboards"
 import { RelativeTime } from "@/components/relative-time"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -68,9 +69,29 @@ interface ChangesPage {
   next_offset: number | null
   by_vendor: Record<string, number>
   by_severity: Record<string, number>
+  by_vendor_severity: Record<string, Record<string, number>>
   unfiltered_total: number
   vendor_id: string | null
   severity: string | null
+}
+
+/**
+ * The dashboards' input, read off the page's own payload.
+ *
+ * `newestDetectedAt` comes from the first row rather than a facet, and that is sound only
+ * because the query orders by `detected_at DESC` and the dashboards render on the unfiltered
+ * first page. It goes null the moment a narrowing is applied — a "newest change" computed over
+ * a filtered page would be the newest *matching* change under a label that does not say so.
+ */
+function facetsOf(page: ChangesPage): ChangesFacets {
+  const unnarrowed = page.vendor_id === null && page.severity === null
+  return {
+    by_vendor: page.by_vendor,
+    by_severity: page.by_severity,
+    by_vendor_severity: page.by_vendor_severity,
+    unfiltered_total: page.unfiltered_total,
+    newestDetectedAt: unnarrowed ? (page.items[0]?.detected_at ?? null) : null,
+  }
 }
 
 async function fetchChanges(
@@ -182,6 +203,15 @@ export function IntegrationChangesPage() {
           what="the integration changes"
           onRetry={() => void query.refetch()}
         />
+      )}
+
+      {query.isSuccess && (
+        <>
+          {/* Dashboards G1 and G3, off facets the page already fetched -- neither costs a
+              request, and both describe the whole record rather than the narrowed table. */}
+          <ChangesKpis facets={facetsOf(query.data)} />
+          <SeverityPerIntegration facets={facetsOf(query.data)} />
+        </>
       )}
 
       {query.isSuccess && (

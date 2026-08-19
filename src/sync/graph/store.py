@@ -1454,6 +1454,27 @@ class GraphStore:
 
         by_vendor = facet("vendor_id", ignoring="vendor_id")
         by_severity = facet("severity", ignoring="severity")
+
+        # Dashboard G3's source: severity per vendor, which neither single-column facet can
+        # answer. A reader wanting "which integration publishes the breaking changes" could
+        # otherwise only filter to one vendor and read the severity facet, once per vendor.
+        #
+        # Both filters ignored, for the same reason each facet ignores its own: a cross-facet
+        # narrowed to the reader's current selection would show them the slice they already
+        # chose. Bounded by vendors x the five-member severity vocabulary rather than by row
+        # count, so it is cheap at any scale -- the argument `open_findings_vendor_counts`
+        # carries for staying unbounded.
+        crossed = self._connect().execute(
+            """
+            SELECT vendor_id, severity, count(*) AS n
+              FROM vendor_change
+             GROUP BY vendor_id, severity
+             ORDER BY vendor_id, severity
+            """
+        ).fetchall()
+        by_vendor_severity: dict[str, dict[str, int]] = {}
+        for row in crossed:
+            by_vendor_severity.setdefault(row["vendor_id"], {})[row["severity"]] = int(row["n"])
         consumed = offset + len(rows)
         return {
             "items": [
@@ -1469,6 +1490,9 @@ class GraphStore:
             "next_offset": consumed if consumed < total else None,
             "by_vendor": by_vendor,
             "by_severity": by_severity,
+            # A pairing absent here was never published, never measured at nought: the grouping
+            # returns groups that exist, and a render site must not fill a missing key with a zero.
+            "by_vendor_severity": by_vendor_severity,
             "unfiltered_total": sum(by_vendor.values()),
             "vendor_id": vendor_id,
             "severity": severity,

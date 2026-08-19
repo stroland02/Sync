@@ -22,11 +22,6 @@
 import { useQuery } from "@tanstack/react-query"
 
 import {
-  ApiStatusError,
-  MalformedResponseError,
-  UnreachableApiError,
-} from "@/api/errors"
-import {
   Table,
   TableBody,
   TableCell,
@@ -36,45 +31,7 @@ import {
 } from "@/components/data-table"
 import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
-
-interface CatalogueRow {
-  vendor_id: string
-  tier: string
-  source: string | null
-  sdk_bindings: Record<string, Record<string, string>>
-  staged: { tag: string | null; symbols: number | null; baked_at?: string } | null
-  call_sites: number
-  changes_recorded: number
-  state: "watched" | "staged" | "available"
-}
-
-interface Catalogue {
-  repo_id: string | null
-  integrations: CatalogueRow[]
-  by_tier: Record<string, number>
-  by_state: Record<string, number>
-  total: number
-}
-
-async function fetchCatalogue(repoId: string | null, signal?: AbortSignal): Promise<Catalogue> {
-  const path =
-    repoId === null
-      ? "/api/integrations"
-      : `/api/integrations?repo_id=${encodeURIComponent(repoId)}`
-  let response: Response
-  try {
-    response = await fetch(path, { headers: { Accept: "application/json" }, signal })
-  } catch (cause) {
-    if (signal?.aborted) throw cause
-    throw new UnreachableApiError(path, { cause })
-  }
-  if (!response.ok) throw new ApiStatusError(response.status, path)
-  try {
-    return (await response.json()) as Catalogue
-  } catch (cause) {
-    throw new MalformedResponseError(path, { cause })
-  }
-}
+import { type CatalogueRow, fetchCatalogue } from "@/features/vendors/catalogue"
 
 const STATE_WORD: Record<CatalogueRow["state"], string> = {
   watched: "in use here",

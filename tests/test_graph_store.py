@@ -1706,3 +1706,44 @@ def test_an_outcome_outside_the_closed_set_is_refused(store):
     # to index needs a schema that can answer it, and free text cannot be aggregated.
     with pytest.raises(ValueError):
         store.fail_index_run("r1", started_at=SEEN, at=SEEN, outcome="it broke")
+
+
+def test_severity_by_vendor_crosses_both_columns_without_either_filter(store):
+    """G3's source: severity counted per vendor, as one grouping rather than two.
+
+    `by_vendor` and `by_severity` are each a single-column facet, and neither can answer "which
+    integration is publishing the breaking changes" -- a reader could only get there by filtering
+    to one vendor and reading the severity facet, once per vendor.
+
+    Counted with the page's own filters ignored, the same rule the single-column facets follow:
+    a facet that narrowed itself would show the reader only the slice they already chose.
+    """
+    store.upsert_vendor_change(_change(vendor_id="stripe", severity="breaking"))
+    store.upsert_vendor_change(
+        _change(vendor_id="stripe", severity="warning", operation_id="PostCharges")
+    )
+    store.upsert_vendor_change(
+        _change(vendor_id="twilio", severity="breaking", operation_id="GetCalls")
+    )
+
+    crossed = store.vendor_changes_page(vendor_id="stripe")["by_vendor_severity"]
+
+    assert crossed == {
+        "stripe": {"breaking": 1, "warning": 1},
+        "twilio": {"breaking": 1},
+    }
+
+
+def test_severity_by_vendor_omits_a_severity_a_vendor_never_published(store):
+    """A vendor with no breaking change is absent from that key, never present at nought.
+
+    The grouping returns groups that exist. Rendering a missing key as a zero would claim the
+    pairing was measured and found empty, which is the absence-versus-zero distinction the
+    console is built to keep.
+    """
+    store.upsert_vendor_change(_change(vendor_id="stripe", severity="warning"))
+
+    crossed = store.vendor_changes_page()["by_vendor_severity"]
+
+    assert crossed == {"stripe": {"warning": 1}}
+    assert "breaking" not in crossed["stripe"]
