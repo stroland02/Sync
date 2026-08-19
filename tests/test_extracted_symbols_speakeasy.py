@@ -387,7 +387,7 @@ def test_the_extractor_registry_offers_this_rule_by_name():
 
     assert EXTRACTORS[GENERATOR].GENERATOR == GENERATOR
     assert sorted(EXTRACTORS) == [
-        "speakeasy-typescript", "stainless-python", "stainless-typescript"
+        "speakeasy-python", "speakeasy-typescript", "stainless-python", "stainless-typescript"
     ]
 
 

@@ -113,6 +113,27 @@ such operations and a rule walking only mounts would drop all of them.
 As with both Stainless trees, coverage measured against this fixture is a floor rather than the
 SDK's real figure; the un-truncated number is in the task report.
 
+## `mistral_python/`
+
+**Handwritten, not vendored** — the one tree here that is. Seven files in the shape of
+Speakeasy's Python emission, read from `mistralai/client-python` (`src/mistralai/client/`,
+default branch) on 2026-08-18: the `_sub_sdk_map` lazy root with quoted forward-reference
+mounts, the `_init_sdks` nested mount with a direct class-name annotation, the verb and path as
+keyword arguments of `self._build_request(...)` / `_build_request_async(...)`, the `#stream`
+fragment marker, and the `models` attribute naming class `Models` in `models_.py`. Every
+construct was observed in that repository; none of its code is copied.
+
+`ocr.py` is deliberately not staged while `sdk.py` mounts it, so a mount naming a class the
+checkout does not declare has a case holding it — the same role `sdk/sdk.ts` plays for the
+TypeScript flavour.
+
+## `mistral_python_spec_operations.json`
+
+Handwritten to match the tree above rather than fetched: the seven routes the fixture states
+plus `POST /v1/ocr`, which no staged symbol reaches. Because both sides are handwritten, nothing
+here evidences Mistral's real API — the pair exercises the rule, and a measurement against a
+full checkout belongs to whoever stages one.
+
 ## `vercel_spec_operations.json`
 
 The operation set of the specification `vercel/sdk`'s own manifest names. The URL is the single

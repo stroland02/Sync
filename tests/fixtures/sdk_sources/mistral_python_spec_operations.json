@@ -1,0 +1,10 @@
+[
+  {"method": "post", "path": "/v1/chat/completions"},
+  {"method": "post", "path": "/v1/embeddings"},
+  {"method": "get", "path": "/v1/models"},
+  {"method": "get", "path": "/v1/models/{model_id}"},
+  {"method": "delete", "path": "/v1/models/{model_id}"},
+  {"method": "post", "path": "/v1/conversations"},
+  {"method": "post", "path": "/v1/conversations/{conversation_id}"},
+  {"method": "post", "path": "/v1/ocr"}
+]
