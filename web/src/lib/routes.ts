@@ -46,6 +46,7 @@ import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
 import { FindingsPage } from "@/features/findings/findings-page"
 import { CallSitesPage } from "@/features/bindings/call-sites-page"
+import { FileTreePage } from "@/features/index-graph/file-tree-page"
 import { MetricsPage } from "@/features/dashboards/metrics-page"
 import { SolutionsPage } from "@/features/workflows/solutions-page"
 import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
@@ -131,6 +132,18 @@ export const ROUTES: readonly RouteEntry[] = [
     question: "What does Sync see in this workspace, and what does it not?",
     params: ["repoId"],
     element: CodebasePage,
+  },
+  {
+    path: "/repositories/:repoId/file-tree",
+    reachedFrom: "the Overview's file tree panel",
+    // Not in the rail: the Overview shows both maps and each opens its own full view, so a
+    // rail entry would be a third door to a screen already one click away.
+    nav: false,
+    label: "File tree",
+    level: "Codebase",
+    question: "How is this codebase laid out, and what is it made of?",
+    params: ["repoId"],
+    element: FileTreePage,
   },
   {
     path: "/repositories/:repoId/integration-changes",

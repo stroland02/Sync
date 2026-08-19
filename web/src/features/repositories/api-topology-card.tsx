@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API topology: the shape of this codebase's API surface, measured from its own call sites.
  *
  * The owner's ask of 2026-08-18 — topology, complexity, composition — answered from what the
@@ -42,7 +42,7 @@ interface OperationRow {
   files: number
 }
 
-interface Topology {
+export interface Topology {
   repo_id: string
   totals: { call_sites: number; vendors: number; operations: number; files: number }
   by_vendor: VendorRow[]
@@ -51,7 +51,7 @@ interface Topology {
   by_loop_depth: Record<string, number>
 }
 
-async function fetchTopology(repoId: string, signal?: AbortSignal): Promise<Topology> {
+export async function fetchTopology(repoId: string, signal?: AbortSignal): Promise<Topology> {
   const path = `/api/repositories/${encodeURIComponent(repoId)}/topology`
   let response: Response
   try {

@@ -24,13 +24,13 @@
  * this; picked up once nothing else owned that file.
  */
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useParams } from "react-router"
 
 import { useRepositoryGraph } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
-import { Button } from "@/components/ui/button"
-import { TreeMapD3 } from "@/features/index-graph/tree-map-d3"
+
+import { ApiTopologyCard } from "@/features/repositories/api-topology-card"
 import { ForceMap } from "@/features/index-graph/force-map"
 import { classifyIndexState } from "@/features/index-graph/index-state"
 import { IndexStreamBanner } from "@/features/index-graph/index-stream-banner"
@@ -53,7 +53,7 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
   const query = useRepositoryGraph(repoId)
   // The map leads: it is the view that answers "what does this codebase depend on" at a
   // glance, and the tree is the one a reader switches to for a path.
-  const [view, setView] = useState<"map" | "tree">("map")
+
   // The canvas builds visibly and the banner accompanies it. Decision 87 protects a reader
   // *reading* a table; this is a surface you are *watching build*, and freezing it removes the
   // one moment the one-command install exists to create.
@@ -82,7 +82,7 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
   const state = classifyIndexState(graph)
 
   return (
-    <section className="flex min-h-[calc(100svh-8rem)] flex-col gap-8">
+    <section className="flex flex-col gap-8">
       <IndexStreamBanner
         indexedCount={stream.indexedCount}
         status={stream.status}
@@ -128,38 +128,16 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
               picture stops being legible before the codebase stops having edges.
             </p>
           )}
-          {/* Two views of one graph, and the choice is the reader's because the two answer
-              different questions: the map shows how the codebase clusters around its
-              integrations, the tree shows where each call lives on disk. Neither is a summary
-              of the other and neither is drawn from different rows. */}
-          <div className="flex flex-wrap items-center gap-field">
-            <Button
-              variant={view === "map" ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setView("map")}
-            >
-              Codebase map
-            </Button>
-            <Button
-              variant={view === "tree" ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setView("tree")}
-            >
-              File tree
-            </Button>
-          </div>
-
           {/* The full graph takes the page, on the owner's direction: this route exists
               because the Overview's panel is too small for a real codebase, so a canvas here
               that was also boxed would be the same picture at the same size. `min-h-0` is
               what lets the flex child actually shrink to the height it is given. */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            {view === "map" ? (
-              <ForceMap rows={graph.bindings} fill />
-            ) : (
-              <TreeMapD3 rows={graph.bindings} fill />
-            )}
+          <div className="h-[calc(100svh-16rem)] min-h-[32rem]">
+            <ForceMap rows={graph.bindings} fill />
           </div>
+          {/* This page's own analytics: the integration map's subject is what this codebase
+              calls, so the topology figures live here rather than on the Overview. */}
+          <ApiTopologyCard repoId={repoId} />
           <OffPathNote graph={graph} total={state.offPathTotal} />
         </>
       )}

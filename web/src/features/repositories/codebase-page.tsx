@@ -62,13 +62,14 @@ import { Link, useParams } from "react-router"
 import { InfoHint } from "@/components/info-hint"
 import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
-import { ApiTopologyCard } from "@/features/repositories/api-topology-card"
-import { CodebaseFactsCard } from "@/features/repositories/codebase-facts-card"
+import { MapPreviews } from "@/features/index-graph/map-previews"
+import { OverviewKpis } from "@/features/repositories/overview-kpis"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
-import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
+import { useRepositoryGraph } from "@/api/queries"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { ObservedTelemetryCard } from "@/features/telemetry/observed-telemetry-card"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ControlBar } from "@/layouts/control-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -105,6 +106,36 @@ function VendorsListLink({ repoId }: { repoId: string }) {
   )
 }
 
+/**
+ * The two map previews, fed one read.
+ *
+ * One query for both: they draw the same bindings, and two components each issuing their own
+ * would be two round trips for one answer -- React Query dedupes on the key, which is what
+ * makes the pair free rather than double.
+ */
+function MapsRegion({ repoId }: { repoId: string }) {
+  const query = useRepositoryGraph(repoId)
+  if (query.isPending) return <LoadingState what="the codebase maps" />
+  if (query.isError) {
+    return (
+      <ErrorState
+        error={query.error}
+        what="the codebase maps"
+        onRetry={() => void query.refetch()}
+      />
+    )
+  }
+  if (query.data.total_bindings === 0) {
+    return (
+      <EmptyState
+        headline="No call site has been indexed for this codebase."
+        detail="Both maps draw indexed call sites, and there are none. A vendor call appears once INDEX has run against this repository and found one -- a repository the index never ran against shows the same nothing as one that calls no vendor, and neither is a claim that it calls none."
+      />
+    )
+  }
+  return <MapPreviews repoId={repoId} bindings={query.data.bindings} />
+}
+
 export interface CodebasePageProps {
   readonly question?: string
 }
@@ -118,15 +149,14 @@ export function CodebasePage() {
       {/* Getting started leads, by the owner's direction: the workspace identity and the full
           loop's probed prerequisites are the first thing on the Overview. */}
       <GettingStartedCard repoId={repoId} />
-      {/* The dependency graph — the screen's centrepiece, because it is the thing no
-          competitor can draw: this codebase's actual API surface. It lived on the fleet screen,
-          which the sole-codebase install now skips past, so it moves to the one Overview
-          rather than becoming unreachable. */}
-      <OverviewGraphPanel repoId={repoId} />
-      {/* The technical census — what this codebase is made of, measured with the index pass,
-          by the owner's direction that the Overview carries real engineering information. */}
-      <ApiTopologyCard repoId={repoId} />
-      <CodebaseFactsCard repoId={repoId} />
+      {/* The page's opening facts (owner ruling 2026-08-19: strip only on this screen — the
+          rung chart stays on Detectors where it is built rather than being drawn twice). */}
+      <OverviewKpis repoId={repoId} />
+      {/* Both maps, side by side, each opening its own full view. A codebase has two shapes
+          worth seeing — what it calls, and how it is laid out — and neither summarises the
+          other. Their analytics moved with them: topology to the integration map's page, the
+          technical census to the file tree's, which is what keeps this screen scannable. */}
+      <MapsRegion repoId={repoId} />
       <PageHeaderRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}
       <div className="grid gap-8 xl:grid-cols-2">
