@@ -25,14 +25,37 @@
 
 import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
-export function NotAttachedState({ detail }: { detail: string }) {
+export function NotAttachedState({
+  detail,
+  command,
+}: {
+  detail: string
+  /**
+   * The invocation that attaches a source of this role, where one exists.
+   *
+   * **Owner direction, 2026-08-19: nothing on screen that just sits there.** This card explained
+   * an absence and stopped, which left a reader knowing a role was empty and not how to fill it.
+   * The console cannot run the command itself -- no route mutates the graph or triggers a run --
+   * so what it honestly offers is the exact invocation rather than a button that would have to
+   * pretend it did something.
+   */
+  command?: string
+}) {
   return (
     <Card className="max-w-prose">
       <CardHeader>
         <p className="text-emphasis text-foreground">No integration of this role is attached.</p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-row">
         <p className="text-body text-muted-foreground">{detail}</p>
+        {command !== undefined && (
+          <div className="flex flex-col gap-field">
+            <span className="furniture text-meta text-ink-muted">Attach one</span>
+            <code className="block overflow-x-auto rounded-control border border-line bg-surface-subtle px-field py-field font-mono text-meta text-ink select-all">
+              {command}
+            </code>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

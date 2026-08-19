@@ -45,18 +45,24 @@ export function FactTile({
   figure?: boolean
   className?: string
 }) {
+  // No border and no background of its own. `KpiStrip` draws one surface with hairline dividers
+  // and the tile fills a cell in it -- the owner's direction of 2026-08-19, after the strip read
+  // as "just a row of cards". A tile that carried its own chrome inside a bordered strip drew the
+  // frame twice, which is what made four facts occupy the height of a panel.
   return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col gap-field rounded-surface border border-line bg-surface p-section",
-        className
-      )}
-    >
+    <div className={cn("flex min-w-0 flex-col justify-between gap-field", className)}>
       <span className="furniture text-meta text-ink-muted">{label}</span>
-      <span className={cn("min-w-0 break-words", figure ? "text-figure" : "text-body")}>
+      <span
+        className={cn(
+          "min-w-0 break-words leading-none",
+          figure ? "text-figure" : "text-emphasis",
+        )}
+      >
         {value}
       </span>
-      {note !== undefined && <span className="text-meta text-ink-muted">{note}</span>}
+      {note !== undefined && (
+        <span className="text-meta leading-snug text-ink-muted">{note}</span>
+      )}
     </div>
   )
 }

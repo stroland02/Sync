@@ -129,6 +129,88 @@ def check_seeded() -> Check:
     return Check("seeded", OK, f"{rows} call site(s) present")
 
 
+def _count(table: str) -> int | None:
+    """Rows in one table, or None when the database cannot answer."""
+    from sync.graph.store import GraphStore
+
+    try:
+        store = GraphStore(dsn=_default_dsn())
+        return int(store._connect().execute(f"SELECT count(*) AS n FROM {table}").fetchone()["n"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_signal() -> Check:
+    """SIGNAL: has any adapter delivered a vendor change?
+
+    The stage checks below exist because the owner asked that a first run leave the operator
+    knowing *where the data workflow stands*, not merely that the server is up. Each one names the
+    command that advances it, so the startup output is the pipeline in order rather than a list of
+    services.
+    """
+    rows = _count("vendor_change")
+    if rows is None:
+        return Check("signal", MISSING, "vendor_change cannot be counted", "npm run no-admin")
+    if not rows:
+        return Check(
+            "signal",
+            MISSING,
+            "no adapter has delivered a vendor change, so DETECT has nothing to match against",
+            "uv run python -m sync scan --repo-id <repo>",
+        )
+    return Check("signal", OK, f"{rows} vendor change(s) recorded")
+
+
+def check_detect() -> Check:
+    """DETECT: has anything been found in this codebase?"""
+    rows = _count("finding")
+    if rows is None:
+        return Check("detect", MISSING, "finding cannot be counted", "npm run no-admin")
+    if not rows:
+        return Check(
+            "detect",
+            MISSING,
+            "no finding recorded -- either nothing is broken, or DETECT has not run",
+            "uv run python -m sync run --repo-id <repo>",
+        )
+    return Check("detect", OK, f"{rows} finding(s) recorded")
+
+
+def check_observed() -> Check:
+    """OBSERVE: is any traffic attached?
+
+    Empty here is legitimate and common -- the telemetry rung is opt-in -- so this reports the
+    absence and the command rather than treating it as a fault. That distinction is the console's
+    own: never-attached is not attached-and-quiet.
+    """
+    rows = _count("observed_call")
+    if rows is None:
+        return Check("observed", MISSING, "observed_call cannot be counted", "npm run no-admin")
+    if not rows:
+        return Check(
+            "observed",
+            MISSING,
+            "no traffic observed, so the telemetry rung is empty and observed-drift cannot run",
+            "uv run python -m sync ingest --repo-id <repo> --payload <otlp.json>",
+        )
+    return Check("observed", OK, f"{rows} observed call(s) recorded")
+
+
+def check_remediate() -> Check:
+    """REMEDIATE: has the repair loop ever run?"""
+    rows = _count("migration_outcome")
+    if rows is None:
+        return Check("remediate", MISSING, "migration_outcome cannot be counted", "npm run no-admin")
+    if not rows:
+        return Check(
+            "remediate",
+            MISSING,
+            "no repair attempted, so Solutions, Corpus and the remediation flow are all empty",
+            "uv run python -m sync rehearse --repo-id <repo>",
+        )
+    return Check("remediate", OK, f"{rows} repair attempt(s) recorded")
+
+
 def undefined_names_in(function: Callable) -> list[str]:
     """Names a function calls that its own module does not define.
 
@@ -246,6 +328,11 @@ CHECKS: tuple[Callable[[], Check], ...] = (
     check_postgres,
     check_schema,
     check_seeded,
+    # The pipeline in the order it runs, so the startup output reads as a workflow.
+    check_signal,
+    check_detect,
+    check_observed,
+    check_remediate,
     check_api_entrypoint,
     check_api_port,
     check_npm,

@@ -100,6 +100,19 @@ export function FindingsPage() {
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 
+      {/* Dashboard F1. The page's opening row, above everything else (owner direction
+          2026-08-19): it carries what the tabs and the table do not -- how many detectors stood
+          behind the answer, and when this workspace was last indexed, which is what makes an
+          empty table readable as clean rather than as unchecked. */}
+      {query.isSuccess && (
+        <FindingsKpis
+          page={query.data}
+          detectorNames={
+            detectors.isSuccess ? detectors.data.detectors.map((row) => row.detector) : null
+          }
+        />
+      )}
+
       {/* What a human has already ruled on, beside what is still open. The table below lists
           open findings only, so without this a finding somebody deliberately set aside reads
           as one nobody has looked at. It states its own fleet scope, which is why it can sit
@@ -202,11 +215,6 @@ function FindingsBody({
             }
 
   return (
-    <>
-      {/* Dashboard F1, above the triage control: what the tabs and the table do not carry --
-          how many detectors stood behind the answer, and when this workspace was last indexed.
-          The second is what makes an empty table readable as clean rather than as unchecked. */}
-      <FindingsKpis page={page} detectorNames={detectorNames} />
     <TriageTabs
       legend="Findings by kind"
       noun="open findings"
@@ -248,6 +256,5 @@ function FindingsBody({
         />
       </MetricPanel>
     </TriageTabs>
-    </>
   )
 }

@@ -136,10 +136,36 @@ export function LoadingState({ what }: { what: string }) {
 }
 
 /** The API answered, and the answer was nothing. A true answer, not a failure. */
-export function EmptyState({ headline, detail }: { headline: string; detail: string }) {
+export function EmptyState({
+  headline,
+  detail,
+  action,
+  command,
+}: {
+  headline: string
+  detail: string
+  /** Where a reader goes to populate this. A link, usually into Settings or a sibling screen. */
+  action?: ReactNode
+  /**
+   * The command that fills it, for the cases where the answer is a terminal rather than a screen.
+   *
+   * **Owner direction, 2026-08-19: no panel that just sits there.** An empty state that explains
+   * itself and stops leaves a reader knowing what is missing and not how to get it -- twenty-seven
+   * components did exactly that. The console cannot run these commands (`console-dev-loop.md`: no
+   * route mutates the graph or triggers a run), so what it can honestly offer is the exact
+   * invocation, copyable, rather than a button that would have to lie about what it did.
+   */
+  command?: string
+}) {
   return (
     <Panel headline={headline}>
       <p>{detail}</p>
+      {command !== undefined && (
+        <code className="mt-row block overflow-x-auto rounded-control border border-line bg-surface-subtle px-field py-field font-mono text-meta text-ink select-all">
+          {command}
+        </code>
+      )}
+      {action !== undefined && <div className="mt-row flex flex-wrap gap-row">{action}</div>}
     </Panel>
   )
 }

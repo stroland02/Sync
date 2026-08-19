@@ -139,7 +139,8 @@ export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
               query.data.telemetry_attached_at === null ? (
                 <EmptyState
                   headline="Telemetry was never attached to this repository."
-                  detail="Nothing has watched this repository's traffic, so there is nothing to have observed. This is the absence of a measurement rather than a measurement of nought — no call site here has been shown unexercised, only unwatched."
+                  detail="Nothing has watched this repository's traffic, so there is nothing to have observed. This is the absence of a measurement rather than a measurement of nought — no call site here has been shown unexercised, only unwatched. Fold in a captured export to attach one:"
+                  command={`uv run python -m sync ingest --repo-id ${repoId} --vendor stripe --payload <otlp.json>`}
                 />
               ) : (
                 <EmptyState

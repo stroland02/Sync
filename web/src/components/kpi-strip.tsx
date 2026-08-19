@@ -43,28 +43,30 @@ export function KpiStrip({
   className?: string
 }) {
   return (
+    // One surface, hairline-divided, rather than four cards with four borders and four gaps.
+    // The owner's direction of 2026-08-19: the strip is the page's instrument panel and should
+    // read as one instrument. `divide-x` supplies the separation the gaps used to, at a fraction
+    // of the height, and `auto-rows-fr` still holds every cell to one height so a note that wraps
+    // cannot make its neighbour shorter.
     <div
       className={cn(
-        // `auto-rows-fr` is the symmetry: a tile whose note wraps to two lines would otherwise
-        // be taller than its neighbours, and a row of tiles at four heights is the defect the
-        // owner named across the whole console.
-        "grid auto-rows-fr gap-section sm:grid-cols-2",
+        "grid auto-rows-fr overflow-hidden rounded-surface border border-line bg-surface",
+        "divide-y divide-line sm:grid-cols-2 sm:divide-y-0 sm:[&>*:nth-child(n+3)]:border-t",
+        "sm:[&>*]:border-line",
         items.length === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3",
+        "xl:[&>*:nth-child(n+3)]:border-t-0 xl:divide-x",
         className
       )}
     >
       {items.map((item) => (
-        <div
+        <FactTile
           key={item.label}
-          className="flex h-full flex-col rounded-surface border border-line bg-surface p-section"
-        >
-          <FactTile
-            label={item.label}
-            value={item.value}
-            note={item.note}
-            figure={item.figure ?? true}
-          />
-        </div>
+          className="px-section py-row"
+          label={item.label}
+          value={item.value}
+          note={item.note}
+          figure={item.figure ?? true}
+        />
       ))}
     </div>
   )
