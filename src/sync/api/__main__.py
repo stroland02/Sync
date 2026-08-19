@@ -427,6 +427,10 @@ def app_factory() -> Starlette:
         integration_changes_reader=integration_changes_reader,
         topology_reader=topology_reader,
         catalogue_reader=catalogue_reader,
+        call_site_source_reader=store.call_site_source,
+        # Off is the hosted posture; a local single-operator deployment serves its own source.
+        serve_source=os.environ.get("SYNC_SERVE_SOURCE", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
         api_password=configured_api_password(),
     )
 

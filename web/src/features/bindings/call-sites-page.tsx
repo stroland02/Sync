@@ -76,7 +76,7 @@ const LIMIT = 50
 const CALL_SITE_COLUMNS: readonly ColumnSpec[] = [
   { id: "path", label: "File", hideable: false },
   { id: "symbol", label: "Symbol" },
-  { id: "vendor", label: "Integration" },
+  { id: "vendor", label: "Vendor" },
   { id: "operation", label: "Operation" },
   { id: "loops", label: "Loops" },
   { id: "args", label: "Arguments sent", defaultVisible: false },
@@ -99,6 +99,8 @@ interface CallSiteRow {
   loop_depth: number
   sdk_version: string
   indexed_at: string | null
+  snippet?: string | null
+  snippet_start_line?: number | null
 }
 
 interface CallSitesPage {
@@ -110,6 +112,7 @@ interface CallSitesPage {
   unfiltered_total: number
   vendor_id: string | null
   path_prefix: string | null
+  source_served: boolean
 }
 
 async function fetchCallSites(
@@ -240,7 +243,14 @@ export function CallSitesPage() {
           <DetailLayout
             title={selectedSite ? `${selectedSite.path}:${selectedSite.line}` : ""}
             onClose={() => setOpenSite(null)}
-            detail={selectedSite ? <CallSiteDetail site={selectedSite} /> : null}
+            detail={
+              selectedSite ? (
+                <CallSiteDetail
+                  site={selectedSite}
+                  sourceServed={query.data?.source_served ?? false}
+                />
+              ) : null
+            }
             list={
               <>
             <MetricPanel

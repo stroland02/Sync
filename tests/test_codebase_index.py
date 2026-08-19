@@ -480,3 +480,40 @@ def test_a_relative_cache_path_is_resolved_rather_than_left_to_the_working_direc
 
     assert candidates, "discovery must offer somewhere to look"
     assert all(c.is_absolute() for c in candidates), [str(c) for c in candidates]
+
+
+def test_index_codebase_captures_a_bounded_snippet(tmp_path, staged_cache):
+    """The pass that writes a call site captures the window around it -- the graph stores no
+    path back to the checkout, so index time is the only moment the source is in hand."""
+    repo_dir = tmp_path / "snippet_app"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / "package.json").write_text(
+        json.dumps({"name": "snippet-app", "dependencies": {"stripe": "^14.0.0"}}),
+        encoding="utf-8",
+    )
+    src_dir = repo_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "billing.ts").write_text(
+        """import Stripe from 'stripe';
+const stripe = new Stripe('sk_test');
+export async function pay() {
+    const charge = await stripe.charges.create({
+        amount: 2000,
+        currency: 'usd',
+    });
+    return charge.id;
+}
+""",
+        encoding="utf-8",
+    )
+
+    report = index_codebase(repo_dir, cache_dir=staged_cache)
+
+    site = next(cs for cs in report.call_sites if cs.operation_id == "PostCharges")
+    assert site.snippet is not None
+    assert site.snippet_start_line == max(1, site.line - 4)
+    window = site.snippet.splitlines()
+    # Bounded: at most the call line plus four each side.
+    assert len(window) <= 9
+    # The call line itself is inside the window, at the offset the start line implies.
+    assert "charges.create" in window[site.line - site.snippet_start_line]

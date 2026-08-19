@@ -396,6 +396,8 @@ def _build_app(
     integration_changes_reader=_fake_integration_changes_reader,
     settings_reader=_fake_settings_reader,
     settings_writer=_fake_settings_writer,
+    call_site_source_reader=None,
+    serve_source: bool = True,
     api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
@@ -439,6 +441,8 @@ def _build_app(
         findings_reader=findings_reader,
         settings_reader=settings_reader,
         settings_writer=settings_writer,
+        call_site_source_reader=call_site_source_reader,
+        serve_source=serve_source,
         api_password=api_password,
     )
 
@@ -1143,21 +1147,24 @@ def test_change_units_route_passes_query_params():
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
 
 
-def test_binding_route_returns_the_readers_payload_unaltered():
+def test_binding_route_returns_the_readers_payload_plus_the_source_policy():
+    # "Unaltered" until 2026-08-19: the route now states the deployment's source policy on the
+    # way through, because the rows can carry index-captured snippets and a reader has to be
+    # able to tell withheld from never-captured. Everything the reader said is still forwarded.
     payload = {
         "vendor_id": "stripe", "operation_id": "PostCharges", "repo_id": None,
         "call_sites": [{"path": "src/pay.ts", "binding_rung": "static"}], "changes": [],
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        binding_reader=lambda vendor_id, operation_id, *, repo_id=None, **_: payload,
+        binding_reader=lambda vendor_id, operation_id, *, repo_id=None, **_: dict(payload),
     )
     client = TestClient(app)
 
     response = client.get("/api/vendors/stripe/operations/PostCharges/bindings")
 
     assert response.status_code == 200
-    assert response.json() == payload
+    assert response.json() == {**payload, "source_served": True}
 
 
 def test_binding_route_passes_the_path_segments_and_the_repo_id_query_param():
@@ -2878,3 +2885,43 @@ def test_the_dismissal_tally_is_reachable_and_not_shadowed_by_the_finding_route(
     assert seen == [True], "the finding route shadowed the tally"
     assert response.status_code == 200
     assert response.json() == {"counts": {"wont_fix": 2}, "total": 2}
+
+
+# -- source policy ----------------------------------------------------------------
+#
+# Owner re-ruling 2026-08-19, scoping the threat-model rule at the top of `app.py`: bounded,
+# index-captured windows are served unless the deployment switches them off. `source_served`
+# is always present so a console can tell policy from absence -- a row with no snippet on a
+# serving deployment was indexed before capture existed, a different nothing from withheld.
+
+
+def _source_policy_client(serve_source: bool) -> TestClient:
+    def reader(repo_id, **_kw):
+        return {
+            "repo_id": repo_id,
+            "items": [
+                {"path": "src/a.ts", "line": 3, "snippet": "const x = 1", "snippet_start_line": 1}
+            ],
+            "total": 1,
+            "next_offset": None,
+        }
+
+    surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
+    app = _build_app(surface=surface, call_sites_reader=reader, serve_source=serve_source)
+    return TestClient(app)
+
+
+def test_call_sites_serve_captured_source_by_default():
+    page = _source_policy_client(True).get("/api/repositories/acme/call-sites").json()
+
+    assert page["source_served"] is True
+    assert page["items"][0]["snippet"] == "const x = 1"
+    assert page["items"][0]["snippet_start_line"] == 1
+
+
+def test_source_policy_withholds_snippets_and_says_which_nothing_it_is():
+    page = _source_policy_client(False).get("/api/repositories/acme/call-sites").json()
+
+    assert page["source_served"] is False
+    assert "snippet" not in page["items"][0]
+    assert "snippet_start_line" not in page["items"][0]

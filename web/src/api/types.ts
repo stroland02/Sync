@@ -290,6 +290,13 @@ export interface FindingDetail extends Provenance {
   response_fields_read: string[]
   sdk_version: string | null
   known_changes: KnownChange[]
+  /** Whether this deployment serves index-captured source windows (SYNC_SERVE_SOURCE). */
+  source_served: boolean
+  /**
+   * The captured window around the finding's call site, or `null`: under `source_served: false`
+   * it is withheld by policy; under `true` it means no index pass has captured this row yet.
+   */
+  call_site_source: { snippet: string; snippet_start_line: number; line: number } | null
 }
 
 /** The 404 body. A finding that is not open is an answer, so the API names the identifier. */
@@ -686,6 +693,14 @@ export interface BindingCallSite {
   loop_depth: number
   binding_rung: BindingSource
   indexed_at: string
+  /**
+   * A bounded window of source around the call, captured by the index pass that wrote the row.
+   * `null` under `source_served: true` means the row predates capture -- a different nothing
+   * from a deployment that withholds source, which the page-level flag names.
+   */
+  snippet?: string | null
+  /** 1-based file line of the snippet's first line. */
+  snippet_start_line?: number | null
 }
 
 /** One vendor change `GET .../bindings` reports, already filtered to the operation the URL names. */
@@ -738,6 +753,8 @@ export interface BindingSurfaceResponse {
   call_sites_common_directory: string
   changes: ItemPage<BindingChange>
   repositories: BindingRepository[]
+  /** Whether this deployment serves index-captured source windows (SYNC_SERVE_SOURCE). */
+  source_served: boolean
 }
 
 /**

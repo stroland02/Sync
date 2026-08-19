@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS call_site (
     -- which is why this is not interchangeable with a count from `observed_call`. A query
     -- that treats a non-zero depth as proof of volume is wrong -- it is proof of shape.
     loop_depth           INTEGER NOT NULL DEFAULT 0,
+    -- A bounded window of source around the call (a few lines each side), captured by the index
+    -- pass that wrote the row. Nullable with no default -- the only shape `apply_schema` can add
+    -- to a table that already has rows -- and NULL on rows from passes that predate capture.
+    -- Whether it is served is the API's decision (SYNC_SERVE_SOURCE); the column records what
+    -- the pass read either way.
+    snippet              TEXT,
+    -- 1-based file line of the snippet's first line.
+    snippet_start_line   INTEGER,
     indexed_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- When a pass over this repository stopped finding the call at this position. NULL means the
     -- revision last indexed has it. Nullable and with no default because that is the only shape
