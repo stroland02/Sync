@@ -1,68 +1,47 @@
 ---
 paths:
   - "tests/**"
+  - "web/src/**/*.test.ts"
+  - "web/src/**/*.test.tsx"
 ---
 
-# Test rules
+# Tests
 
-## Watch it fail first
+`CLAUDE.md` carries *test first, and watch it fail for the reason you expect*, and
+`src/sync/CLAUDE.md` carries the fixture and admin-connection rules. These are what only matters
+once you are inside a test file.
 
-Write the failing test, run it, watch it fail *for the reason you expect*, then implement. A
-test that has never failed has never been shown to test anything.
+## A skip is a test that cannot fail, in a different shape
 
-## A test that cannot fail is worse than no test
+It reports as neither pass nor fail, so a skip with no real reason manufactures the same false
+confidence. `scripts/lint_test_skips.py` is the check: **a skip is permitted only when its reason
+names a platform or a genuinely absent local toolchain.** "because" and "flaky" name neither.
 
-It manufactures confidence. When a test asserts on a subprocess, an exit code, or an external
-tool, prove it detects a real violation before trusting it — break the thing deliberately,
-watch the test go red, restore it.
-
-This has bitten this repository already: the import-boundary test's original form exited 0
-without parsing its own argument. It passed for the wrong reason and would have kept passing
-through any violation.
-
-A skip is the same defect in a different shape: it reports as neither pass nor fail, so a
-skip with no real reason manufactures the same false confidence a test that cannot fail
-does. `scripts/lint_test_skips.py`, gated in CI as "Test skip discipline", is the check —
-a skip is permitted only when its reason names a platform or a genuinely absent local
-toolchain; "because" or "flaky" name neither. Prove it the same way: put an unqualified
-`pytest.skip(...)` in a test file, run the linter, watch it exit non-zero naming the file
-and line, then remove it and watch it pass.
-
-## No vendor API, no model API
-
-Fixtures are committed. Local toolchain access is fine — the Postgres container, `npx`
-fetching a compiler. The one end-to-end test is marked `@pytest.mark.e2e` and deselected by
-default via `addopts`.
-
-## Fixtures are ASCII, so encoding bugs are invisible here
-
-Every fixture in this repository is ASCII. That means **no test will ever catch a missing
-`encoding="utf-8"`** — the failure arrives first against real vendor data or a real customer
-repository, on Windows, where the default is cp1252.
-
-Do not try to solve this with a test. It is a lint (`scripts/lint_encoding.py`), and the lint
-is what runs in CI. If you are adding a fixture with non-ASCII content specifically to
-exercise a decode path, that is welcome — but it does not replace the lint, because the lint
-covers call sites no fixture reaches.
+Prove that lint the way you prove any other: plant an unqualified `pytest.skip(...)`, watch the
+linter exit non-zero naming the file and line, remove it, watch it pass.
 
 ## Assert on shape, not on incidental values
 
-A test that pins an exact error string, a timestamp, or a dict ordering fails on changes that
-break nothing. Assert the property the code promises.
+A test pinning an exact error string, a timestamp or a dict ordering fails on changes that break
+nothing. Assert the property the code promises.
 
-## Never open an admin connection by hand
+## Encoding bugs are a lint, not a test
 
-`CREATE DATABASE` and `DROP DATABASE` go through `conftest.admin_connection`, and a drop goes
-through `conftest.drop_database` or `conftest.drop_databases_best_effort`. Not style: a bare
-`psycopg.connect(admin_dsn)` has no `statement_timeout` and no `lock_timeout`, and `DROP
-DATABASE` waits on an immediate cluster-wide checkpoint while holding an object lock. Several
-worktrees run this suite at once, so those queue — and B132 is a serial gate killed after 70
-minutes having printed nothing, blocked in exactly that statement.
-
-A teardown uses the best-effort form. Cleanup that fails a test which passed reports a defect in
-whatever that test covers, and a database it could not drop is one the next run's sweep takes.
+Do not try to catch a missing `encoding="utf-8"` with a test — every fixture here is ASCII, so no
+test can. It is `scripts/lint_encoding.py` plus a PostToolUse hook. A fixture with non-ASCII content
+added to exercise a decode path is welcome, but it does not replace the lint, which covers call
+sites no fixture reaches.
 
 ## Run focused while iterating, full before committing
 
-`uv run pytest tests/test_x.py::test_name -v` while working. `uv run pytest` once before the
-commit. Never `python3` — that is a Microsoft Store shim on this machine and it will not run.
+`uv run pytest tests/test_x.py::test_name -v` while working. The full suite once before the commit.
+
+## Console tests
+
+Scope is **classification, derivation and structural invariants — never class names, never
+snapshots**; `web/CLAUDE.md` carries why, and where a rule belongs when the payload could answer it
+instead.
+
+**The proven-RED requirement applies here exactly as in `tests/`.** Every guard in
+`web/src/**/*.test.*` was shown red against a deliberately broken subject before it was trusted.
+That is a permanent increase in per-task cost, stated rather than hidden.
