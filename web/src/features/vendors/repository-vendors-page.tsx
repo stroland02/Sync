@@ -35,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
-import { PageTabs, integrationsTabs } from "@/components/page-tabs"
+import { PageTabs, vendorsTabs } from "@/components/page-tabs"
 import { FindingsPerIntegration } from "@/features/vendors/findings-per-integration"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
@@ -96,7 +96,7 @@ export function RepositoryVendorsPage() {
 
   return (
     <section className="flex min-w-0 flex-col gap-8">
-      <PageTabs label="Integrations" tabs={integrationsTabs(repoId ?? "")} />
+      <PageTabs label="Vendors" tabs={vendorsTabs(repoId ?? "")} />
 
       {/* Dashboard I1. Above the scope check on purpose: the catalogue is its own read with its
           own scope, so it stays true when the overview beneath arrives computed for a different

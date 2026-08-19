@@ -22,6 +22,7 @@ import {
   DESTINATIONS,
   GRAPH_LEVELS,
   ROUTES,
+  WORKFLOW_STAGES,
   boundParams,
   destinationHref,
   isActiveMenuItem,
@@ -141,10 +142,11 @@ describe("one region, and what a workspace can bind", () => {
     for (const route of reached) {
       // **Amended 2026-08-19.** This required every non-rail route to need more than a workspace,
       // which was true while the rail was the only way in. The owner's tab rulings added a second
-      // reason to sit outside it: Detectors, Trends, Corpus, Changes and Signals are tabs, and the
-      // two map pages open from the Overview's panels -- all buildable from a workspace alone and
-      // all deliberately not rail rows, because a second door to a screen one click away is
-      // clutter rather than reach.
+      // reason to sit outside it: Trends, Corpus and Changes are tabs, and the two map pages open
+      // from the Overview's panels -- all buildable from a workspace alone and all deliberately
+      // not rail rows, because a second door to a screen one click away is clutter rather than
+      // reach. (Detectors and the telemetry page were tabs too, until the stage grouping gave
+      // their stages doors of their own.)
       //
       // What still holds, and is the half that protects a reader: **a route outside the rail must
       // say where it is reached from.** Without that a declared route is a dead end nobody can
@@ -159,6 +161,50 @@ describe("one region, and what a workspace can bind", () => {
     // two rows claiming the same thing again.
     const labels = ROUTES.map((route) => route.label)
     expect(new Set(labels).size).toBe(labels.length)
+  })
+})
+
+describe("the rail's stage grouping", () => {
+  /**
+   * The owner's restructure of 2026-08-19: the rail groups by pipeline stage — Index, Signal,
+   * Observe, Detect, Remediate — in pipeline order. The stages are presentation, not levels;
+   * `GRAPH_LEVELS` is untouched and `tests/test_console_hierarchy.py` still holds it. What these
+   * guards hold is the grouping's own integrity, which no spec test can see.
+   */
+  const railInOrder = ROUTES.filter((route) => route.nav).sort(
+    (a, b) => (a.navOrder ?? Number.MAX_SAFE_INTEGER) - (b.navOrder ?? Number.MAX_SAFE_INTEGER)
+  )
+
+  it("gives every rail row a stage, so no row renders outside every group", () => {
+    expect(railInOrder.length).toBeGreaterThan(0)
+    for (const route of railInOrder) {
+      expect(WORKFLOW_STAGES).toContain(route.stage)
+    }
+  })
+
+  it("keeps each stage's rows contiguous and the stages in pipeline order", () => {
+    // The rail renders one group per stage over the navOrder-sorted list. Rows of one stage
+    // split by another's would render that stage's heading twice, and a stage out of pipeline
+    // order tells the loop's story backwards.
+    const seen = railInOrder.map((route) => route.stage)
+    const stagesInFirstAppearance = [...new Set(seen)]
+
+    expect(stagesInFirstAppearance).toEqual(
+      WORKFLOW_STAGES.filter((stage) => seen.includes(stage))
+    )
+    for (const stage of stagesInFirstAppearance) {
+      const positions = seen.flatMap((s, i) => (s === stage ? [i] : []))
+      expect(positions[positions.length - 1] - positions[0]).toBe(positions.length - 1)
+    }
+  })
+
+  it("never names a row after its own stage heading, which is the duplication that killed level headings", () => {
+    // The 2026-08-18 ruling against headings was earned by "BINDING SURFACE" over a "Binding
+    // surface" row. Five stage headings over nine differently-worded rows is the design that
+    // supersedes it, and this is the wording half of that argument, held.
+    for (const route of railInOrder) {
+      expect(route.label.toLowerCase()).not.toBe(route.stage?.toLowerCase())
+    }
   })
 })
 

@@ -129,7 +129,7 @@ export function ApiTopologyCard({ repoId }: { repoId: string }) {
       }
     >
       <div className="grid auto-rows-fr gap-section sm:grid-cols-2 xl:grid-cols-4">
-        <Figure label="Integrations" value={totals.vendors} unit="called" />
+        <Figure label="Vendors" value={totals.vendors} unit="called" />
         <Figure label="Operations" value={totals.operations} unit="reached" />
         <Figure label="Files" value={totals.files} unit="calling out" />
         <Figure label="Call sites" value={totals.call_sites} unit="indexed" />

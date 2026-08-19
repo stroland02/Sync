@@ -34,7 +34,7 @@ const PAGE_GUIDES: readonly PageGuide[] = [
   },
   {
     id: "findings",
-    title: "Metrics",
+    title: "Findings",
     body: [
       "Every open finding in the workspace — the call sites an open finding touches, and what each one is bound to. The tabs across the top divide the set by change kind, counted over the whole scope rather than the page in view, so a tab's count says what selecting it would return.",
       "The rung column on each row says how the system knows the site is bound to the operation — static (read from the code), resolved, or observed (seen in traffic). It is not hideable, because a false positive that cannot be attributed to a rung cannot be fixed.",
@@ -43,7 +43,7 @@ const PAGE_GUIDES: readonly PageGuide[] = [
   },
   {
     id: "runs",
-    title: "Logs",
+    title: "Runs",
     body: [
       "What the remediation pipeline attempted, what it abandoned, and which change kinds it does not handle mechanically. One row is one attempt: a finding retried three times is three rows here and one finding everywhere else.",
       "The rail on the left narrows by disposition, counted across every run the deployment holds. The record count under the table describes the narrowed set — two figures, two questions, each stating its scope.",
@@ -52,7 +52,7 @@ const PAGE_GUIDES: readonly PageGuide[] = [
   },
   {
     id: "signals",
-    title: "Signals",
+    title: "Telemetry",
     body: [
       "A catalogue of what is attached to the repository's graph, grouped by the role it plays: the vendor role (which API services the code calls), the signal-source role (what traffic showed up and how it behaved), and the human-surface role (where remediation output is delivered).",
       "One card per integration — and a card is not evidence that an integration stands behind it. Each role group states whether anything is attached, because a role that was never asked is a different fact from one that was asked and had nothing to report.",
@@ -60,7 +60,7 @@ const PAGE_GUIDES: readonly PageGuide[] = [
   },
   {
     id: "vendors",
-    title: "Integrations and connections",
+    title: "Vendors and services",
     body: [
       "One page per vendor, scoped to the selected codebase: the operations this codebase calls, the findings open against them, and what the vendor published beside where it was read from. Exposure leads and the vendor's history follows, because the history is the reason the findings appeared.",
       "What a vendor published is a fact about the vendor, never about one codebase — the changes table says so on screen, because it is the one figure on the page that is not scoped.",

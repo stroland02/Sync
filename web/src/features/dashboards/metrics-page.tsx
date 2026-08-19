@@ -15,7 +15,7 @@ import { ChangesOverTimeCard } from "@/features/dashboards/changes-over-time-car
 import { TrendsKpis } from "@/features/dashboards/trends-kpis"
 import { AttemptsOverTime } from "@/features/workflows/remediation-activity"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
-import { PageTabs, metricsTabs } from "@/components/page-tabs"
+import { PageTabs, findingsTabs } from "@/components/page-tabs"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -25,8 +25,8 @@ export function MetricsPage() {
 
   return (
     <section className="flex flex-col gap-8">
-      <Breadcrumbs trail={[{ label: "Metrics" }]} />
-      <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
+      <Breadcrumbs trail={[{ label: "Findings" }]} />
+      <PageTabs label="Findings" tabs={findingsTabs(repoId)} />
       {/* Dashboard T1. Every page opens with its strip (owner ruling), and here the tiles
           are the totals the two charts below sum to -- which is what makes the charts
           checkable rather than merely decorative. */}

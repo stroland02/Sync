@@ -44,7 +44,6 @@
 import { useParams } from "react-router"
 
 import { InfoHint } from "@/components/info-hint"
-import { PageTabs, logsTabs } from "@/components/page-tabs"
 import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
 import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
 import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
@@ -66,8 +65,7 @@ export function RunsPage() {
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes — the page keeps the
             segments the bar does not reach, which here is one. */}
-        <Breadcrumbs trail={[{ label: "Logs" }]} />
-        <PageTabs label="Logs" tabs={logsTabs(repoId)} />
+        <Breadcrumbs trail={[{ label: "Runs" }]} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

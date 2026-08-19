@@ -14,6 +14,7 @@ import {
   Plug,
   Radar,
   Radio,
+  ScanSearch,
   ScrollText,
   Settings,
   Workflow,
@@ -37,6 +38,7 @@ import {
 import {
   DESTINATIONS,
   ROUTES,
+  WORKFLOW_STAGES,
   boundParams,
   destinationHref,
   isActiveMenuItem,
@@ -64,7 +66,7 @@ const DESTINATION_ICON: Record<string, LucideIcon> = {
   "/repositories/:repoId/services": Plug,
   "/repositories/:repoId/vendors": FolderTree,
   "/repositories/:repoId/observed": Radio,
-  "/repositories/:repoId/detectors": FileWarning,
+  "/repositories/:repoId/detectors": ScanSearch,
   "/repositories/:repoId/vendors/:vendorId": Plug,
   "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId": Layers,
   "/repositories/:repoId/findings/:findingId": Wrench,
@@ -144,7 +146,7 @@ function EnvironmentBadge() {
     <Link
       to="/settings?group=github-connection"
       className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
-      title="Connections — Settings"
+      title="GitHub connection — Settings"
     >
       {workspace !== null && (
         <>
@@ -369,23 +371,39 @@ function AppSidebar({ pathname }: { pathname: string }) {
               destination is unreachable and no route test would catch it, which is a worse fault
               than a scrollbar the owner did not want. */}
           <SidebarContent className="gap-0 pt-row overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* One flat set in the owner's declared order. The workspace is chosen above;
-              everything here is that workspace's. */}
-          <SidebarGroup className="px-row py-0">
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0">
-                {navRoutes().map((route) => (
-                  <DestinationRow
-                    key={route.path}
-                    route={route}
-                    pathname={pathname}
-                    bound={bound}
-                    minimised={minimised}
-                  />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {/* One group per pipeline stage, in pipeline order — the owner's restructure of
+              2026-08-19, superseding the flat list of 2026-08-18 and, before that, the ruling
+              against headings altogether. What killed level headings was thirteen of them over
+              eleven rows, several duplicating the row beneath; five stage words over nine
+              differently-named rows is a different design, and `routes.test.tsx` holds the
+              wording apart. The heading row stays in the DOM at the rail width with its text
+              `sr-only`, exactly as the row labels do, so no icon moves across the reveal. */}
+          {WORKFLOW_STAGES.map((stage) => {
+            const rows = navRoutes().filter((route) => route.stage === stage)
+            if (rows.length === 0) return null
+            return (
+              <SidebarGroup key={stage} className="px-row py-0">
+                <div data-stage-heading={stage} className="flex h-7 items-center px-row">
+                  <span className={minimised ? "sr-only" : "text-meta text-ink-muted"}>
+                    {stage}
+                  </span>
+                </div>
+                <SidebarGroupContent>
+                  <SidebarMenu className="gap-0">
+                    {rows.map((route) => (
+                      <DestinationRow
+                        key={route.path}
+                        route={route}
+                        pathname={pathname}
+                        bound={bound}
+                        minimised={minimised}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )
+          })}
 
           </SidebarContent>
 
@@ -458,7 +476,8 @@ function ChassisQualifications() {
   return (
     <footer className="mt-auto flex flex-col gap-field border-t border-line px-frame py-section">
       <p className="text-meta text-ink-muted leading-snug">
-        Nine graph levels, six areas. An area groups a run of levels — it is not a level itself.
+        Nine graph levels, five pipeline stages. A stage groups the pages that answer it — it is
+        not a level itself.
       </p>
       {/* Whose data this is, which nothing on screen said until a console could be served
           somewhere a partner reaches it. The sentence claims only what this console can

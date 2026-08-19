@@ -506,20 +506,49 @@ describe("the sidebar carries the destinations", () => {
     expect(order[0]).toEqual(navRoutes().map((r) => r.path))
   })
 
-  it("prints no level heading, because eleven of them is what forced the scrollbar", () => {
-    // Reversed after the owner opened the reference images and said the console "doesn't look much
-    // different". The reference rail carries NO section heading at all; ours carried thirteen for
-    // eleven rows, and several duplicated the row beneath them outright -- a "BINDING SURFACE"
-    // heading over a "Binding surface" row. That is what made the sidebar taller than the viewport
-    // and forced the scroll the owner asked twice to remove.
+  it("heads each stage's rows with the stage, once, in pipeline order", () => {
+    // This supersedes "prints no level heading" — the owner's ruling of 2026-08-19, replacing the
+    // ruling of 2026-08-18 that removed headings altogether. What killed level headings was
+    // thirteen of them over eleven rows, several duplicating the row beneath ("BINDING SURFACE"
+    // over "Binding surface"). The stage grouping is a different design, and its own guards hold
+    // exactly the two things that earned the old removal: `routes.test.tsx` forbids a row named
+    // after its stage, and this asserts one heading per stage rather than one per row.
     //
-    // The specification's vocabulary does not depend on this: `route.level` still carries it, and
-    // `tests/test_console_hierarchy.py` still holds it against the spec block. What is dropped is a
-    // second rendering of a word already on the row.
-    renderAt("/")
+    // The specification's vocabulary still does not depend on any of this: `route.level` carries
+    // it, and `tests/test_console_hierarchy.py` holds it against the spec block.
+    renderAt("/repositories/org%2Fone")
 
-    const labels = [...destinations().querySelectorAll('[data-sidebar="group-label"]')]
-    expect(labels.length).toBe(0)
+    const headings = [...destinations().querySelectorAll("[data-stage-heading]")].map(
+      (el) => el.getAttribute("data-stage-heading")
+    )
+    const expected = [
+      ...new Set(navRoutes().map((route) => route.stage)),
+    ]
+    expect(expected.length).toBeGreaterThan(1)
+    expect(headings).toEqual(expected)
+  })
+
+  it("keeps each row under its own stage's heading in document order", () => {
+    renderAt("/repositories/org%2Fone")
+
+    // Walk the sidebar's rows and headings as one sequence: every destination row must be
+    // preceded most recently by its own stage's heading, which is what "grouped" means in a
+    // structure jsdom can see.
+    const sequence = [...destinations().querySelectorAll("[data-stage-heading], [data-destination]")]
+    let currentStage: string | null = null
+    let rowsChecked = 0
+    for (const el of sequence) {
+      const heading = el.getAttribute("data-stage-heading")
+      if (heading !== null) {
+        currentStage = heading
+        continue
+      }
+      const route = navRoutes().find((r) => r.path === el.getAttribute("data-destination"))
+      expect(route).toBeDefined()
+      expect(currentStage).toBe(route!.stage)
+      rowsChecked += 1
+    }
+    expect(rowsChecked).toBe(navRoutes().length)
   })
 
   it("draws one flat set of destinations, with no region heading above them", () => {

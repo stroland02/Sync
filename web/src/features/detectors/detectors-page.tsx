@@ -54,7 +54,6 @@
 import { useParams } from "react-router"
 
 import { InfoHint } from "@/components/info-hint"
-import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { ScopeChip } from "@/components/scope-chip"
 
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -78,8 +77,6 @@ export function DetectorsPage() {
 
   return (
     <section className="flex flex-col gap-8">
-      <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
-
       {/* Dashboards D1 and D2, opening the page with every other screen's strip. This page
           carried one chart and a table; the strip says how much was attributed and to how
           many detectors, and the ranking says which detector is loudest -- which the rung

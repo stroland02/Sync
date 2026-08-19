@@ -45,7 +45,7 @@ import { useParams } from "react-router"
 import { useDetectors, useWorkspaceFindings } from "@/api/queries"
 import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
-import { PageTabs, metricsTabs } from "@/components/page-tabs"
+import { PageTabs, findingsTabs } from "@/components/page-tabs"
 import { DismissedTally } from "@/features/findings/dismissed-tally"
 import { FindingsKpis } from "@/features/findings/findings-kpis"
 import { ErrorState, LoadingState } from "@/components/states"
@@ -95,8 +95,8 @@ export function FindingsPage() {
       <div className="flex flex-col gap-field">
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes. */}
-        <Breadcrumbs trail={[{ label: "Metrics" }]} />
-        <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
+        <Breadcrumbs trail={[{ label: "Findings" }]} />
+        <PageTabs label="Findings" tabs={findingsTabs(repoId)} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

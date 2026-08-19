@@ -294,7 +294,7 @@ describe("the trail names the page, so a page does not have to", () => {
     renderAt("/repositories/seed-console/observed")
 
     const trail = screen.getByRole("navigation", { name: /scope/i })
-    expect(within(trail).getByText("Signals")).toBeTruthy()
+    expect(within(trail).getByText("Telemetry")).toBeTruthy()
   })
 
   it("makes that name the page's only top-level heading", () => {
@@ -302,7 +302,7 @@ describe("the trail names the page, so a page does not have to", () => {
 
     const headings = screen.getAllByRole("heading", { level: 1 })
     expect(headings.length).toBe(1)
-    expect(headings[0].textContent).toContain("Signals")
+    expect(headings[0].textContent).toContain("Telemetry")
   })
 
   it("names a page the registry does not declare without inventing a label for it", () => {

@@ -81,6 +81,19 @@ export const GRAPH_LEVELS = [
 
 export type GraphLevel = (typeof GRAPH_LEVELS)[number]
 
+/**
+ * The pipeline's stages, in pipeline order — the sidebar's grouping, owner-ruled 2026-08-19.
+ *
+ * Presentation, not levels: `GRAPH_LEVELS` is the specification's vocabulary and stays bound to
+ * the design document; a stage groups the rail's rows by which part of the loop answers the
+ * reader's question. The owner's own definitions, recorded the day the grouping was asked for:
+ * Index reads the code, Signal downloads vendor specs and diffs them, Observe records traffic,
+ * Detect turns evidence into findings, Remediate opens the pull request.
+ */
+export const WORKFLOW_STAGES = ["Index", "Signal", "Observe", "Detect", "Remediate"] as const
+
+export type WorkflowStage = (typeof WORKFLOW_STAGES)[number]
+
 
 export interface RouteEntry {
   /** Absolute path. Dynamic segments use react-router's `:name` syntax. */
@@ -98,12 +111,20 @@ export interface RouteEntry {
    */
   nav: boolean
   /**
-   * The rail's own ordering, owner-ruled 2026-08-18 and amended the same evening: Overview,
-   * Integrations, Connections, Metrics, Call sites, Logs, Solutions. Explicit because the rail no longer
-   * groups by level — the reading order is a product decision, not an accident of registry
-   * position — and an entry without one sorts after every entry that has one.
+   * The rail's own ordering, owner-ruled 2026-08-19: pipeline order, inside stage groups —
+   * Overview, Call sites, Services · Vendors · Telemetry · Findings, Detectors · Runs,
+   * Solutions. Explicit because the rail does not group by level — the reading order is a
+   * product decision, not an accident of registry position — and an entry without one sorts
+   * after every entry that has one. Rows sharing a `stage` must be contiguous in this order,
+   * or the group renders twice.
    */
   navOrder?: number
+  /**
+   * Which pipeline stage's group the rail draws this row under. Required exactly where
+   * `nav` is true — a rail row with no stage has no group to sit in, and `routes.test.tsx`
+   * holds that — and meaningless elsewhere, since only the rail draws the grouping.
+   */
+  stage?: WorkflowStage
   /** What an operator opens this screen to find out, in one sentence. */
   question: string
   /**
@@ -128,6 +149,7 @@ export const ROUTES: readonly RouteEntry[] = [
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 1,
+    stage: "Index",
     label: "Overview",
     level: "Codebase",
     question: "What does Sync see in this workspace, and what does it not?",
@@ -148,9 +170,9 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/integration-changes",
-    reachedFrom: "the Integrations tabs",
-    // The changes feed is Integrations' second tab, never its own rail entry: what a vendor
-    // published belongs beside the integrations it describes.
+    reachedFrom: "the Vendors tabs",
+    // The changes feed is Vendors' second tab, never its own rail entry: what a vendor
+    // published belongs beside the vendors it describes.
     nav: false,
     label: "Integration changes",
     level: "API Services",
@@ -165,7 +187,8 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/call-sites",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 5,
+    navOrder: 2,
+    stage: "Index",
     label: "Call sites",
     level: "Binding surface",
     question: "Where does this codebase call an integration's API, and what did each call bind to?",
@@ -176,8 +199,8 @@ export const ROUTES: readonly RouteEntry[] = [
     // Metrics: the workspace's charts, its own rail entry by the owner's naming scheme. An
     // aggregate over levels the console already has, not a rung -- `GRAPH_LEVELS` untouched.
     path: "/repositories/:repoId/metrics",
-    reachedFrom: "the Metrics tabs",
-    // The charts are the third Metrics tab; the rail slot lands on Findings.
+    reachedFrom: "the Findings tabs",
+    // The charts are Findings' second tab; the rail slot lands on Findings.
     nav: false,
     label: "Trends",
     level: "Codebase",
@@ -186,11 +209,13 @@ export const ROUTES: readonly RouteEntry[] = [
     element: MetricsPage,
   },
   {
-    // Metrics -> Corpus: what the remediation loop has actually produced, on the owner's ruling
+    // Solutions -> Corpus: what the remediation loop has actually produced, on the owner's ruling
     // of 2026-08-19. An aggregate over Solution Workflow rather than a rung, so `GRAPH_LEVELS`
-    // is untouched -- the same reasoning detector attribution and the findings list carry.
+    // is untouched -- the same reasoning detector attribution and the findings list carry. It
+    // moved from the Metrics tabs to the Solutions tabs with the stage grouping: the corpus is
+    // remediation output, so it belongs beside the runs that produced it.
     path: "/repositories/:repoId/corpus",
-    reachedFrom: "the Metrics tabs",
+    reachedFrom: "the Solutions tabs",
     nav: false,
     label: "Corpus",
     level: "Solution Workflow",
@@ -204,7 +229,8 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/solutions",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 7,
+    navOrder: 9,
+    stage: "Remediate",
     label: "Solutions",
     level: "Solution Workflow",
     question: "Which remediations reached the forge, and where is each one's evidence?",
@@ -231,15 +257,16 @@ export const ROUTES: readonly RouteEntry[] = [
     // over that level the way detector attribution aggregates over Errors & Incidents, and
     // `.claude/rules/console-hierarchy.md` is explicit that an aggregate is not a rung. `GRAPH_LEVELS`
     // is untouched, so no specification amendment was owed before this landed.
-    // Owner naming ruling, 2026-08-18 (amended the same evening): Runs presents as "Logs" —
-    // one row per attempt is the pipeline's own log — with its own rail entry. The LEVEL is
-    // untouched: presentation vocabulary renames freely, the specification's words do not,
-    // which is the fleet screen's own precedent.
+    // "Runs" by the owner's ruling, 2026-08-19, superseding the "Logs" naming of 2026-08-18:
+    // under a REMEDIATE stage heading, one row per remediation attempt is a run, and "Logs"
+    // suggested a text stream this screen does not hold. The LEVEL is untouched: presentation
+    // vocabulary renames freely, the specification's words do not.
     path: "/repositories/:repoId/runs",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 6,
-    label: "Logs",
+    navOrder: 8,
+    stage: "Remediate",
+    label: "Runs",
     level: "Solution Workflow",
     question:
       "What did the remediation pipeline attempt, what did it abandon, and which change kinds does it not handle mechanically?",
@@ -256,12 +283,13 @@ export const ROUTES: readonly RouteEntry[] = [
     // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
     path: "/repositories/:repoId/findings",
     reachedFrom: "a workspace in the switcher",
-    // The Metrics rail slot lands here rather than on the charts: findings are the screen an
-    // operator opens Metrics for, and the tab strip carries Detectors and Trends beside it.
-    // Second in the rail, honouring the owner's "findings above integrations".
     nav: true,
-    navOrder: 4,
-    label: "Metrics",
+    navOrder: 6,
+    stage: "Detect",
+    // "Findings" by the owner's ruling, 2026-08-19, superseding the "Metrics" slot of
+    // 2026-08-18: the rail's word and the screen disagreed — the product's central question
+    // was labelled as charts. The charts stay one tab over, as Trends.
+    label: "Findings",
     level: "Finding",
     question: "What is broken in this workspace, and what is each finding bound to?",
     params: ["repoId"],
@@ -272,9 +300,12 @@ export const ROUTES: readonly RouteEntry[] = [
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 3,
-    // "Connections" by the owner's naming ruling, 2026-08-18. The LEVEL keeps the
-    // specification's words -- presentation vocabulary renames freely, levels do not.
-    label: "Connections",
+    stage: "Index",
+    // "Services" by the owner's naming ruling, 2026-08-19, superseding "Connections" of
+    // 2026-08-18: it sat beside "Integrations" as a near-synonym, and Settings already uses
+    // "Connection" for the forge credential. The LEVEL keeps the specification's words --
+    // presentation vocabulary renames freely, levels do not.
+    label: "Services",
     level: "API Services",
     question:
       "Which services is this workspace connected to, and what does the index know about each?",
@@ -285,9 +316,12 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/vendors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 2,
-    // "Integrations" by the owner's naming ruling, 2026-08-18. Same split as above.
-    label: "Integrations",
+    navOrder: 4,
+    // The Signal stage's page: what each vendor published, diffed against what this codebase
+    // binds. "Vendors" by the owner's naming ruling, 2026-08-19, superseding "Integrations" of
+    // 2026-08-18 — see the Services entry for the collision that ruling resolved.
+    stage: "Signal",
+    label: "Vendors",
     level: "API Services",
     question: "Which integrations does this workspace use, and how much is open against each?",
     params: ["repoId"],
@@ -296,8 +330,15 @@ export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/repositories/:repoId/observed",
     reachedFrom: "a workspace in the switcher",
-    nav: false,
-    label: "Signals",
+    // In the rail as of 2026-08-19: the Observe stage had no door at all — this page was
+    // reachable only as a Logs tab, so one of the five things the product does was invisible.
+    nav: true,
+    navOrder: 5,
+    stage: "Observe",
+    // "Telemetry" rather than the level's own word, because the rail now has a SIGNAL stage
+    // heading two rows up and a row reading "Signals" under a different stage would file the
+    // page under the wrong verb. The LEVEL keeps the specification's word.
+    label: "Telemetry",
     level: "Signals",
     question:
       "What vendor, signal source and human surface does this workspace have attached, and what has each reported?",
@@ -307,7 +348,11 @@ export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/repositories/:repoId/detectors",
     reachedFrom: "a workspace in the switcher",
-    nav: false,
+    // In the rail as of 2026-08-19, out of the Findings tab strip: the Detect stage's own
+    // attribution page, not a view of the findings list.
+    nav: true,
+    navOrder: 7,
+    stage: "Detect",
     label: "Detectors",
     level: "Errors & Incidents",
     question: "Which detector is producing this workspace's false positives?",

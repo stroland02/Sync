@@ -35,6 +35,7 @@ import { RelativeTime } from "@/components/relative-time"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { PageTabs, solutionsTabs } from "@/components/page-tabs"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 export function SolutionsPage() {
@@ -47,6 +48,7 @@ export function SolutionsPage() {
   return (
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Solutions" }]} />
+      <PageTabs label="Solutions" tabs={solutionsTabs(repoId)} />
 
       {query.isPending && <LoadingState what="the opened pull requests" />}
       {query.isError && (

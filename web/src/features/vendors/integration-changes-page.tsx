@@ -38,7 +38,7 @@ import {
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
-import { PageTabs, integrationsTabs } from "@/components/page-tabs"
+import { PageTabs, vendorsTabs } from "@/components/page-tabs"
 import {
   ChangesKpis,
   type ChangesFacets,
@@ -197,8 +197,8 @@ export function IntegrationChangesPage() {
   return (
     <section className="flex min-w-0 flex-col gap-8">
       <div className="flex flex-col gap-field">
-        <Breadcrumbs trail={[{ label: "Integrations" }]} />
-        <PageTabs label="Integrations" tabs={integrationsTabs(repoId)} />
+        <Breadcrumbs trail={[{ label: "Vendors" }]} />
+        <PageTabs label="Vendors" tabs={vendorsTabs(repoId)} />
       </div>
 
       {query.isPending && <LoadingState what="the integration changes" />}

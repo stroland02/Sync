@@ -86,7 +86,6 @@ import { SignalsKpis } from "@/features/signals/signals-kpis"
 import type { ReactNode } from "react"
 
 import { InfoHint } from "@/components/info-hint"
-import { PageTabs, logsTabs } from "@/components/page-tabs"
 
 import { SignalSourcePanel } from "@/features/telemetry/signal-source-panel"
 import { NotAttachedState } from "@/features/signals/not-attached-state"
@@ -172,8 +171,6 @@ function SignalsKpisRegion({ repoId }: { repoId: string }) {
 function SignalsDetail({ repoId }: { repoId: string }) {
   return (
     <section className="flex flex-col gap-8">
-      <PageTabs label="Logs" tabs={logsTabs(repoId)} />
-
       {/* Dashboard S1. Every tile distinguishes "no source attached" from "attached and quiet",
           which is the distinction this whole rung exists to make and the one an empty page
           otherwise erases. */}

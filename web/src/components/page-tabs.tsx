@@ -1,10 +1,11 @@
 /**
  * Link-tabs across the top of a destination that holds more than one screen.
  *
- * The owner's consolidation of 2026-08-18: ten rail entries became seven, with the screens
- * that answer one kind of question grouped under one destination. Each tab is a real route
- * with its own address — a reader can share the tab they are looking at, and which one is
- * active is a fact of the URL rather than component state that dies on navigation.
+ * The owner's consolidation of 2026-08-18, re-cut for the stage grouping of 2026-08-19: a tab
+ * set holds the screens that answer one page's question, and a page whose stage earned it a
+ * rail row of its own (Detectors, Telemetry) left the strip it was buried in. Each tab is a
+ * real route with its own address — a reader can share the tab they are looking at, and which
+ * one is active is a fact of the URL rather than component state that dies on navigation.
  *
  * Deliberately not the vendored `Tabs`: that component owns selection state and renders every
  * panel's subtree, which for these screens would mean four data-fetching pages mounted to show
@@ -41,31 +42,29 @@ export function PageTabs({ label, tabs }: { label: string; tabs: readonly PageTa
   )
 }
 
-/** The tabs under Logs: event streams, one row per occurrence. */
-export function logsTabs(repoId: string): PageTab[] {
-  const encoded = encodeURIComponent(repoId)
-  return [
-    { label: "Runs", to: `/repositories/${encoded}/runs` },
-    { label: "Signals", to: `/repositories/${encoded}/observed` },
-  ]
-}
-
-/** The tabs under Metrics: measured state and the aggregates over it. */
-export function metricsTabs(repoId: string): PageTab[] {
+/** The tabs under Findings: the open findings, and the measured trends over them. */
+export function findingsTabs(repoId: string): PageTab[] {
   const encoded = encodeURIComponent(repoId)
   return [
     { label: "Findings", to: `/repositories/${encoded}/findings` },
-    { label: "Detectors", to: `/repositories/${encoded}/detectors` },
     { label: "Trends", to: `/repositories/${encoded}/metrics` },
+  ]
+}
+
+/** The tabs under Solutions: what reached the forge, and the corpus those runs produced. */
+export function solutionsTabs(repoId: string): PageTab[] {
+  const encoded = encodeURIComponent(repoId)
+  return [
+    { label: "Solutions", to: `/repositories/${encoded}/solutions` },
     { label: "Corpus", to: `/repositories/${encoded}/corpus` },
   ]
 }
 
-/** The tabs under Integrations: what this codebase uses, and what those vendors published. */
-export function integrationsTabs(repoId: string): PageTab[] {
+/** The tabs under Vendors: what this codebase uses, and what those vendors published. */
+export function vendorsTabs(repoId: string): PageTab[] {
   const encoded = encodeURIComponent(repoId)
   return [
-    { label: "Integrations", to: `/repositories/${encoded}/vendors` },
+    { label: "Vendors", to: `/repositories/${encoded}/vendors` },
     { label: "Changes", to: `/repositories/${encoded}/integration-changes` },
   ]
 }
