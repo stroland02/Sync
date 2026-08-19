@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Solutions: every run that reached a pull request, and the door into each one's workflow —
  * the owner's page, named 2026-08-18: "shows the PR information and the solution workflow".
  *
@@ -25,7 +25,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { KpiStrip } from "@/components/kpi-strip"
 import { MetricPanel } from "@/components/metric-panel"
+import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
 import { RelativeTime } from "@/components/relative-time"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -50,6 +52,42 @@ export function SolutionsPage() {
           error={query.error}
           what="the opened pull requests"
           onRetry={() => void query.refetch()}
+        />
+      )}
+
+      {/* The page's facts before its rows (owner ruling 2026-08-19). `unfiltered_total` is the
+          one a tile earns its slot with: the table below is narrowed to opened runs, so the
+          share it represents is a fact the rows cannot carry. */}
+      {query.isSuccess && (
+        <KpiStrip
+          items={[
+            {
+              label: "Pull requests opened",
+              value: query.data.total.toLocaleString(),
+              note: "runs that reached the forge",
+            },
+            {
+              label: "Distinct findings behind them",
+              value: new Set(query.data.items.map((run) => run.finding_id)).size,
+              note: "on this page — a retried finding opens twice",
+            },
+            {
+              label: "Share of all runs",
+              value: `${Math.round((query.data.total / Math.max(query.data.unfiltered_total, 1)) * 100)}%`,
+              note: `${query.data.total} of ${query.data.unfiltered_total} the checkpointer holds`,
+            },
+            {
+              label: "Newest",
+              value:
+                query.data.items.length === 0 ? (
+                  <Absent>none opened yet</Absent>
+                ) : (
+                  <RelativeTime iso={query.data.items[0].last_checkpoint_at} />
+                ),
+              note: "last checkpoint on the newest opened run",
+              figure: false,
+            },
+          ]}
         />
       )}
 

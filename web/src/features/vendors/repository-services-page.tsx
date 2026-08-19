@@ -42,6 +42,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { KpiStrip } from "@/components/kpi-strip"
+import { RankedBars } from "@/components/ranked-bars"
 import { Absent, Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Badge } from "@/vendor/supabase/ui/badge"
@@ -118,11 +120,55 @@ export function RepositoryServicesPage() {
   return (
     <section className="flex flex-col gap-8">
 
+      {/* The page's own facts, ahead of the table (owner ruling 2026-08-19). None restates the
+          table's footer: the counts split the list by *which answer* names each service, which
+          is the distinction the table draws per column and never totals. */}
+      {scopeMatches && (
+        <KpiStrip
+          items={[
+            {
+              label: "Services connected",
+              value: services.length.toLocaleString(),
+              note: "named by the index, an open finding, or both",
+            },
+            {
+              label: "With open findings",
+              value: services.filter((service) => (openFindings.get(service) ?? 0) > 0).length,
+              note: "a detector has something open against them",
+            },
+            {
+              label: "Bound by the index",
+              value: Object.keys(indexed).length,
+              note: "a call site in this codebase reaches them",
+            },
+            {
+              label: "Never indexed here",
+              value: services.filter((service) => indexed[service] === undefined).length,
+              note: "named by a finding, with no current call site",
+            },
+          ]}
+        />
+      )}
+
       <p className="max-w-prose text-body text-muted-foreground">
         A service is listed here when the index bound a call site in this repository to it, or when
         an open finding names it. Those are two answers to two different questions, and each column
         below reports only its own — a blank in one is not a zero in the other.
       </p>
+
+      {/* Where the exposure is, as bars rather than as a column a reader sorts by eye. The
+          chart draws the index's answer only -- open findings are the other question, and a
+          bar mixing the two would be the merge this screen's docstring refuses. */}
+      {scopeMatches && coverageState.kind === "ready" && Object.keys(indexed).length > 0 && (
+        <RankedBars
+          label="Call sites per service"
+          caption="What the index bound in this codebase. A service with an open finding and no bar has no current call site here, which the table's own columns say per row."
+          rows={Object.entries(indexed)
+            .map(([service, count]) => ({ key: service, value: Number(count) }))
+            .sort((a, b) => b.value - a.value)}
+          unit="call sites"
+        />
+      )}
 
       {coverageState.kind === "unrouted" && (
         <NotFoundState
