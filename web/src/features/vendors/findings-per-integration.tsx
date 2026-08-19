@@ -43,7 +43,7 @@ export function FindingsPerIntegration({ repoId }: { repoId: string }) {
     .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))
 
   const hint = (
-    <InfoHint label="About findings per integration">
+    <InfoHint label="About findings per vendor">
       Open findings grouped by the integration each is bound to. Counted over every open finding
       in this workspace rather than over a page of them, so the ranking describes the whole set.
       An integration missing from this chart has no open finding — it is absent from the grouping
@@ -54,7 +54,7 @@ export function FindingsPerIntegration({ repoId }: { repoId: string }) {
   if (rows.length === 0) {
     return (
       <MetricPanel
-        label="Open findings per integration"
+        label="Open findings per vendor"
         hint={hint}
         caption="No integration in this workspace has an open finding."
       >
@@ -68,9 +68,9 @@ export function FindingsPerIntegration({ repoId }: { repoId: string }) {
   }
 
   return (
-    <MetricPanel label="Open findings per integration" hint={hint}>
+    <MetricPanel label="Open findings per vendor" hint={hint}>
       <RankedBars
-        label="By integration"
+        label="By vendor"
         caption="Open findings in this workspace, grouped by integration. Each bar's width is its share of the largest, not of the total."
         rows={rows}
         unit="findings"

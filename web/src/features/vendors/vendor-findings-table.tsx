@@ -296,7 +296,7 @@ export function VendorFindingsCard({
 
   return (
     <MetricPanel
-      label="Errors and incidents"
+      label={`Open findings against ${vendorId}`}
       metric={{
         value: page.severity_total.toLocaleString(),
         unit: `open ${page.severity_total === 1 ? "finding" : "findings"}${

@@ -143,7 +143,7 @@ export function SeverityPerIntegration({ facets }: { facets: ChangesFacets }) {
   const widest = rows.reduce((max, row) => Math.max(max, row.total), 0)
 
   const hint = (
-    <InfoHint label="About severity per integration">
+    <InfoHint label="About severity per vendor">
       Every change each integration published, split by the severity the vendor gave it. Counted
       across the whole record rather than the narrowed table, so the rail&rsquo;s selections do
       not change these bars. A severity missing from an integration&rsquo;s bar was never
@@ -156,7 +156,7 @@ export function SeverityPerIntegration({ facets }: { facets: ChangesFacets }) {
   if (rows.length === 0) {
     return (
       <MetricPanel
-        label="Severity per integration"
+        label="Severity per vendor"
         hint={hint}
         caption="No integration has published a change."
       >
@@ -170,7 +170,7 @@ export function SeverityPerIntegration({ facets }: { facets: ChangesFacets }) {
 
   return (
     <MetricPanel
-      label="Severity per integration"
+      label="Severity per vendor"
       hint={hint}
       caption="Each row is one integration's whole published record. A row's full width is the largest publisher's total, so rows compare against each other rather than against themselves."
     >

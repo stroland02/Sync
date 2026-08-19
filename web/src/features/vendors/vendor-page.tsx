@@ -1,16 +1,16 @@
 /**
- * One API service: what the vendor changed, and what is at risk across the codebase.
+ * One API service: the calls this codebase makes on it, then everything else in tabs.
  *
- * **The owner re-ruled the order on 2026-08-19, superseding decision 29.** That decision led
- * with exposure — what this vendor costs this codebase — with the vendor's history at the
- * bottom. Looking at the running page reversed it: until telemetry attaches, the exposure
- * table's rung and traffic columns are constants, so the page opened on its emptiest answer
- * while the changes feed — the thing that moves — sat below the fold. The mock (`03-vendor`)
- * drew this order all along; the ruling is recorded here so the next reader sees a decision
- * rather than a drift back to the mock.
+ * **The owner's second re-ruling of 2026-08-19, superseding both prior orders.** Decision 29 led
+ * with exposure; the morning's re-ruling led with the changes feed. Looking at both, the owner's
+ * settled shape is neither stack: the API-calls table is the page's fixed answer — the organized
+ * call patterns and operations for this one vendor — and the other three tables (what the vendor
+ * published, the findings open against it, where its spec is read from) spread into tabs beneath
+ * it rather than stacking into a scroll.
  *
- * Top to bottom: what the vendor published beside where it was read from, then the operations
- * this codebase calls, then the findings open against them.
+ * The tab is a query parameter, not component state: a shared address opens on the tab the
+ * sender was reading. Only the active table mounts — three data-fetching tables mounted to show
+ * one is the cost `page-tabs.tsx` documents against the vendored `Tabs`.
  */
 
 import { useParams } from "react-router"
@@ -25,18 +25,34 @@ import {
 import { VendorSourcesCard } from "@/features/vendors/vendor-sources-card"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { UnknownRoute } from "@/layouts/unknown-route"
-
+import { chipSurface } from "@/lib/selectable-surface"
+import { useFilterParam } from "@/lib/use-filter-param"
 
 export interface VendorPageProps {
   readonly question?: string
 }
+
+const PANELS = [
+  { id: "changes", label: "Changes" },
+  { id: "findings", label: "Findings" },
+  { id: "sources", label: "Sources" },
+] as const
+
+type PanelId = (typeof PANELS)[number]["id"]
 
 export function VendorPage() {
   // **The route is the scope**, and it used to be a query string: this read
   // `searchParams.get("repo_id")` while the route carries `:repoId`, so an address naming a
   // workspace could still render a fleet-wide claim -- the screen contradicting its own URL.
   const { vendorId, repoId } = useParams<{ vendorId: string; repoId: string }>()
+  const [panelParam, setPanel] = useFilterParam("panel")
   if (vendorId === undefined || repoId === undefined) return <UnknownRoute />
+
+  // An unknown value falls back rather than rendering nothing: a mistyped shared address should
+  // land on the default tab, not on a page with a strip and no table.
+  const panel: PanelId = PANELS.some((entry) => entry.id === panelParam)
+    ? (panelParam as PanelId)
+    : "changes"
 
   return (
     <section className="flex flex-col gap-8">
@@ -63,28 +79,40 @@ export function VendorPage() {
       >
         <div className="flex min-w-0 flex-col gap-section">
           <p className="max-w-prose text-body text-muted-foreground">
-            What {vendorId} published, then what it touches here. The changes are a fact about the
-            vendor, never about this workspace; the exposure and findings beneath them are counted
-            over <span className="font-mono">{repoId}</span> alone.
+            Every operation <span className="font-mono">{repoId}</span> calls on {vendorId}, then
+            the vendor&rsquo;s own record in the tabs beneath: what it published, what is open
+            against it here, and where its spec is read from.
           </p>
         </div>
       </DetailGrid>
 
-      {/* No `items-start`: the two cards share this row, and stretching them to one height is
-          what keeps the pairing legible as a pairing rather than as two blocks that happen to
-          be adjacent. The page gap, because this row sits between panels, not inside one. */}
-      <div
-        className="grid grid-cols-1 gap-8 lg:grid-cols-2"
-        data-testid="vendor-history"
-      >
-        <VendorChangesCard vendorId={vendorId} repoId={repoId} />
-        <VendorSourcesCard vendorId={vendorId} repoId={repoId} />
+      <div data-testid="vendor-exposure">
+        <VendorExposureCard vendorId={vendorId} repoId={repoId} />
       </div>
 
-      <div className="flex flex-col gap-8" data-testid="vendor-exposure">
-        <VendorExposureCard vendorId={vendorId} repoId={repoId} />
-        <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
-        <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
+      <div className="flex flex-col gap-8" data-testid="vendor-panels">
+        <nav aria-label="Vendor records" className="flex flex-wrap items-center gap-row">
+          {PANELS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              aria-pressed={entry.id === panel}
+              onClick={() => setPanel(entry.id === "changes" ? null : entry.id)}
+              className={`rounded-control border px-row py-field text-body ${chipSurface(entry.id === panel)}`}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </nav>
+
+        {panel === "changes" && <VendorChangesCard vendorId={vendorId} repoId={repoId} />}
+        {panel === "findings" && (
+          <>
+            <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
+            <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
+          </>
+        )}
+        {panel === "sources" && <VendorSourcesCard vendorId={vendorId} repoId={repoId} />}
       </div>
     </section>
   )

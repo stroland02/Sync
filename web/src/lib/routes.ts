@@ -185,7 +185,9 @@ export const ROUTES: readonly RouteEntry[] = [
     // The changes feed is Vendors' second tab, never its own rail entry: what a vendor
     // published belongs beside the vendors it describes.
     nav: false,
-    label: "Integration changes",
+    // "Vendor changes" with the one-word ruling of 2026-08-19: the rail says Vendors, so a
+    // screen of what those vendors published does not get a second noun.
+    label: "Vendor changes",
     level: "API Services",
     question: "What have the integrations this codebase uses published, newest first?",
     params: ["repoId"],

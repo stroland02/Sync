@@ -66,7 +66,7 @@ export function VendorChangesCard({
   return (
     <MetricPanel
       className="h-full"
-      label="Vendor changes"
+      label={`Changes ${vendorId} published`}
       caption={
         <>
           <p className="max-w-prose">

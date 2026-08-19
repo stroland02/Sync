@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { ErrorState, LoadingState } from "@/components/states"
 import { TableEmptyState } from "@/components/table-empty"
@@ -66,21 +67,30 @@ export function VendorExposureCard({
   const { operations, telemetry_attached_at: attachedAt } = query.data
 
   return (
+    // "API calls to {vendor}" names the data; "What this costs you" named a judgement about it
+    // (owner ruling, 2026-08-19). The how-it-works prose moves behind the ⓘ per the same day's
+    // hint rule; the claims stay visible — the rung on every row, the tri-state in the Traffic
+    // cells, and the one-word telemetry qualifier in the caption.
     <MetricPanel
-      label="What this costs you"
-      caption={
-        <>
-          <p className="max-w-prose">
-            The operations this codebase calls on {vendorId}, and how many places call each. Every
-            row is what the static index found, which is why each states its rung rather than
-            leaving it to be assumed.
+      label={`API calls to ${vendorId}`}
+      hint={
+        <InfoHint label={`About API calls to ${vendorId}`}>
+          <p>
+            What the Index stage read from the code: the operations this codebase calls on{" "}
+            {vendorId}, and how many places call each. Every row is what the static index found,
+            which is why each states its rung rather than leaving it to be assumed.
           </p>
-          <p className="max-w-prose">
+          <p>
             {attachedAt === null
               ? "No telemetry is attached to this scope, so no row can say whether traffic reached the operation. That is nobody having looked, which is a different fact from having looked and seen nothing."
               : "Telemetry is attached, so an operation no span named is a measured absence of traffic rather than an unasked question."}
           </p>
-        </>
+        </InfoHint>
+      }
+      caption={
+        <p className="max-w-prose">
+          {attachedAt === null ? "Static evidence; telemetry not attached." : "Static evidence, with telemetry attached."}
+        </p>
       }
     >
       <Table>

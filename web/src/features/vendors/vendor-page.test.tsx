@@ -36,26 +36,45 @@ function renderVendor(path: string) {
 // which also carries the page's name and the page's only `h1`.
 
 /**
- * Decision 29 settles this page's order: exposure first, the vendor's history below it as the
- * reason findings appeared. The mock draws it the other way round and the decision wins.
- *
- * Asserted on document order rather than on which components exist, because both orders render
- * exactly the same set of cards.
+ * The owner's settled shape, 2026-08-19 (second re-ruling that day, superseding decision 29 and
+ * the morning's inversion): the API-calls table is the page's fixed top answer, and the vendor's
+ * other three records — changes, findings, sources — are tabs beneath it, one mounted at a time.
  */
-describe("VendorPage's order, per the owner's re-ruling of 2026-08-19", () => {
-  it("leads with what this vendor changed, before what it costs", () => {
-    // Supersedes decision 29, which led with exposure. The owner reversed it looking at the
-    // running page: the exposure table's rung and traffic columns are constants until telemetry
-    // attaches, so the page opened on its emptiest answer while the vendor's history — the thing
-    // that changes — sat at the bottom.
+describe("VendorPage's shape: API calls on top, everything else in tabs", () => {
+  it("leads with the API-calls table, tabs following", () => {
     renderVendor("/repositories/seed-console/vendors/stripe")
 
     const exposure = screen.getByTestId("vendor-exposure")
-    const history = screen.getByTestId("vendor-history")
+    const panels = screen.getByTestId("vendor-panels")
 
-    // DOCUMENT_POSITION_FOLLOWING: exposure comes after history in document order.
-    expect(history.compareDocumentPosition(exposure) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    expect(exposure.compareDocumentPosition(panels) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     )
+  })
+
+  it("offers the three records as a strip and opens on Changes", () => {
+    renderVendor("/repositories/seed-console/vendors/stripe")
+
+    const strip = screen.getByRole("navigation", { name: /vendor records/i })
+    const labels = [...strip.querySelectorAll("button")].map((b) => b.textContent)
+    expect(labels).toEqual(["Changes", "Findings", "Sources"])
+    expect(
+      strip.querySelector('[aria-pressed="true"]')?.textContent
+    ).toBe("Changes")
+  })
+
+  it("reads the open tab from the address, so a shared link opens where the sender was", () => {
+    renderVendor("/repositories/seed-console/vendors/stripe?panel=sources")
+
+    const strip = screen.getByRole("navigation", { name: /vendor records/i })
+    expect(strip.querySelector('[aria-pressed="true"]')?.textContent).toBe("Sources")
+  })
+
+  it("falls back to the default tab on a panel value nothing declares", () => {
+    // A mistyped shared address lands on the default table, never on a strip with no table.
+    renderVendor("/repositories/seed-console/vendors/stripe?panel=nonsense")
+
+    const strip = screen.getByRole("navigation", { name: /vendor records/i })
+    expect(strip.querySelector('[aria-pressed="true"]')?.textContent).toBe("Changes")
   })
 })
