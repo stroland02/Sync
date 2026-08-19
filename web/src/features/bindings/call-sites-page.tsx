@@ -37,8 +37,15 @@ import {
 } from "@/components/data-table"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
+import { RelativeTime } from "@/components/relative-time"
+import { Absent } from "@/components/status"
 import { MetricPanel } from "@/components/metric-panel"
 import { ErrorState, LoadingState } from "@/components/states"
+import {
+  ColumnVisibilityMenu,
+  useColumnVisibility,
+  type ColumnSpec,
+} from "@/components/column-visibility"
 import { CallSitesDashboards } from "@/features/bindings/call-sites-dashboards"
 import { CallSiteDrawer } from "@/features/bindings/call-site-drawer"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -48,6 +55,29 @@ import { useFacetParam } from "@/lib/use-facet-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 const LIMIT = 50
+
+/**
+ * What the table can show, and what it shows by default.
+ *
+ * M15 Task 1: the payload records fifteen fields per call site and the page drew five. The screen
+ * is wide now, so the rest are offered rather than dropped -- and the default set stays the five
+ * a reader scans, because a table that opens with everything is as unreadable as one that opens
+ * with too little.
+ *
+ * `File` is not hideable: it is the row's identity, and a table of call sites with no address is
+ * a list of things a reader cannot go and look at.
+ */
+const CALL_SITE_COLUMNS: readonly ColumnSpec[] = [
+  { id: "path", label: "File", hideable: false },
+  { id: "symbol", label: "Symbol" },
+  { id: "vendor", label: "Integration" },
+  { id: "operation", label: "Operation" },
+  { id: "loops", label: "Loops" },
+  { id: "args", label: "Arguments sent", defaultVisible: false },
+  { id: "reads", label: "Response fields read", defaultVisible: false },
+  { id: "sdk", label: "SDK version", defaultVisible: false },
+  { id: "indexed", label: "Indexed", defaultVisible: false },
+]
 
 interface CallSiteRow {
   id: string
@@ -134,6 +164,7 @@ export function CallSitesPage() {
   // The open row lives in the URL, which is the half of Nango's drawer convention that matters:
   // a reader handing a colleague a link hands them the row they are looking at, not the page.
   const [openSite, setOpenSite] = useFacetParam("call_sites_open")
+  const columns = useColumnVisibility("call-sites", CALL_SITE_COLUMNS)
   const query = useQuery({
     queryKey: ["call-sites", repoId ?? "", vendorId, pathPrefix, offset],
     queryFn: ({ signal }) =>
@@ -202,19 +233,32 @@ export function CallSitesPage() {
                   : `call site${query.data.total === 1 ? "" : "s"} calling ${vendorId}`,
             }}
           >
+            {/* The reader chooses which of the fifteen recorded fields to see. Above the table
+                rather than in a settings screen: the choice belongs where its effect is. */}
+            <div className="flex justify-end">
+              <ColumnVisibilityMenu
+                columns={CALL_SITE_COLUMNS}
+                isVisible={columns.isVisible}
+                onToggle={columns.toggle}
+              />
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>File</TableHead>
-                  <TableHead>Symbol</TableHead>
-                  <TableHead>Integration</TableHead>
-                  <TableHead>Operation</TableHead>
-                  <TableHead>Loops</TableHead>
+                  {columns.isVisible("path") && <TableHead>File</TableHead>}
+                  {columns.isVisible("symbol") && <TableHead>Symbol</TableHead>}
+                  {columns.isVisible("vendor") && <TableHead>Integration</TableHead>}
+                  {columns.isVisible("operation") && <TableHead>Operation</TableHead>}
+                  {columns.isVisible("loops") && <TableHead>Loops</TableHead>}
+                  {columns.isVisible("args") && <TableHead>Arguments sent</TableHead>}
+                  {columns.isVisible("reads") && <TableHead>Response fields read</TableHead>}
+                  {columns.isVisible("sdk") && <TableHead>SDK version</TableHead>}
+                  {columns.isVisible("indexed") && <TableHead>Indexed</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {query.data.items.length === 0 && (
-                  <TableEmptyRow colSpan={5}>
+                  <TableEmptyRow colSpan={columns.visible.size}>
                     {vendorId !== null && query.data.unfiltered_total > 0 ? (
                       <>
                         <span className="text-ink">No call site matches this narrowing.</span>{" "}
@@ -238,14 +282,21 @@ export function CallSitesPage() {
                     onClick={() => setOpenSite(site.id)}
                     className="cursor-pointer"
                   >
-                    <TableCell className="font-mono text-meta">
-                      <span className="break-all">{site.path}</span>
-                      <span className="text-ink-muted">
-                        :{site.line}:{site.col}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-mono">{site.symbol}</TableCell>
-                    <TableCell className="font-mono text-meta">{site.vendor_id}</TableCell>
+                    {columns.isVisible("path") && (
+                      <TableCell className="font-mono text-meta">
+                        <span className="break-all">{site.path}</span>
+                        <span className="text-ink-muted">
+                          :{site.line}:{site.col}
+                        </span>
+                      </TableCell>
+                    )}
+                    {columns.isVisible("symbol") && (
+                      <TableCell className="font-mono">{site.symbol}</TableCell>
+                    )}
+                    {columns.isVisible("vendor") && (
+                      <TableCell className="font-mono text-meta">{site.vendor_id}</TableCell>
+                    )}
+                    {columns.isVisible("operation") && (
                     <TableCell className="font-mono text-meta">
                       {/* The binding surface is where this site's rung and its vendor changes
                           live — the operation is the address of that screen. */}
@@ -257,9 +308,46 @@ export function CallSitesPage() {
                         {site.operation_id}
                       </Link>
                     </TableCell>
-                    <TableCell className="font-mono text-meta tabular-nums">
-                      {site.loop_depth}
-                    </TableCell>
+                    )}
+                    {columns.isVisible("loops") && (
+                      <TableCell className="font-mono text-meta tabular-nums">
+                        {site.loop_depth}
+                      </TableCell>
+                    )}
+                    {columns.isVisible("args") && (
+                      <TableCell className="text-meta text-ink-muted">
+                        {/* Keys only, never values -- `graph-grain.md`'s shapes-not-values rule,
+                            and the empty case says which nothing it is. */}
+                        {site.args_keys.length === 0 ? (
+                          <Absent>none recorded</Absent>
+                        ) : (
+                          <span className="font-mono">{site.args_keys.join(", ")}</span>
+                        )}
+                      </TableCell>
+                    )}
+                    {columns.isVisible("reads") && (
+                      <TableCell className="text-meta text-ink-muted">
+                        {site.response_fields_read.length === 0 ? (
+                          <Absent>none recorded</Absent>
+                        ) : (
+                          <span className="font-mono">{site.response_fields_read.join(", ")}</span>
+                        )}
+                      </TableCell>
+                    )}
+                    {columns.isVisible("sdk") && (
+                      <TableCell className="font-mono text-meta">
+                        {site.sdk_version ? site.sdk_version : <Absent>not recorded</Absent>}
+                      </TableCell>
+                    )}
+                    {columns.isVisible("indexed") && (
+                      <TableCell className="text-meta text-ink-muted">
+                        {site.indexed_at === null ? (
+                          <Absent>no date</Absent>
+                        ) : (
+                          <RelativeTime iso={site.indexed_at} />
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

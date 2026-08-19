@@ -113,6 +113,16 @@ export interface RouteEntry {
    */
   reachedFrom: string | null
   /**
+   * `true` where the screen is a table first and the page's reading cap costs it columns.
+   *
+   * The chassis caps content at 1400px so prose lines stay readable, which is right for a screen
+   * of panels and wrong for one whose subject is fifteen recorded fields per row. Declared here
+   * rather than achieved with negative margins in the page: a full-bleed hack fights the
+   * scrollbar and lands differently on every browser, where a flag the frame reads is one rule
+   * in one place. `M15` Task 1.
+   */
+  wide?: boolean
+  /**
    * Names of the dynamic segments in `path`, in order. A non-empty list means this
    * destination needs a subject the registry does not hold — the navigation and the palette
    * render it as a place to look one up rather than as a direct link, so neither ever
@@ -148,6 +158,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/integration-changes",
+    wide: true,
     reachedFrom: "the Integrations tabs",
     // The changes feed is Integrations' second tab, never its own rail entry: what a vendor
     // published belongs beside the integrations it describes.
@@ -163,6 +174,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // -- it lists the sites a binding is made of -- so `GRAPH_LEVELS` is untouched, the same
     // reasoning the findings list and detector attribution already carry.
     path: "/repositories/:repoId/call-sites",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 5,
@@ -236,6 +248,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // untouched: presentation vocabulary renames freely, the specification's words do not,
     // which is the fleet screen's own precedent.
     path: "/repositories/:repoId/runs",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 6,
@@ -255,6 +268,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // `Finding` is the specification's own level, not a promotion: a list of findings aggregates
     // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
     path: "/repositories/:repoId/findings",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     // The Metrics rail slot lands here rather than on the charts: findings are the screen an
     // operator opens Metrics for, and the tab strip carries Detectors and Trends beside it.
@@ -269,6 +283,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/services",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 3,
@@ -497,3 +512,16 @@ export const DESTINATIONS: readonly DestinationEntry[] = [
 
 
 
+
+
+/**
+ * Whether the address is a table-first screen that should use the full window.
+ *
+ * Matched through `matchPath` rather than by string prefix, for the reason `isActiveMenuItem`
+ * gives: a parameterised pattern matched by prefix claims every route nested under it, so
+ * `/findings` would widen `/findings/:findingId/workflow` — a detail screen, which the cap is
+ * right for.
+ */
+export function isWideRoute(pathname: string): boolean {
+  return ROUTES.some((route) => route.wide === true && matchPath(route.path, pathname) !== null)
+}

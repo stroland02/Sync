@@ -40,8 +40,10 @@ import {
   boundParams,
   destinationHref,
   isActiveMenuItem,
+  isWideRoute,
   type RouteEntry,
 } from "@/lib/routes"
+import { cn } from "@/lib/utils"
 import {
   Sidebar,
   SidebarContent,
@@ -140,12 +142,10 @@ function EnvironmentBadge() {
   const { pathname } = useLocation()
   const { workspace, forgeLogin, pending } = useChassisIdentity(pathname)
   return (
-    <span className="flex min-w-0 items-center gap-field">
-    <Link
-      to="/settings?group=github-connection"
-      className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
-      title="Connections — Settings"
-    >
+    // No longer a link into Settings. Pressing the text a reader takes for the codebase name
+    // navigated them to a different screen entirely (owner report, 2026-08-19); the badge is the
+    // switcher now, and Settings is reachable from the rail where it always was.
+    <WorkspaceSwitcher current={workspace}>
       {workspace !== null && (
         <>
           <span className="min-w-0 truncate font-mono text-ink" title={workspace}>
@@ -159,11 +159,7 @@ function EnvironmentBadge() {
       <span className="shrink-0">
         {pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
       </span>
-    </Link>
-    {/* Outside the Link, not inside it: a menu trigger nested in an anchor is a nested
-        interactive element, and the anchor swallows the press. */}
-    <WorkspaceSwitcher current={workspace} />
-    </span>
+    </WorkspaceSwitcher>
   )
 }
 
@@ -551,7 +547,17 @@ export function AppFrame() {
               the sidebar with dead space to the right, which reads as a misaligned screen rather
               than a large one. `w-full` keeps narrow viewports exactly as they were. */}
           <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col outline-none">
-            <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-8 p-frame">
+            {/* The cap keeps a prose line readable, which is right for a screen of panels and
+                wrong for one whose subject is fifteen recorded fields per row -- a table-first
+                route declares itself wide in the registry and gets the window (M15 Task 1). A
+                flag read here rather than a full-bleed hack in the page: negative margins fight
+                the scrollbar and land differently per browser. */}
+            <div
+              className={cn(
+                "mx-auto flex w-full flex-1 flex-col gap-8 p-frame",
+                isWideRoute(pathname) ? "max-w-none" : "max-w-[1400px]",
+              )}
+            >
               <Outlet />
             </div>
           </main>
