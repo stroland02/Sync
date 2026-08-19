@@ -27,7 +27,7 @@ from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
 from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.core.models import UNATTRIBUTED, BindingRung
-from sync.dashboard.queries import _FINISHED
+from sync.dashboard.queries import DISPOSITIONS, _FINISHED
 from sync.graph.store import FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
@@ -2180,7 +2180,11 @@ def test_the_consoles_run_disposition_matches_the_finished_outcomes():
     match = re.search(r"export type RunDisposition\s*=([^\n]+)", source)
     assert match is not None, "web/src/api/types.ts no longer declares RunDisposition"
     members = set(re.findall(r'"([^"]+)"', match.group(1)))
-    assert members == set(_FINISHED)
+    # Pinned to `DISPOSITIONS` rather than `_FINISHED` since M15 Task 8. `parked` is a disposition
+    # the console must render, and a run waiting on a human read as *in flight* for exactly as
+    # long as this test held the narrower set -- the binding was doing its job, against the wrong
+    # authority.
+    assert members == set(DISPOSITIONS)
 
 
 def test_the_consoles_finding_order_matches_the_orderings_the_store_offers():

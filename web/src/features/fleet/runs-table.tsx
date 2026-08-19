@@ -44,6 +44,10 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 function describeOutcome(outcome: RunDisposition | null, isRehearsal = false): string {
   if (outcome === null) return "in flight"
   if (outcome === "reported" && isRehearsal) return "halted before the remote"
+  // M15 Task 8. `parked` is a run that stopped and is waiting on a person, and the bare word
+  // reads as a parking place rather than as a state that wants something from the reader. It is
+  // not "in flight": nobody is coming back to it on their own.
+  if (outcome === "parked") return "waiting on a review"
   return outcome
 }
 

@@ -510,7 +510,7 @@ export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]
  * by `tests/test_api_routes.py::test_the_consoles_run_disposition_matches_the_finished_outcomes`,
  * since nothing else keeps the two languages agreeing.
  */
-export type RunDisposition = "opened" | "abandoned" | "reported"
+export type RunDisposition = "opened" | "abandoned" | "reported" | "parked"
 
 /**
  * One run the checkpointer holds: the newest checkpoint on one thread.

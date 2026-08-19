@@ -175,7 +175,27 @@ checkpointer already holds all of it**, so this is exposing rather than capturin
 
 **Verify.** Every node with recorded evidence opens it; a node without says which nothing that is.
 
-### Task 10 — The two-tier shell *(Supabase)*
+### Task 10 — The two-tier shell *(Supabase)* — **CLOSED by supersession, 2026-08-19**
+
+**Not built, and building it now would undo an owner decision.** `CI-W522` restructured the rail
+while this plan was being executed: it groups by **pipeline stage** — Index, Signal, Observe,
+Detect, Remediate, the owner's own definitions — and it carries an icon-width minimised mode. The
+per-page tab strips are the contextual second level. That is Supabase's shape, reached through the
+owner's vocabulary instead of this task's.
+
+The task as written proposed an icon rail of `GRAPH_LEVELS`, and the problem statement below is
+what has changed: the levels are *not* unused, they are the specification hierarchy
+`test_console_hierarchy.py` holds, and `CI-W522` was explicit that the stage grouping is
+**presentation** and leaves `GRAPH_LEVELS` untouched. Building a second navigation keyed to the
+levels would put two competing hierarchies on one screen and reverse the owner's restructure.
+
+**Its verification was run rather than assumed** (2026-08-19): every declared route reachable,
+`routes.test.tsx` and `hrefs.test.ts` green with no relaxation (73 tests),
+`test_console_hierarchy.py` green, and `ActiveDot` absent from the tree as §1 requires.
+
+The original task follows, unamended, so the reasoning stays readable.
+
+
 
 **Problem.** One flat rail carries seven destinations; the levels are already declared in
 `GRAPH_LEVELS` and unused as navigation.
@@ -264,3 +284,7 @@ human.
 | 4 | Derived finding names | Random word pairs | A name must survive `insert_finding` re-hashing |
 | 5 | No virtualisation | Adding it with full-page tables | 165 rows; a virtualiser breaks find-in-page for no gain |
 | 6 | Run-state change is a spec amendment first | Adding the state in the graph | `console-hierarchy.md`'s ordering rule: the authority changes before the code |
+| 7 | Task 10 closed by supersession, not built | Building the `GRAPH_LEVELS` icon rail as planned | `CI-W522` landed the owner's own restructure mid-plan: the rail groups by pipeline stage and already has an icon width, with page tabs as the second tier. A second navigation keyed to the levels would put two hierarchies on one screen and reverse the owner. Verification run, not assumed |
+| 8 | No rung facet on call sites (Task 4) | Offering it as the plan listed | `call_site` has no rung column and `store.py` hard-codes `static`; a facet holding one value asserts the others exist |
+| 9 | Disposition stays single-select (Task 4) | Widening every facet uniformly | The union would have to reach the checkpointer query beneath `fleet.runs`; a rail letting two be pressed while one reached the query looks identical to one that works |
+| 10 | Neutral generated marks, and the logo fetch deleted (Task 5) | Keeping the Clearbit `<img>` behind a flag | Owner ruling. It also called a third party from the operator's browser on every render, telling that endpoint which integrations a customer watches |
