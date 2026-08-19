@@ -39,7 +39,7 @@
  * deferred-work note in the task report.
  */
 
-import { useId } from "react"
+import { useId, useState } from "react"
 
 import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
@@ -76,9 +76,21 @@ export interface FilterGroup {
   /** What the facet divides, in this facet's own words — "Time range", "Level". */
   readonly legend: string
   readonly options: readonly [FilterOption, ...FilterOption[]]
-  /** The value currently narrowing the set, or `null` for the whole set. */
-  readonly selected: string | null
-  /** `null` clears the facet. The rail never holds selection state of its own. */
+  /**
+   * The values currently narrowing the set. Empty is the whole set.
+   *
+   * **A set rather than one value, as of M15 Task 4.** A codebase with forty integrations is not
+   * filterable one at a time: the pair a reader wants -- two integrations, or the severities that
+   * are not `info` -- had no sequence of presses that reached it. Several values are a union, and
+   * the count beside each option still ignores that option's own facet.
+   */
+  readonly selected: readonly string[]
+  /**
+   * Toggles one value in or out; `null` clears the facet.
+   *
+   * The rail never holds selection state of its own -- what is pressed is what the caller was
+   * handed, so a URL a reader pasted and the rail they are looking at cannot disagree.
+   */
   readonly onSelect: (value: string | null) => void
   /**
    * The unfiltered option, when the caller holds an honest count for the whole facet.
@@ -150,20 +162,57 @@ export function unansweredCounts(groups: readonly FilterGroup[]): UnansweredCoun
 export function activeSelections(groups: readonly FilterGroup[]): ActiveSelection[] {
   const selections: ActiveSelection[] = []
   for (const group of groups) {
-    if (group.selected === null) continue
-    const option = group.options.find((candidate) => candidate.value === group.selected)
-    selections.push(
-      option === undefined
-        ? { kind: "outside-vocabulary", legend: group.legend, value: group.selected }
-        : {
-            kind: "option",
-            legend: group.legend,
-            value: option.value,
-            label: option.label,
-          }
-    )
+    for (const selected of group.selected) {
+      const option = group.options.find((candidate) => candidate.value === selected)
+      selections.push(
+        option === undefined
+          ? { kind: "outside-vocabulary", legend: group.legend, value: selected }
+          : {
+              kind: "option",
+              legend: group.legend,
+              value: option.value,
+              label: option.label,
+            }
+      )
+    }
   }
   return selections
+}
+
+/**
+ * Above how many options a facet offers a search box.
+ *
+ * A search box over four options is furniture that costs a reader a decision and returns
+ * nothing; over forty it is the only way to reach the one they want. The threshold is a
+ * judgement rather than a measurement, and it is here as a named constant so it is one
+ * judgement rather than one per screen.
+ */
+export const SEARCHABLE_ABOVE = 8
+
+/**
+ * The options a search term admits, matched on the value as well as the label.
+ *
+ * Both, because a reader searching a facet of vendor identifiers types what they saw in a URL or
+ * a stack trace, which is the value; a reader searching operations types the prose. Matching one
+ * would silently hide the rows the other was looking for.
+ *
+ * **A selected option always survives the search.** Otherwise typing into the box hides an option
+ * that is currently narrowing the table, and the only control that would clear it is the one that
+ * just disappeared -- a reader would be left with a filtered table and an apparently empty facet.
+ */
+export function matchingOptions(
+  options: readonly FilterOption[],
+  query: string,
+  selected: readonly string[] = [],
+): FilterOption[] {
+  const term = query.trim().toLowerCase()
+  if (term === "") return [...options]
+  return options.filter(
+    (option) =>
+      selected.includes(option.value) ||
+      option.label.toLowerCase().includes(term) ||
+      option.value.toLowerCase().includes(term)
+  )
 }
 
 function OptionCount({ count }: { count: FilterCount }) {
@@ -205,37 +254,67 @@ function OptionButton({
 }
 
 function Group({ group }: { group: FilterGroup }) {
-  const selection = activeSelections([group])[0]
+  const [query, setQuery] = useState("")
+  const searchId = useId()
+  const searchable = group.options.length > SEARCHABLE_ABOVE
+  const shown = searchable ? matchingOptions(group.options, query, group.selected) : group.options
+  const stray = activeSelections([group]).filter(
+    (selection) => selection.kind === "outside-vocabulary"
+  )
 
   return (
     <fieldset className="flex min-w-0 flex-col gap-row">
       <legend className="furniture text-meta text-ink-muted">{group.legend}</legend>
+      {searchable && (
+        <>
+          <label htmlFor={searchId} className="sr-only">
+            Search {group.legend.toLowerCase()}
+          </label>
+          <input
+            id={searchId}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Search ${group.options.length} values`}
+            className="w-full rounded-control border border-line bg-surface-subtle px-field py-field text-meta text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </>
+      )}
       <div className="flex min-w-0 flex-col gap-field">
         {group.unfiltered !== undefined && (
           <OptionButton
             label={group.unfiltered.label}
             count={group.unfiltered.count}
-            pressed={group.selected === null}
+            // Pressed when nothing narrows the facet, which under a set is an empty one.
+            pressed={group.selected.length === 0}
             onClick={() => group.onSelect(null)}
           />
         )}
-        {group.options.map((option) => (
+        {shown.map((option) => (
           <OptionButton
             key={option.value}
             label={option.label}
             count={option.count}
-            pressed={group.selected === option.value}
-            onClick={() => group.onSelect(group.selected === option.value ? null : option.value)}
+            pressed={group.selected.includes(option.value)}
+            // A press toggles this value alone and the others stand. Pressing a pressed option
+            // removes it, which is how a reader gets back without reaching for the clear.
+            onClick={() => group.onSelect(option.value)}
           />
         ))}
+        {searchable && shown.length === 0 && (
+          <p className="text-meta text-ink-muted">
+            No value in this facet matches <span className="font-mono text-ink">{query}</span>.
+            The facet holds {group.options.length.toLocaleString()}.
+          </p>
+        )}
       </div>
-      {selection?.kind === "outside-vocabulary" && (
-        <p className="max-w-prose text-meta text-ink-muted">
+      {stray.map((selection) => (
+        <p key={selection.value} className="max-w-prose text-meta text-ink-muted">
           Narrowed by <span className="font-mono text-ink">{selection.value}</span>, which is not
-          one of this facet&rsquo;s values — nothing above is selected because nothing above
-          matches it, and the counts beside these options do not describe the set on screen.
+          one of this facet&rsquo;s values — nothing above is selected for it because nothing
+          above matches it, and the counts beside these options do not describe the set on screen.
         </p>
-      )}
+      ))}
     </fieldset>
   )
 }

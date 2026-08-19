@@ -63,6 +63,23 @@ def _stable_id(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
 
 
+def _value_set(values: Sequence, name: str) -> tuple:
+    """One multi-select filter's chosen values, de-duplicated and order-stable.
+
+    The string check is the only validation in this module that guards an internal caller, and
+    it is here because the failure it catches is silent. A string is a sequence of characters,
+    so `vendor_ids="stripe"` reaches Postgres as `= ANY(ARRAY['s','t','r','i','p','e'])`, which
+    matches nothing and returns an empty page -- indistinguishable on screen from an honest "no
+    call site matches this narrowing".
+
+    Order-stable rather than a `set` so a query plan and a cache key do not vary by iteration
+    order, which would make two identical narrowings look like two different reads.
+    """
+    if isinstance(values, str):
+        raise TypeError(f"{name} takes a sequence of values, not the string {values!r}")
+    return tuple(dict.fromkeys(values))
+
+
 # Entries in a CREATE TABLE body that declare a constraint rather than a column. Everything
 # else is a column, which is what makes this list the whole of the grammar this needs to know.
 _TABLE_CONSTRAINTS = frozenset(
@@ -1026,7 +1043,9 @@ class GraphStore:
         self,
         repo_id: str,
         *,
-        vendor_id: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        operation_ids: Sequence[str] = (),
+        loop_depths: Sequence[int] = (),
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -1043,19 +1062,49 @@ class GraphStore:
         vendor counts honour a path prefix and ignore the vendor selection, and nothing here
         sums them into a total the caller did not ask for.
 
+        **Each filter takes a set, and a set is a union.** A codebase with forty integrations is
+        not filterable one at a time, and the pair a reader usually wants -- two integrations,
+        or the depths above one -- has no single-value spelling. An empty set is absent rather
+        than "match nothing": deselecting the last option means stop narrowing, and a rail whose
+        final deselection emptied the table would strand a reader with no visible way back.
+
+        **There is no rung filter and the table holds no rung column.** A rung describes a
+        binding rather than a call site; offering a facet whose vocabulary has one member would
+        assert the others exist.
+
         Retracted rows are excluded, as everywhere: a site the last pass stopped finding is not
         a place this codebase calls the vendor, and `total` counts what the filters admit so
         the pager walks exactly the set on screen.
         """
         limit = max(limit, 1)
-        where = ["repo_id = %s", "retracted_at IS NULL"]
-        params: list[object] = [repo_id]
-        if vendor_id is not None:
-            where.append("vendor_id = %s")
-            params.append(vendor_id)
-        if path_prefix:
-            where.append("path LIKE %s")
-            params.append(f"{path_prefix}%")
+        vendor_ids = _value_set(vendor_ids, "vendor_ids")
+        operation_ids = _value_set(operation_ids, "operation_ids")
+        loop_depths = _value_set(loop_depths, "loop_depths")
+
+        def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
+            """The WHERE terms, optionally leaving one facet's own filter out.
+
+            One builder rather than two, because the facet queries and the page query differing
+            by anything but the named omission is the defect this rule exists to prevent -- and
+            a second hand-maintained copy of the terms is exactly how they would come to differ.
+            """
+            where = ["repo_id = %s", "retracted_at IS NULL"]
+            params: list[object] = [repo_id]
+            if vendor_ids and ignoring != "vendor_id":
+                where.append("vendor_id = ANY(%s)")
+                params.append(list(vendor_ids))
+            if operation_ids and ignoring != "operation_id":
+                where.append("operation_id = ANY(%s)")
+                params.append(list(operation_ids))
+            if loop_depths and ignoring != "loop_depth":
+                where.append("loop_depth = ANY(%s)")
+                params.append(list(loop_depths))
+            if path_prefix and ignoring != "path":
+                where.append("path LIKE %s")
+                params.append(f"{path_prefix}%")
+            return where, params
+
+        where, params = predicates()
         clause = " AND ".join(where)
 
         total = int(
@@ -1068,22 +1117,21 @@ class GraphStore:
             [*params, limit, offset],
         ).fetchall()
 
-        # The vendor facet, counted over everything the OTHER filters admit.
-        facet_where = ["repo_id = %s", "retracted_at IS NULL"]
-        facet_params: list[object] = [repo_id]
-        if path_prefix:
-            facet_where.append("path LIKE %s")
-            facet_params.append(f"{path_prefix}%")
-        vendor_rows = self._connect().execute(
-            f"""
-            SELECT vendor_id, count(*) AS n
-              FROM call_site
-             WHERE {" AND ".join(facet_where)}
-             GROUP BY vendor_id
-             ORDER BY vendor_id
-            """,
-            facet_params,
-        ).fetchall()
+        # Each facet, counted over everything the OTHER filters admit.
+        def facet(column: str) -> list:
+            facet_where, facet_params = predicates(ignoring=column)
+            return self._connect().execute(
+                f"""
+                SELECT {column} AS key, count(*) AS n
+                  FROM call_site
+                 WHERE {" AND ".join(facet_where)}
+                 GROUP BY {column}
+                 ORDER BY {column}
+                """,
+                facet_params,
+            ).fetchall()
+
+        vendor_rows = facet("vendor_id")
 
         def rendered(row) -> dict:
             # `indexed_at` arrives as a datetime and the transport is JSON, so it is rendered
@@ -1102,9 +1150,13 @@ class GraphStore:
             "items": [rendered(row) for row in rows],
             "total": total,
             "next_offset": consumed if consumed < total else None,
-            "by_vendor": {row["vendor_id"]: int(row["n"]) for row in vendor_rows},
+            "by_vendor": {row["key"]: int(row["n"]) for row in vendor_rows},
+            "by_operation": {row["key"]: int(row["n"]) for row in facet("operation_id")},
+            "by_loop_depth": {int(row["key"]): int(row["n"]) for row in facet("loop_depth")},
             "unfiltered_total": sum(int(row["n"]) for row in vendor_rows),
-            "vendor_id": vendor_id,
+            "vendor_ids": list(vendor_ids),
+            "operation_ids": list(operation_ids),
+            "loop_depths": list(loop_depths),
             "path_prefix": path_prefix,
         }
 
@@ -1390,8 +1442,8 @@ class GraphStore:
     def vendor_changes_page(
         self,
         *,
-        vendor_id: str | None = None,
-        severity: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        severities: Sequence[str] = (),
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
@@ -1409,14 +1461,21 @@ class GraphStore:
         say so on screen.
         """
         limit = max(limit, 1)
-        where: list[str] = []
-        params: list[object] = []
-        if vendor_id is not None:
-            where.append("vendor_id = %s")
-            params.append(vendor_id)
-        if severity is not None:
-            where.append("severity = %s")
-            params.append(severity)
+        vendor_ids = _value_set(vendor_ids, "vendor_ids")
+        severities = _value_set(severities, "severities")
+
+        def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
+            where: list[str] = []
+            params: list[object] = []
+            if vendor_ids and ignoring != "vendor_id":
+                where.append("vendor_id = ANY(%s)")
+                params.append(list(vendor_ids))
+            if severities and ignoring != "severity":
+                where.append("severity = ANY(%s)")
+                params.append(list(severities))
+            return where, params
+
+        where, params = predicates()
         clause = f"WHERE {' AND '.join(where)}" if where else ""
 
         total = int(
@@ -1436,14 +1495,7 @@ class GraphStore:
         ).fetchall()
 
         def facet(column: str, ignoring: str) -> dict[str, int]:
-            facet_where: list[str] = []
-            facet_params: list[object] = []
-            if vendor_id is not None and ignoring != "vendor_id":
-                facet_where.append("vendor_id = %s")
-                facet_params.append(vendor_id)
-            if severity is not None and ignoring != "severity":
-                facet_where.append("severity = %s")
-                facet_params.append(severity)
+            facet_where, facet_params = predicates(ignoring=ignoring)
             facet_clause = f"WHERE {' AND '.join(facet_where)}" if facet_where else ""
             found = self._connect().execute(
                 f"SELECT {column} AS key, count(*) AS n FROM vendor_change {facet_clause}"
@@ -1494,8 +1546,8 @@ class GraphStore:
             # returns groups that exist, and a render site must not fill a missing key with a zero.
             "by_vendor_severity": by_vendor_severity,
             "unfiltered_total": sum(by_vendor.values()),
-            "vendor_id": vendor_id,
-            "severity": severity,
+            "vendor_ids": list(vendor_ids),
+            "severities": list(severities),
         }
 
     def vendor_intake_rollup(self) -> dict[str, dict]:

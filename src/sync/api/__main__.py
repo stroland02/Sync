@@ -16,6 +16,7 @@ instead, naming the commands that fill one.
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 import uvicorn
@@ -188,26 +189,30 @@ def app_factory() -> Starlette:
 
     def integration_changes_reader(
         *,
-        vendor_id: str | None = None,
-        severity: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        severities: Sequence[str] = (),
         limit: int = 50,
         offset: int = 0,
     ):
         return store.vendor_changes_page(
-            vendor_id=vendor_id, severity=severity, limit=limit, offset=offset
+            vendor_ids=vendor_ids, severities=severities, limit=limit, offset=offset
         )
 
     def call_sites_reader(
         repo_id: str,
         *,
-        vendor_id: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        operation_ids: Sequence[str] = (),
+        loop_depths: Sequence[int] = (),
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ):
         return store.call_sites_page(
             repo_id,
-            vendor_id=vendor_id,
+            vendor_ids=vendor_ids,
+            operation_ids=operation_ids,
+            loop_depths=loop_depths,
             path_prefix=path_prefix,
             limit=limit,
             offset=offset,
