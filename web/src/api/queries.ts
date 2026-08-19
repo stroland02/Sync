@@ -353,8 +353,19 @@ export function useRepositoryGraph(repoId: string) {
   })
 }
 
-/** What traffic this repository has shown, what shape it had, and how often it failed. */
-export function useRepositoryObserved(repoId: string, params: ObservedTelemetryParams = {}) {
+/**
+ * What traffic this repository has shown, what shape it had, and how often it failed.
+ *
+ * `refetchIntervalMs` is the Telemetry page's poll (owner ruling 2026-08-19): the live-signals
+ * screen re-asks while open and states when it last asked, rather than wearing a "live" badge
+ * that claims a push this transport does not have. Off by default — every other caller reads
+ * once per navigation.
+ */
+export function useRepositoryObserved(
+  repoId: string,
+  params: ObservedTelemetryParams = {},
+  options: { refetchIntervalMs?: number } = {},
+) {
   return useQuery({
     queryKey: [
       "repositories",
@@ -365,6 +376,7 @@ export function useRepositoryObserved(repoId: string, params: ObservedTelemetryP
       params.errorWindowsOffset ?? 0,
     ],
     queryFn: ({ signal }) => fetchRepositoryObserved(repoId, params, signal),
+    refetchInterval: options.refetchIntervalMs ?? false,
   })
 }
 

@@ -2992,6 +2992,82 @@ class GraphStore:
         ).fetchone()
         return row["n"]
 
+    def observed_traffic_rollup(self, repo_id: str) -> list[dict]:
+        """Traffic per operation, pooled across every unit of work this table holds.
+
+        Grain: one row per `(vendor_id, operation_id, server_address, http_method,
+        binding_rung)` -- the natural key without the trace, which is `status_rate`'s own
+        population, plus the rung so a caller can keep correlated traffic and unattributed
+        traffic apart rather than averaging a gap into a measurement.
+
+        The denominator rule is `StatusRateDetector`'s, stated there with the argument:
+        `requests` counts spans that carried a status; a span with none leaves the numerator
+        and the denominator both and is reported in `unstatused` so a reader can discount a
+        rate computed over a shrunken sample. No rate is computed here -- both counts travel,
+        and the screen that divides them shows both.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT oc.vendor_id,
+                   oc.operation_id,
+                   oc.server_address,
+                   oc.http_method,
+                   oc.binding_rung,
+                   max(oc.url_template)                                       AS url_template,
+                   count(DISTINCT oc.trace_id)                                AS traces,
+                   count(*) FILTER (WHERE (s.value->>'status') IS NOT NULL)   AS requests,
+                   count(*) FILTER (WHERE (s.value->>'status')::int >= 400)   AS errors,
+                   count(*) FILTER (WHERE (s.value->>'status') IS NULL)       AS unstatused,
+                   count(DISTINCT s.value->>'target')                         AS distinct_targets,
+                   coalesce(max((s.value->>'resend')::int), 0)                AS max_resend,
+                   min(oc.first_seen)                                         AS first_seen,
+                   max(oc.last_seen)                                          AS last_seen
+              FROM observed_call oc
+             CROSS JOIN LATERAL jsonb_each(oc.spans) AS s
+             WHERE oc.repo_id = %s
+             GROUP BY oc.vendor_id, oc.operation_id, oc.server_address, oc.http_method,
+                      oc.binding_rung
+             ORDER BY requests DESC, oc.vendor_id, oc.operation_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def observed_traffic_series(self, repo_id: str) -> list[dict]:
+        """Requests and errors per hour, over everything this table currently holds.
+
+        Bucketed by each unit of work's `first_seen`, because a span carries no timestamp of
+        its own -- a long-running trace's spans all land on the hour its first request did.
+        The caller states that rather than smoothing it; inventing per-span times would be a
+        measurement nobody made.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT date_trunc('hour', oc.first_seen)                          AS bucket,
+                   count(*) FILTER (WHERE (s.value->>'status') IS NOT NULL)   AS requests,
+                   count(*) FILTER (WHERE (s.value->>'status')::int >= 400)   AS errors
+              FROM observed_call oc
+             CROSS JOIN LATERAL jsonb_each(oc.spans) AS s
+             WHERE oc.repo_id = %s
+             GROUP BY 1
+             ORDER BY 1
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def indexed_operation_count(self, repo_id: str) -> int:
+        """How many distinct vendor operations this repository's current call sites bind."""
+        row = self._connect().execute(
+            """
+            SELECT count(DISTINCT (vendor_id || ':' || operation_id)) AS n
+              FROM call_site
+             WHERE repo_id = %s AND retracted_at IS NULL
+            """,
+            (repo_id,),
+        ).fetchone()
+        return row["n"]
+
     def observed_operation_pairs(self, repo_id: str) -> list[tuple[str, str]]:
         """Every `(vendor_id, operation_id)` this repository's observed traffic actually names.
 
