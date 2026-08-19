@@ -3359,6 +3359,60 @@ class GraphStore:
         )
         return attempt_id
 
+    def intake_attempt_rollup(self) -> dict[str, dict]:
+        """Per vendor, the newest attempt and the outcome tally over every attempt recorded.
+
+        **This is the record `adapter_inventory`'s docstring says it does not have.** That view
+        reports `last_change_at` -- the newest `vendor_change` row -- and states plainly that an
+        adapter polled hourly which has found nothing new for a week reports last week's date,
+        because nothing recorded an intake *attempt*, only its result. `intake_attempt` records
+        the attempt, and this is the aggregate that carries it to the screen.
+
+        Two facts and they are not interchangeable: `last_attempt_at` is when the adapter was
+        last asked, `last_change_at` is when it last had something to say. An adapter that is
+        healthy and quiet has a recent first and an old second, which is the state that was
+        previously indistinguishable from an adapter nobody has run.
+
+        **A vendor absent from this mapping has no attempt recorded**, which is not the same as an
+        adapter that has never been asked -- the record only began when this table did. The
+        caller renders null rather than a claim; `adapter_inventory` does exactly that.
+
+        Grouped in SQL rather than folded from `intake_attempts`, which pages: a tally over one
+        page is the tally of whichever rows the ordering reached.
+        """
+        newest = self._connect().execute(
+            """
+            SELECT DISTINCT ON (vendor_id)
+                   vendor_id, attempted_at, outcome, reason_code, changes_count
+              FROM intake_attempt
+             ORDER BY vendor_id, attempted_at DESC, id
+            """
+        ).fetchall()
+        tallies = self._connect().execute(
+            """
+            SELECT vendor_id, outcome, count(*) AS n
+              FROM intake_attempt
+             GROUP BY vendor_id, outcome
+             ORDER BY vendor_id, outcome
+            """
+        ).fetchall()
+
+        by_vendor: dict[str, dict] = {}
+        for row in newest:
+            attempted = row["attempted_at"]
+            by_vendor[row["vendor_id"]] = {
+                "last_attempt_at": attempted.isoformat()
+                if hasattr(attempted, "isoformat")
+                else attempted,
+                "last_attempt_outcome": row["outcome"],
+                "last_attempt_reason": row["reason_code"],
+                "last_attempt_changes": int(row["changes_count"]),
+                "attempts": {},
+            }
+        for row in tallies:
+            by_vendor[row["vendor_id"]]["attempts"][row["outcome"]] = int(row["n"])
+        return by_vendor
+
     def intake_attempts(
         self, vendor_id: str | None = None, limit: int = 100
     ) -> list[IntakeAttempt]:

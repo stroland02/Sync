@@ -913,6 +913,38 @@ export interface AdapterRow {
   last_change_at: string | null
   /** The `source` values those rows carry, sorted. `null` when the adapter has never delivered. */
   sources: string[] | null
+  /**
+   * When the adapter was last *asked*, ISO-8601, or `null` where no attempt is recorded.
+   *
+   * **This is the field `last_change_at` says it is not.** The two answer different questions and
+   * the difference is the point: a healthy, quiet adapter has a recent `last_attempt_at` and an
+   * old `last_change_at`, which was previously indistinguishable from an adapter nobody had run.
+   *
+   * A `null` here is not "never asked". The attempt record began when the table did, so it means
+   * this screen holds no record of an attempt -- a limit of the record rather than a fact about
+   * the adapter.
+   */
+  last_attempt_at: string | null
+  /** `success`, `declined` or `failed` on the newest attempt; `null` where none is recorded. */
+  last_attempt_outcome: "success" | "declined" | "failed" | null
+  /**
+   * Why the newest attempt declined or failed, from the closed vocabulary
+   * `sync.signals.intake_attempt` owns. `null` on a success, and on a vendor with no record.
+   *
+   * Closed rather than free text precisely so it can be counted: a promise to learn from
+   * failures needs a schema that can answer the question.
+   */
+  last_attempt_reason: string | null
+  /** Changes the newest attempt returned. `null` where no attempt is recorded. */
+  last_attempt_changes: number | null
+  /**
+   * Attempts tallied by outcome, over every attempt recorded for this vendor.
+   *
+   * Only outcomes that occurred are keys. An outcome absent here never happened for this
+   * adapter; it is not an outcome measured at nought, and a view must not render it as one.
+   * `{}` means no attempt is recorded at all.
+   */
+  attempts: Record<string, number>
 }
 
 /** `GET /api/adapters`. Registered adapters and historical vendors alike, ordered by vendor id. */

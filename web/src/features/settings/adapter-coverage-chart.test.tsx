@@ -22,6 +22,11 @@ const row = (vendor_id: string, kind: AdapterRow["kind"]): AdapterRow => ({
   operations: null,
   last_change_at: null,
   sources: null,
+  last_attempt_at: null,
+  last_attempt_outcome: null,
+  last_attempt_reason: null,
+  last_attempt_changes: null,
+  attempts: {},
 })
 
 describe("AdapterCoverageChart", () => {

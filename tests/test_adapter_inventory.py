@@ -227,3 +227,55 @@ def test_nothing_here_records_why_an_adapter_declined(store):
     row = _rows(adapter_inventory(store, adapters=registry))["stripe"]
 
     assert "decline_reason" not in row
+
+
+def test_inventory_carries_the_last_attempt_not_only_the_last_delivery(store):
+    """B136's console half: an adapter that ran and found nothing is not an adapter that never ran.
+
+    `last_change_at` is the newest `vendor_change` row, so an adapter polled hourly that has found
+    nothing new for a week reports last week. That limit is stated in `adapter_inventory`'s own
+    docstring and it is what `intake_attempt` exists to close: the attempt record says when the
+    adapter was last *asked*, which is the question an operator reading this screen actually has.
+    """
+    from datetime import datetime, timezone
+
+    from sync.signals.intake_attempt import IntakeAttempt
+
+    store.record_intake_attempt(
+        IntakeAttempt(
+            vendor_id="stripe",
+            attempted_at=datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc),
+            outcome="success",
+            changes_count=3,
+        )
+    )
+    store.record_intake_attempt(
+        IntakeAttempt(
+            vendor_id="stripe",
+            attempted_at=datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc),
+            outcome="declined",
+            reason_code="up_to_date",
+        )
+    )
+
+    rows = {row["vendor_id"]: row for row in adapter_inventory(store)["adapters"]}
+
+    assert rows["stripe"]["last_attempt_at"] == "2026-08-19T12:00:00+00:00"
+    assert rows["stripe"]["last_attempt_outcome"] == "declined"
+    # The reason vocabulary is closed, which is what makes an aggregate over it possible at all --
+    # the docstring's "there is deliberately no decline_reason" limit closes here.
+    assert rows["stripe"]["last_attempt_reason"] == "up_to_date"
+    assert rows["stripe"]["attempts"] == {"success": 1, "declined": 1}
+
+
+def test_an_adapter_with_no_attempt_recorded_reports_none_rather_than_never_asked(store):
+    """Absence, not a claim. A vendor with no attempt row has no attempt *record* -- which is not
+    the same as an adapter that was never asked, because the record only began being written when
+    `intake_attempt` landed. Nulls say "this screen cannot tell you", never "it never ran".
+    """
+    rows = {row["vendor_id"]: row for row in adapter_inventory(store)["adapters"]}
+    some_adapter = next(iter(rows.values()))
+
+    assert some_adapter["last_attempt_at"] is None
+    assert some_adapter["last_attempt_outcome"] is None
+    assert some_adapter["attempts"] == {}

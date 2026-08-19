@@ -24,6 +24,18 @@ NEVER_DELIVERED: dict[str, None] = {
     "last_change_at": None,
     "sources": None,
 }
+
+# No attempt row for this vendor. Every field is null and `attempts` is empty rather than zeroed,
+# for the reason the delivery mapping above uses nulls: the attempt record began when the table
+# did, so "no row" means this screen cannot tell you whether the adapter ran -- never that it
+# did not. A zero here would be a measurement nobody took.
+NO_ATTEMPT_RECORDED: dict = {
+    "last_attempt_at": None,
+    "last_attempt_outcome": None,
+    "last_attempt_reason": None,
+    "last_attempt_changes": None,
+    "attempts": {},
+}
 """What a registered adapter the graph holds no row for answers.
 
 `None` and not `0`. Zero is a measurement -- Sync read the vendor's specification and found
@@ -48,13 +60,23 @@ def adapter_inventory(
     attempt, only its result. Naming it `last_change_at` rather than `last_intake` is the whole
     of the fix available without that record, and the screen must not relabel it.
 
-    There is deliberately no `decline_reason`. Nothing in this repository records why an adapter
-    declined, and a column that is null on every row reads as "no adapter has ever declined" --
-    a claim nothing measured, on the screen whose argument is that it does not make those. B136
-    is the intake attempt record that closes both this and the `last_change_at` limit above.
+    **Both limits above are closed as of `CI-W501`, and the wording is kept because the reason
+    still holds for the `last_change_at` column itself.** `intake_attempt` now records the
+    attempt, so `last_attempt_at` sits beside `last_change_at` and the two say different things:
+    when the adapter was last *asked*, and when it last had something to say. An adapter that is
+    healthy and quiet has a recent first and an old second -- previously indistinguishable from
+    one nobody had run. `last_attempt_reason` is the decline reason, drawn from the closed
+    vocabulary `sync.signals.intake_attempt` owns, which is what makes it aggregatable rather
+    than free text.
+
+    **A null in either group is still not a zero**, and the two nulls mean different things: no
+    delivery means the graph holds no change from this adapter, no attempt means the graph holds
+    no record of it being asked -- and since that record only began when the table did, it never
+    means the adapter was not asked.
     """
     registered = list(registered_adapters() if adapters is None else adapters)
     delivered = store.vendor_intake_rollup()
+    attempted = store.intake_attempt_rollup()
 
     rows = [
         {
@@ -62,12 +84,19 @@ def adapter_inventory(
             "kind": entry.kind,
             "source": entry.source,
             **delivered.get(entry.vendor_id, NEVER_DELIVERED),
+            **attempted.get(entry.vendor_id, NO_ATTEMPT_RECORDED),
         }
         for entry in registered
     ]
     known = {entry.vendor_id for entry in registered}
     rows += [
-        {"vendor_id": vendor_id, "kind": "unregistered", "source": None, **rollup}
+        {
+            "vendor_id": vendor_id,
+            "kind": "unregistered",
+            "source": None,
+            **rollup,
+            **attempted.get(vendor_id, NO_ATTEMPT_RECORDED),
+        }
         for vendor_id, rollup in delivered.items()
         if vendor_id not in known
     ]

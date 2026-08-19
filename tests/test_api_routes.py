@@ -2256,7 +2256,8 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     # 2026-08-19 that the console reads dismissals and never writes one -- and that is the
     # ordinary state of a route this guard holds, because the guard reads fetched paths and
     # is indifferent to method.
-    "/api/corpus/health",  # M12-W323: corpus health view model and route only, panel not yet scheduled
+    # `/api/corpus/health` was here from M12-W323 and its receipt is spent: the Metrics ->
+    # Corpus tab renders it as of CI-W501, on the owner's ruling of 2026-08-19.
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
     "/api/repos/{param}/findings",
@@ -2298,6 +2299,13 @@ def test_the_consoles_fetched_paths_match_the_apps_declared_routes():
             if ".test." in path.name:
                 continue
             source = path.read_text(encoding="utf-8")
+            # Comments first. Widening this guard beyond `client.ts` brought every docstring
+            # with it, and these files cite routes in prose constantly -- a sentence reading
+            # "`/api/topology` computes the totals" is not a fetch, but it is a string starting
+            # with `/api`, so the guard reported a path the app does not declare and the failure
+            # named a defect that did not exist. Prose about a route is not a call to it.
+            source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+            source = re.sub(r"^\s*//.*$", "", source, flags=re.MULTILINE)
             # Interpolations are collapsed *before* the literal is matched, not after. A template
             # like `/api/.../${encodeURIComponent(repoId ?? "")}/graph` carries a quote inside the
             # interpolation, so a regex looking for the closing backtick stops early and yields a

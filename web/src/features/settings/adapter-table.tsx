@@ -12,9 +12,17 @@
  * to remove, and it is one `?? 0` away at all times, which is why the whole row switches on the
  * distinction rather than each cell defending itself.
  *
- * There is no decline column. The mock draws one — a catalogue that served an HTML error page —
- * and no field behind it exists: nothing in Sync records an intake attempt, only its result. A
- * column blank on every row would read as "no adapter has ever declined", which nothing measured.
+ * **There is a decline reason now, and this paragraph used to say there could not be.** It read:
+ * "nothing in Sync records an intake attempt, only its result", and a column blank on every row
+ * would have read as "no adapter has ever declined" — a claim nothing measured. `intake_attempt`
+ * records the attempt, so "Last asked" carries the date, the outcome and the reason, drawn from
+ * the closed vocabulary `sync.signals.intake_attempt` owns. Closed rather than free text is what
+ * makes it aggregatable at all; a promise to learn from failures needs a schema that can answer
+ * the question.
+ *
+ * The null rule above still governs it, one step further out: a row with no attempt says **no
+ * attempt recorded**, never "never asked". The record began when the table did, so its silence is
+ * a limit of the record rather than a fact about the adapter.
  */
 
 import {
@@ -26,7 +34,7 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { TableEmptyState } from "@/components/table-empty"
-import { Formatted } from "@/components/status"
+import { Absent, Formatted } from "@/components/status"
 import type { AdapterRow } from "@/api/types"
 import { formatTimestamp } from "@/lib/format"
 import { VendorMark } from "@/features/vendors/vendor-mark"
@@ -51,6 +59,37 @@ function hasDelivered(adapter: AdapterRow): boolean {
   return adapter.changes !== null
 }
 
+
+/**
+ * When the adapter was last asked, and what came back.
+ *
+ * **This is the column `AdapterRow.last_change_at` says it is not.** Until `intake_attempt`
+ * landed, an adapter running hourly and finding nothing and an adapter nobody had run looked
+ * identical on this screen — both showed an old newest-change date and no other evidence.
+ *
+ * **A null is not "never asked".** The attempt record began when the table did, so no row means
+ * this screen holds no record of an attempt: a limit of the record, not a fact about the adapter.
+ * The wording says which, because the stronger sentence is the one a reader would supply.
+ *
+ * The outcome travels as a word, never a colour: `declined` is the ordinary state of an adapter
+ * asked about a spec that has not moved, and rendering it in a status hue would make routine
+ * quiet look like a fault.
+ */
+function LastAsked({ adapter }: { adapter: AdapterRow }) {
+  if (adapter.last_attempt_at === null) {
+    return <Absent>no attempt recorded</Absent>
+  }
+  return (
+    <span className="flex flex-col gap-field">
+      <Formatted value={formatTimestamp(adapter.last_attempt_at)} />
+      <span className="text-meta text-muted-foreground">
+        {adapter.last_attempt_outcome}
+        {adapter.last_attempt_reason !== null && <> · {adapter.last_attempt_reason}</>}
+      </span>
+    </span>
+  )
+}
+
 export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
   return (
     <>
@@ -63,12 +102,17 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
           <TableHead>Changes</TableHead>
           <TableHead>Operations</TableHead>
           <TableHead>Newest change</TableHead>
+          {/* Two columns, two questions. "Newest change" is when the adapter last had something
+              to say; "Last asked" is when it was last asked. A healthy, quiet adapter has a
+              recent second and an old first, and until `intake_attempt` landed those were
+              indistinguishable -- which is the limit this table's own note used to state. */}
+          <TableHead>Last asked</TableHead>
           <TableHead>Intake sources</TableHead>
         </TableRow>
       </TableHeader>
       {adapters.length === 0 ? (
         <TableEmptyState
-          columns={7}
+          columns={8}
           headline="No adapter is registered, and the graph holds no vendor history"
           detail={
             "Both halves of this table are empty, which is a configured state rather than a " +
@@ -106,13 +150,26 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
                   <Formatted value={formatTimestamp(adapter.last_change_at)} />
                 </TableCell>
                 <TableCell className="font-mono text-meta">
+                  <LastAsked adapter={adapter} />
+                </TableCell>
+                <TableCell className="font-mono text-meta">
                   {adapter.sources?.join(", ")}
                 </TableCell>
               </>
             ) : (
-              <TableCell colSpan={4} className="text-meta text-muted-foreground">
-                {NEVER_DELIVERED_NOTE}
-              </TableCell>
+              <>
+                {/* Three delivery columns collapse into the note; "Last asked" keeps its own
+                    cell, in its own column, because it is the one fact an adapter that has
+                    never delivered can still have — and it is precisely the fact that tells a
+                    reader whether the silence has been tested. */}
+                <TableCell colSpan={3} className="text-meta text-muted-foreground">
+                  {NEVER_DELIVERED_NOTE}
+                </TableCell>
+                <TableCell className="font-mono text-meta">
+                  <LastAsked adapter={adapter} />
+                </TableCell>
+                <TableCell />
+              </>
             )}
           </TableRow>
         ))}

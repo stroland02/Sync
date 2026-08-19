@@ -66,6 +66,11 @@ const delivered: AdapterRow = {
   operations: 5,
   last_change_at: "2026-08-16T10:04:00+00:00",
   sources: ["changelog", "oasdiff"],
+  last_attempt_at: null,
+  last_attempt_outcome: null,
+  last_attempt_reason: null,
+  last_attempt_changes: null,
+  attempts: {},
 }
 
 const neverDelivered: AdapterRow = {
@@ -76,6 +81,11 @@ const neverDelivered: AdapterRow = {
   operations: null,
   last_change_at: null,
   sources: null,
+  last_attempt_at: null,
+  last_attempt_outcome: null,
+  last_attempt_reason: null,
+  last_attempt_changes: null,
+  attempts: {},
 }
 
 describe("VendorCard", () => {

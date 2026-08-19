@@ -57,6 +57,7 @@ export function metricsTabs(repoId: string): PageTab[] {
     { label: "Findings", to: `/repositories/${encoded}/findings` },
     { label: "Detectors", to: `/repositories/${encoded}/detectors` },
     { label: "Trends", to: `/repositories/${encoded}/metrics` },
+    { label: "Corpus", to: `/repositories/${encoded}/corpus` },
   ]
 }
 

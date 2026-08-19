@@ -40,6 +40,11 @@ function adapter(overrides: Partial<AdapterRow> = {}): AdapterRow {
     operations: 142,
     last_change_at: "2026-08-16T12:00:00Z",
     sources: ["openapi", "changelog"],
+    last_attempt_at: null,
+    last_attempt_outcome: null,
+    last_attempt_reason: null,
+    last_attempt_changes: null,
+    attempts: {},
     ...overrides,
   }
 }
