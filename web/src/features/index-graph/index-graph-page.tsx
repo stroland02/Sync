@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The indexing canvas as a page: `FileTreeCanvas` fed `GET /api/repositories/{repo_id}/graph`
  * through `useRepositoryGraph`, the same route `overview-graph-panel.tsx` draws its own copy of
  * the graph from.
@@ -24,12 +24,14 @@
  * this; picked up once nothing else owned that file.
  */
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useParams } from "react-router"
 
 import { useRepositoryGraph } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
+import { Button } from "@/components/ui/button"
 import { FileTreeCanvas } from "@/features/index-graph/file-tree-canvas"
+import { ForceMap } from "@/features/index-graph/force-map"
 import { classifyIndexState } from "@/features/index-graph/index-state"
 import { IndexStreamBanner } from "@/features/index-graph/index-stream-banner"
 import { useRepositoryEvents } from "@/features/index-graph/use-repository-events"
@@ -49,6 +51,9 @@ export function IndexGraphPage() {
 
 function IndexGraphDetail({ repoId }: { repoId: string }) {
   const query = useRepositoryGraph(repoId)
+  // The map leads: it is the view that answers "what does this codebase depend on" at a
+  // glance, and the tree is the one a reader switches to for a path.
+  const [view, setView] = useState<"map" | "tree">("map")
   // The canvas builds visibly and the banner accompanies it. Decision 87 protects a reader
   // *reading* a table; this is a surface you are *watching build*, and freezing it removes the
   // one moment the one-command install exists to create.
@@ -123,10 +128,35 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
               picture stops being legible before the codebase stops having edges.
             </p>
           )}
-          <FileTreeCanvas
-            rows={graph.bindings}
-            knownVendorIds={graph.vendors.map((v) => v.vendor_id)}
-          />
+          {/* Two views of one graph, and the choice is the reader's because the two answer
+              different questions: the map shows how the codebase clusters around its
+              integrations, the tree shows where each call lives on disk. Neither is a summary
+              of the other and neither is drawn from different rows. */}
+          <div className="flex flex-wrap items-center gap-field">
+            <Button
+              variant={view === "map" ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setView("map")}
+            >
+              Codebase map
+            </Button>
+            <Button
+              variant={view === "tree" ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setView("tree")}
+            >
+              File tree
+            </Button>
+          </div>
+
+          {view === "map" ? (
+            <ForceMap rows={graph.bindings} />
+          ) : (
+            <FileTreeCanvas
+              rows={graph.bindings}
+              knownVendorIds={graph.vendors.map((v) => v.vendor_id)}
+            />
+          )}
           <OffPathNote graph={graph} total={state.offPathTotal} />
         </>
       )}
