@@ -4797,3 +4797,25 @@ joins the Setup checklist. **Evidence that closes it:** the Twilio product list 
 Settings through the declared schema, with no Twilio-specific component in `web/src`.
 
 **B192 closed 2026-08-18:** the pinned major (`typescript@5` -- a major is a CLI contract, `latest` is not) and nested-project discovery (`_project_dir`, root first, then depth-two, `node_modules` excluded, deterministic order) landed in `sync.index.tsc`, with the compiler nearest the project winning and a repository with no project refused in a sentence rather than a help screen. Proven against this repository: project resolved to `web`, its own tsc ran, baseline ok. B121 closed the same day by inspection: the fact rail has been four tiles beside one another since the M14 rework.
+
+### B196 — dependency vulnerability data needs an owner ruling before it can be built
+
+**From the 2026-08-18 tooling survey** (`references/notes/code-metrics-tooling.md`). Sync already
+parses every dependency manifest a codebase declares, so the distance between what it holds and
+"which of your dependencies has a published advisory" is one query against OSV. Every candidate
+tool is permissive (`osv-scanner`, `pip-audit`, `trivy`, `grype` are Apache-2.0), and the data
+itself is free.
+
+**Why it is a ruling rather than a task.** It means Sync makes a network call *about the
+customer's dependency list*, which is a different posture from the one every other stage holds:
+the indexer reads their code and never transmits it, and the threat model's "we never hold
+customer secrets" sits beside an implicit "we do not tell anyone what you depend on". Sending a
+package list to a public API is not a secret leak, and it is also not nothing.
+
+**Three routes, and each trades something different:** query OSV's API at scan time (freshest,
+transmits the list); vendor the OSV database locally and match offline (transmits nothing,
+carries a large artifact and a staleness date); or read a lockfile-adjacent audit the customer's
+own toolchain already produced (`npm audit`, `pip-audit` output) and never fetch at all.
+
+**Evidence that closes it:** the owner names the route, and a dependency with a known advisory
+appears on the Overview with its source and freshness stated.

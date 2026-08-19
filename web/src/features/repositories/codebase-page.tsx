@@ -62,6 +62,7 @@ import { Link, useParams } from "react-router"
 import { InfoHint } from "@/components/info-hint"
 import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
+import { ApiTopologyCard } from "@/features/repositories/api-topology-card"
 import { CodebaseFactsCard } from "@/features/repositories/codebase-facts-card"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
 import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
@@ -124,6 +125,7 @@ export function CodebasePage() {
       <OverviewGraphPanel repoId={repoId} />
       {/* The technical census — what this codebase is made of, measured with the index pass,
           by the owner's direction that the Overview carries real engineering information. */}
+      <ApiTopologyCard repoId={repoId} />
       <CodebaseFactsCard repoId={repoId} />
       <PageHeaderRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}

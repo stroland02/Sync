@@ -1,4 +1,4 @@
-"""Run the operator-console HTTP transport with uvicorn.
+﻿"""Run the operator-console HTTP transport with uvicorn.
 
 `python -m sync.api` starts a local server bound to the graph store the environment names, so
 the frontend has one process to talk to during development. The GraphStore and checkpointer
@@ -24,7 +24,7 @@ from starlette.applications import Starlette
 from sync.api.app import create_app
 from sync.api.auth import configured_api_password, validate_bind_security
 from sync.core.models import RepoContext, RepoSettings
-from sync.dashboard import fleet, graph_views, setup
+from sync.dashboard import catalog, fleet, graph_views, setup
 from sync.dashboard.adapters import adapter_inventory
 from sync.dashboard.patch import patch_for_finding
 from sync.dashboard.queries import workflow_state
@@ -165,6 +165,12 @@ def app_factory() -> Starlette:
 
     def facts_reader(repo_id: str):
         return store.codebase_facts(repo_id)
+
+    def topology_reader(repo_id: str):
+        return store.api_topology(repo_id)
+
+    def catalogue_reader(*, repo_id: str | None = None):
+        return catalog.integrations_catalogue(store, repo_id=repo_id)
 
     def integration_changes_reader(
         *,
@@ -400,6 +406,8 @@ def app_factory() -> Starlette:
         facts_reader=facts_reader,
         call_sites_reader=call_sites_reader,
         integration_changes_reader=integration_changes_reader,
+        topology_reader=topology_reader,
+        catalogue_reader=catalogue_reader,
         api_password=configured_api_password(),
     )
 

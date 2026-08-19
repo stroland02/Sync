@@ -1108,6 +1108,85 @@ class GraphStore:
             "path_prefix": path_prefix,
         }
 
+    def api_topology(self, repo_id: str) -> dict:
+        """The shape of one repository's API surface, measured from the call sites themselves.
+
+        Everything here is a `GROUP BY` over `call_site` — no new parse, no new tool, and no
+        figure that is not a count of rows the index wrote. What the numbers describe is the
+        *topology*: how many operations a codebase reaches, how concentrated its calls are on
+        a few of them, how many files touch more than one integration, and how many calls sit
+        inside loops.
+
+        **Loop depth is static evidence and the payload keeps it labelled as such**: a loop that
+        never runs still counts, which is exactly why `call_site.loop_depth` exists as a depth
+        rather than a flag. It says what the code says, never what ran.
+        """
+        connection = self._connect()
+        base = "FROM call_site WHERE repo_id = %s AND retracted_at IS NULL"
+
+        per_vendor = connection.execute(
+            f"""
+            SELECT vendor_id,
+                   count(*)                     AS call_sites,
+                   count(DISTINCT operation_id) AS operations,
+                   count(DISTINCT path)         AS files
+              {base}
+             GROUP BY vendor_id
+             ORDER BY count(*) DESC, vendor_id
+            """,
+            [repo_id],
+        ).fetchall()
+
+        busiest = connection.execute(
+            f"""
+            SELECT vendor_id, operation_id, count(*) AS call_sites, count(DISTINCT path) AS files
+              {base}
+             GROUP BY vendor_id, operation_id
+             ORDER BY count(*) DESC, vendor_id, operation_id
+             LIMIT 8
+            """,
+            [repo_id],
+        ).fetchall()
+
+        # A file reaching several integrations is where a vendor change costs the most to fix,
+        # which is the one thing this table can say about coupling that a count of files cannot.
+        multi_vendor = connection.execute(
+            f"""
+            SELECT path, count(DISTINCT vendor_id) AS vendors, count(*) AS call_sites
+              {base}
+             GROUP BY path
+            HAVING count(DISTINCT vendor_id) > 1
+             ORDER BY count(DISTINCT vendor_id) DESC, count(*) DESC, path
+             LIMIT 8
+            """,
+            [repo_id],
+        ).fetchall()
+
+        loops = connection.execute(
+            f"SELECT loop_depth, count(*) AS n {base} GROUP BY loop_depth ORDER BY loop_depth",
+            [repo_id],
+        ).fetchall()
+
+        totals = connection.execute(
+            f"""
+            SELECT count(*)                                        AS call_sites,
+                   count(DISTINCT vendor_id)                       AS vendors,
+                   count(DISTINCT (vendor_id || ':' || operation_id)) AS operations,
+                   count(DISTINCT path)                            AS files
+              {base}
+            """,
+            [repo_id],
+        ).fetchone()
+
+        return {
+            "repo_id": repo_id,
+            "totals": dict(totals),
+            "by_vendor": [dict(row) for row in per_vendor],
+            "busiest_operations": [dict(row) for row in busiest],
+            "multi_vendor_files": [dict(row) for row in multi_vendor],
+            "by_loop_depth": {str(row["loop_depth"]): int(row["n"]) for row in loops},
+        }
+
     def call_sites_for_repository_count(self, repo_id: str) -> int:
         """How many current call sites one repository holds, read without fetching their columns."""
         row = self._connect().execute(

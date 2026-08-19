@@ -232,6 +232,8 @@ def create_app(
     facts_reader: Callable[[str], dict[str, Any] | None] | None = None,
     call_sites_reader: Callable[..., dict[str, Any]] | None = None,
     integration_changes_reader: Callable[..., dict[str, Any]] | None = None,
+    topology_reader: Callable[[str], dict[str, Any]] | None = None,
+    catalogue_reader: Callable[..., dict[str, Any]] | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -496,6 +498,18 @@ def create_app(
         if setup_reader is None:
             return JSONResponse({"error": "Setup reader not configured"}, status_code=501)
         return JSONResponse(setup_reader(repo_id=request.query_params.get("repo_id")))
+
+    async def topology_route(request: Request) -> JSONResponse:
+        """One repository's API topology, measured from its own call sites."""
+        if topology_reader is None:
+            return JSONResponse({"error": "Topology reader not configured"}, status_code=501)
+        return JSONResponse(topology_reader(request.path_params["repo_id"]))
+
+    async def catalogue_route(request: Request) -> JSONResponse:
+        """Every integration this deployment can watch, and where each one stands."""
+        if catalogue_reader is None:
+            return JSONResponse({"error": "Catalogue reader not configured"}, status_code=501)
+        return JSONResponse(catalogue_reader(repo_id=request.query_params.get("repo_id")))
 
     async def integration_changes_route(request: Request) -> JSONResponse:
         """Every integration change the graph holds, newest first — the feed.
@@ -793,6 +807,8 @@ def create_app(
         Route("/api/repositories/{repo_id:path}/facts", codebase_facts_route, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/call-sites", call_sites_route, methods=["GET"]),
         Route("/api/integration-changes", integration_changes_route, methods=["GET"]),
+        Route("/api/integrations", catalogue_route, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/topology", topology_route, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", get_staging, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", set_staging, methods=["POST"]),
         Route("/api/corpus", corpus, methods=["GET"]),

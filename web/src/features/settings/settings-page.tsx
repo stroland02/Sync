@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Settings: what this deployment watches, and what it lets you configure.
  *
  * A left sub-nav showing one group at a time, per owner decision 17, which also fixes the order:
@@ -21,6 +21,7 @@ import { CodebasesSettingsPanel } from "@/features/settings/codebases-settings-p
 import { GithubConnectionSettingsPanel } from "@/features/settings/github-connection-settings-panel"
 import { AdaptersSettingsPanel } from "@/features/settings/adapters-settings-panel"
 import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
+import { IntegrationsCataloguePanel } from "@/features/settings/integrations-catalogue-panel"
 import { PagesGuidePanel } from "@/features/settings/pages-guide-panel"
 import { SetupPanel } from "@/features/settings/setup-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
@@ -30,6 +31,7 @@ export type SettingsGroup =
   | "pull-requests"
   | "codebases"
   | "adapters"
+  | "integrations"
   | "github-connection"
   | "pages"
   | "about"
@@ -177,6 +179,9 @@ export function SettingsPage() {
           )}
           {selectedGroup === "codebases" && (
             <CodebasesSettingsPanel repoId={activeRepo} />
+          )}
+          {selectedGroup === "integrations" && (
+            <IntegrationsCataloguePanel repoId={activeRepo} />
           )}
           {selectedGroup === "adapters" && (
             <AdaptersSettingsPanel />
