@@ -1,0 +1,26 @@
+# Staged promotions, awaiting the owner's review -- nothing at runtime reads this file.
+#
+# Each row records a registry-verified generator manifest found in a vendor's official
+# SDK repository. Promotion means writing the entry into `generated-vendors.yaml` by
+# hand, after looking: that file's own standard is that every entry was confirmed by
+# fetching the path, and this staging file carries exactly that evidence.
+- vendor_id: elevenlabs
+  kind: fern
+  repo: elevenlabs/elevenlabs-python
+  manifest: .fernignore
+  language: python
+- vendor_id: perplexity
+  kind: stainless
+  repo: perplexityai/perplexity-py
+  manifest: .stats.yml
+  language: python
+- vendor_id: ragie
+  kind: speakeasy
+  repo: ragieai/ragie-python
+  manifest: .speakeasy/workflow.yaml
+  language: python
+- vendor_id: retell-ai
+  kind: stainless
+  language: typescript
+  manifest: .stats.yml
+  repo: RetellAI/retell-typescript-sdk

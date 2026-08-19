@@ -287,3 +287,379 @@
   packages:
     npm: ["@clerk/backend"]
     pypi: [clerk-backend-api]
+
+# --- swept 2026-08-18: every package below was registry-verified by the sweep workflow ---
+
+- vendor_id: amazon-selling-partner
+  display_name: Amazon Selling Partner API
+  categories: [dev-tools, e-commerce]
+  docs_url: https://developer-docs.amazon.com/sp-api/
+  packages:
+    npm: ["@amazon-sp-api-release/amazon-sp-api-sdk-js"]
+    pypi: [amzn-sp-api]
+
+- vendor_id: apify
+  display_name: Apify
+  categories: [dev-tools, infrastructure]
+  docs_url: https://docs.apify.com
+  packages:
+    npm: [apify-client, apify]
+    pypi: [apify-client, apify]
+
+- vendor_id: atlassian
+  display_name: Atlassian
+  categories: [dev-tools, productivity]
+  docs_url: https://developer.atlassian.com
+  packages:
+    npm: ["@forge/api"]
+
+- vendor_id: aws
+  display_name: AWS
+  categories: [dev-tools, infrastructure]
+  docs_url: https://docs.aws.amazon.com
+  packages:
+    npm: ["@aws-sdk/client-s3", aws-sdk]
+    pypi: [boto3]
+
+- vendor_id: axiom
+  display_name: Axiom
+  categories: [dev-tools, analytics]
+  docs_url: https://axiom.co/docs
+  packages:
+    npm: ["@axiomhq/js"]
+    pypi: [axiom-py]
+
+- vendor_id: azure-devops
+  display_name: Azure DevOps
+  categories: [dev-tools]
+  docs_url: https://learn.microsoft.com/en-us/azure/devops/integrate/
+  packages:
+    npm: [azure-devops-node-api]
+    pypi: [azure-devops]
+
+- vendor_id: builder-io
+  display_name: Builder.io
+  categories: [dev-tools, cms]
+  docs_url: https://www.builder.io/c/docs/developers
+  packages:
+    npm: ["@builder.io/sdk", "@builder.io/react", "@builder.io/sdk-react"]
+
+- vendor_id: canva
+  display_name: Canva
+  categories: [dev-tools, productivity]
+  docs_url: https://www.canva.dev
+  packages:
+    npm: ["@canva/design", "@canva/platform", "@canva/app-ui-kit"]
+
+- vendor_id: clickhouse
+  display_name: ClickHouse
+  categories: [dev-tools, infrastructure]
+  docs_url: https://clickhouse.com/docs
+  packages:
+    npm: ["@clickhouse/client"]
+    pypi: [clickhouse-connect]
+
+- vendor_id: codegen
+  display_name: Codegen
+  categories: [dev-tools, ai]
+  docs_url: https://docs.codegen.com
+  packages:
+    pypi: [codegen]
+
+- vendor_id: contentful
+  display_name: Contentful
+  categories: [dev-tools, cms]
+  docs_url: https://www.contentful.com/developers/docs/
+  packages:
+    npm: [contentful, contentful-management]
+    pypi: [contentful, contentful-management]
+
+- vendor_id: crowdstrike
+  display_name: CrowdStrike
+  categories: [dev-tools]
+  docs_url: https://developer.crowdstrike.com
+  packages:
+    pypi: [crowdstrike-falconpy]
+
+- vendor_id: cursor
+  display_name: Cursor
+  categories: [dev-tools, ai]
+  docs_url: https://docs.cursor.com
+  packages:
+    npm: ["@cursor/sdk"]
+
+- vendor_id: digitalocean
+  display_name: DigitalOcean
+  categories: [dev-tools, infrastructure]
+  docs_url: https://docs.digitalocean.com/reference/
+  packages:
+    pypi: [pydo]
+
+- vendor_id: drata
+  display_name: Drata
+  categories: [dev-tools]
+  docs_url: https://developers.drata.com
+  packages:
+    npm: [drata]
+    pypi: [drata]
+
+- vendor_id: dynatrace
+  display_name: Dynatrace
+  categories: [dev-tools, analytics]
+  docs_url: https://developer.dynatrace.com
+  packages:
+    npm: ["@dynatrace/oneagent-sdk", "@dynatrace-sdk/client-classic-environment-v2"]
+    pypi: [oneagent-sdk]
+
+- vendor_id: elevenlabs
+  display_name: ElevenLabs
+  categories: [dev-tools, ai]
+  docs_url: https://elevenlabs.io/docs
+  packages:
+    npm: ["@elevenlabs/elevenlabs-js", elevenlabs]
+    pypi: [elevenlabs]
+
+- vendor_id: fal-ai
+  display_name: fal
+  categories: [dev-tools, ai]
+  docs_url: https://docs.fal.ai
+  packages:
+    npm: ["@fal-ai/client"]
+    pypi: [fal-client]
+
+- vendor_id: ghost
+  display_name: Ghost
+  categories: [dev-tools, cms]
+  docs_url: https://ghost.org/docs/
+  packages:
+    npm: ["@tryghost/content-api", "@tryghost/admin-api"]
+
+- vendor_id: google-gemini
+  display_name: Google Gemini
+  categories: [dev-tools, ai]
+  docs_url: https://ai.google.dev/gemini-api/docs
+  packages:
+    npm: ["@google/genai"]
+    pypi: [google-genai]
+
+- vendor_id: google-play
+  display_name: Google Play
+  categories: [dev-tools, e-commerce]
+  docs_url: https://developers.google.com/android-publisher
+  packages:
+    npm: [googleapis]
+    pypi: [google-api-python-client]
+
+- vendor_id: grafana
+  display_name: Grafana
+  categories: [dev-tools, analytics]
+  docs_url: https://grafana.com/developers
+  packages:
+    npm: ["@grafana/grafana-foundation-sdk"]
+    pypi: [grafana-foundation-sdk]
+
+- vendor_id: juniper-mist
+  display_name: Juniper Mist
+  categories: [dev-tools, infrastructure]
+  docs_url: https://www.juniper.net/documentation/product/us/en/mist/
+  packages:
+    pypi: [mistapi]
+
+- vendor_id: microsoft-intune
+  display_name: Microsoft Intune
+  categories: [dev-tools, infrastructure]
+  docs_url: https://learn.microsoft.com/en-us/graph/api/resources/intune-graph-overview
+  packages:
+    npm: ["@microsoft/microsoft-graph-client"]
+    pypi: [msgraph-sdk]
+
+- vendor_id: n8n
+  display_name: n8n
+  categories: [dev-tools, productivity]
+  docs_url: https://docs.n8n.io
+  packages:
+    npm: [n8n-workflow, n8n-core]
+
+- vendor_id: neon
+  display_name: Neon
+  categories: [dev-tools, infrastructure]
+  docs_url: https://neon.com/docs
+  packages:
+    npm: ["@neondatabase/serverless", "@neondatabase/api-client"]
+
+- vendor_id: okta
+  display_name: Okta
+  categories: [dev-tools, iam]
+  docs_url: https://developer.okta.com
+  packages:
+    npm: ["@okta/okta-sdk-nodejs"]
+    pypi: [okta]
+
+- vendor_id: onelogin
+  display_name: OneLogin
+  categories: [dev-tools, iam]
+  docs_url: https://developers.onelogin.com
+  packages:
+    npm: ["@onelogin/sdk"]
+    pypi: [onelogin]
+
+- vendor_id: oracle-cloud-identity
+  display_name: Oracle Cloud Identity
+  categories: [dev-tools, iam]
+  docs_url: https://docs.oracle.com/en-us/iaas/Content/Identity/home.htm
+  packages:
+    npm: [oci-identity]
+    pypi: [oci]
+
+- vendor_id: perplexity
+  display_name: Perplexity
+  categories: [dev-tools, ai]
+  docs_url: https://docs.perplexity.ai
+  packages:
+    npm: ["@perplexity-ai/perplexity_ai"]
+    pypi: [perplexityai]
+
+- vendor_id: phrase
+  display_name: Phrase
+  categories: [dev-tools]
+  docs_url: https://developers.phrase.com
+  packages:
+    npm: [phrase-js]
+    pypi: [phrase-api]
+
+- vendor_id: pingone
+  display_name: PingOne
+  categories: [dev-tools, iam]
+  docs_url: https://apidocs.pingidentity.com
+  packages:
+    npm: ["@ping-identity/p14c-js-sdk-core"]
+
+- vendor_id: pipedream
+  display_name: Pipedream
+  categories: [dev-tools, infrastructure]
+  docs_url: https://pipedream.com/docs
+  packages:
+    npm: ["@pipedream/sdk"]
+    pypi: [pipedream]
+
+- vendor_id: posthog
+  display_name: PostHog
+  categories: [dev-tools, analytics]
+  docs_url: https://posthog.com/docs
+  packages:
+    npm: [posthog-node, posthog-js]
+    pypi: [posthog]
+
+- vendor_id: ragie
+  display_name: Ragie
+  categories: [dev-tools, ai]
+  docs_url: https://docs.ragie.ai
+  packages:
+    npm: [ragie]
+    pypi: [ragie]
+
+- vendor_id: recall-ai
+  display_name: Recall.ai
+  categories: [dev-tools, communication]
+  docs_url: https://docs.recall.ai
+  packages:
+    npm: ["@recallai/desktop-sdk"]
+
+- vendor_id: render
+  display_name: Render
+  categories: [dev-tools, infrastructure]
+  docs_url: https://render.com/docs
+  packages:
+    npm: ["@renderinc/sdk"]
+    pypi: [render-sdk]
+
+- vendor_id: replicate
+  display_name: Replicate
+  categories: [dev-tools, ai]
+  docs_url: https://replicate.com/docs
+  packages:
+    npm: [replicate]
+    pypi: [replicate]
+
+- vendor_id: retell-ai
+  display_name: Retell AI
+  categories: [dev-tools, ai]
+  docs_url: https://docs.retellai.com
+  packages:
+    npm: [retell-sdk]
+    pypi: [retell-sdk]
+
+- vendor_id: rootly
+  display_name: Rootly
+  categories: [dev-tools, infrastructure]
+  docs_url: https://docs.rootly.com
+  packages:
+    npm: ["@rootly/ts"]
+    pypi: [rootly]
+
+- vendor_id: shortcut
+  display_name: Shortcut
+  categories: [dev-tools, productivity]
+  docs_url: https://developer.shortcut.com
+  packages:
+    npm: ["@shortcut/client"]
+
+- vendor_id: snowflake
+  display_name: Snowflake
+  categories: [dev-tools, analytics]
+  docs_url: https://docs.snowflake.com
+  packages:
+    npm: [snowflake-sdk]
+    pypi: [snowflake-connector-python, snowflake-snowpark-python, snowflake]
+
+- vendor_id: statsig
+  display_name: Statsig
+  categories: [dev-tools, analytics]
+  docs_url: https://docs.statsig.com
+  packages:
+    npm: [statsig-node, "@statsig/statsig-node-core"]
+    pypi: [statsig, statsig-python-core]
+
+- vendor_id: trigger-dev
+  display_name: Trigger.dev
+  categories: [dev-tools, infrastructure]
+  docs_url: https://trigger.dev/docs
+  packages:
+    npm: ["@trigger.dev/sdk"]
+
+- vendor_id: webflow
+  display_name: Webflow
+  categories: [dev-tools, cms]
+  docs_url: https://developers.webflow.com
+  packages:
+    npm: [webflow-api]
+    pypi: [webflow]
+
+- vendor_id: woocommerce
+  display_name: WooCommerce
+  categories: [dev-tools, e-commerce]
+  docs_url: https://developer.woocommerce.com
+  packages:
+    npm: ["@woocommerce/woocommerce-rest-api"]
+    pypi: [woocommerce]
+
+- vendor_id: wordpress
+  display_name: WordPress
+  categories: [dev-tools, cms]
+  docs_url: https://developer.wordpress.org
+  packages:
+    npm: ["@wordpress/api-fetch"]
+
+- vendor_id: xai
+  display_name: xAI
+  categories: [dev-tools, ai]
+  docs_url: https://docs.x.ai
+  packages:
+    pypi: [xai-sdk]
+
+- vendor_id: zapier
+  display_name: Zapier
+  categories: [dev-tools, productivity]
+  docs_url: https://docs.zapier.com
+  packages:
+    npm: [zapier-platform-core, zapier-platform-cli]
