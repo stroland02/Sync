@@ -53,13 +53,14 @@
 
 import { useParams } from "react-router"
 
+import { InfoHint } from "@/components/info-hint"
 import { PageTabs, metricsTabs } from "@/components/page-tabs"
+import { ScopeChip } from "@/components/scope-chip"
 
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
 import { DetectorsDashboards } from "@/features/detectors/detectors-dashboards"
-import { ControlBar } from "@/layouts/control-bar"
 
 
 export interface DetectorsPageProps {
@@ -84,42 +85,23 @@ export function DetectorsPage() {
           many detectors, and the ranking says which detector is loudest -- which the rung
           chart further down deliberately does not answer. */}
       <DetectorsDashboards repoId={repoId} />
-      <div className="flex flex-col gap-section">
-        <ControlBar>
-          <div className="flex min-w-0 flex-col gap-field">
-            <span className="furniture text-meta text-ink-muted">Scope</span>
-            {/* No widen control and no fleet-wide reading. The owner's ruling is that every page
-                corresponds to a workspace, so "every repository" is not a mode this screen has --
-                switching workspace is the switcher's job, in chrome. */}
-            <span className="font-mono text-body break-words">{repoId}</span>
-          </div>
-        </ControlBar>
-      </div>
 
-      {/* What the screen measures beside what it refuses to measure and what it cannot see. A
-          reader who takes the rung breakdown as a ranking has misread the screen, and the column
-          on the right is where that reading is closed off before the figures are reached. */}
-      <div className="grid gap-8 lg:grid-cols-2">
-        <p className="max-w-prose text-body text-muted-foreground">
-          Every detector's open findings, broken down by the rung of evidence behind its
-          claims. The rung breakdown is the substance: a detector whose findings rest
-          entirely on <code className="font-mono">static</code> evidence is making a
-          different kind of claim from one correlating watched traffic, and an operator
-          weighing a false positive needs that difference before weighing anything else.
-        </p>
-        <div className="flex flex-col gap-field">
-          <p className="max-w-prose text-body text-muted-foreground">
-            This is not a leaderboard and carries no precision or accuracy figure: detectors
-            are not competing, and a ratio computed from open findings alone, with no labelled
-            corpus behind it, would measure nothing.
-          </p>
-          <p className="max-w-prose text-body text-muted-foreground">
-            Every figure below counts open findings in{" "}
-            <span className="font-mono">{repoId}</span> and in no other workspace. A detector with
-            no row here may still be raising findings in another workspace — this screen cannot
-            tell you that, because it did not ask.
-          </p>
-        </div>
+      <div className="flex items-center gap-row">
+        <h2 className="text-section">Detector attribution</h2>
+        <ScopeChip scope="this workspace">
+          Every figure counts open findings in <span className="font-mono">{repoId}</span> and in no
+          other. A detector with no row here may still be raising findings elsewhere — this screen
+          cannot tell you that, because it did not ask.
+        </ScopeChip>
+        <InfoHint label="About detector attribution">
+          Every detector&rsquo;s open findings, broken down by the rung of evidence behind its
+          claims. The rung breakdown is the substance: a detector whose findings rest entirely on{" "}
+          <code className="font-mono">static</code> evidence is making a different kind of claim
+          from one correlating watched traffic, and an operator weighing a false positive needs
+          that difference first. This is not a leaderboard and carries no precision or accuracy
+          figure — detectors are not competing, and a ratio computed from open findings alone, with
+          no labelled corpus behind it, would measure nothing.
+        </InfoHint>
       </div>
 
       <DetectorAccountability repoId={repoId} />

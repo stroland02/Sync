@@ -2,12 +2,15 @@
  * The ⓘ beside a heading: explanation on demand, for prose the screen does not need in front
  * of the data.
  *
- * Owner direction, 2026-08-18: a reader is here for their own data, so field descriptions and
- * how-this-panel-works prose move behind a hover, with the fuller account living in Settings →
- * Pages. **What may move here is explanation. What may not is a claim** — the protected honesty
- * sentences (`docs/superpowers/plans/2026-08-05-sync-console-architecture.md:102-207`), a
- * count's scope, and any absence-versus-zero distinction stay on screen, because a tooltip is a
- * disclosure and those sentences are barred from disclosures by a thrice-recorded ruling.
+ * Owner direction, 2026-08-18, amended 2026-08-19: a reader is here for their own data, so field
+ * descriptions and how-this-panel-works prose move behind a hover.
+ *
+ * **What may move here is the argument. What may not is the claim.** The amendment replaced a rule
+ * protecting twenty-four specific sentences from ever reaching a tooltip — it blocked ordinary
+ * cleanup and seven of them cited deleted files. What survives is stricter about the thing that
+ * mattered: a reader who never hovers must still be able to tell what a figure covers and whether
+ * it was measured. *not measured yet* · *all workspaces* · *static evidence* stay on screen in the
+ * fewest honest words; why each distinction exists comes here. `web/CLAUDE.md` carries it.
  *
  * A real button, not a bare icon: Radix opens a tooltip on focus as well as hover, so the
  * keyboard path exists only if the trigger is focusable. The `aria-label` names what the hint

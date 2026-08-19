@@ -43,7 +43,9 @@
 
 import { useParams } from "react-router"
 
+import { InfoHint } from "@/components/info-hint"
 import { PageTabs, logsTabs } from "@/components/page-tabs"
+import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
 import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
 import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { RunsCard } from "@/features/fleet/runs-table"
@@ -75,38 +77,27 @@ export function RunsPage() {
           a caveat that is not about it. */}
       <RunsKpisRegion />
 
-      {/* The scope statement leads the corpus half, because a reader who meets a count first has
-          already formed a belief about it by the time a caveat arrives. It is one sentence about the whole screen
-          rather than one per card: all three read the same two fleet-wide routes, and three copies
-          of one fact is the disagreement `CLAUDE.md` names as the most expensive kind of debt. */}
-      <p className="text-body text-muted-foreground max-w-3xl leading-relaxed border-l border-line pl-field">
-        Every figure on this page is across all workspaces and is{" "}
-        <span className="text-foreground">not narrowed to this workspace</span>. The corpus table{" "}
-        <span className="font-mono">migration_outcome</span> stores no repository, deliberately —
-        that is what makes it safe to aggregate across customers — so there is no column to filter
-        on and no narrower answer being withheld. Everything above this line is scoped to the
-        workspace in the breadcrumb; nothing below it is.
-      </p>
-
       <RunsCard />
 
-      <div className="grid gap-8 xl:grid-cols-2">
+      {/* The corpus half. Its scope is a chip on each panel rather than the bordered paragraph
+          that used to stand above it -- the claim is two words, the argument is one hover, and it
+          is written once in `CORPUS_SCOPE` rather than three times across three screens. */}
+      <div className="flex items-center gap-row">
+        <h2 className="text-section">The repair corpus</h2>
+        <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
+        <InfoHint label="About the repair corpus">
+          One row is one <em>attempt</em>, not one finding: a finding retried three times writes
+          three attempts and counts once toward the corpus grain, so a total here is larger than
+          the finding count on every other screen and neither is wrong. An abandoned attempt is
+          data rather than a failure to hide — the reason code is queryable, and abandonment by
+          change kind is how routing learns which changes are not mechanically safe to attempt.
+        </InfoHint>
+      </div>
+      <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
         <AbandonReasonsCard />
         <TierOutcomesCard />
       </div>
 
-      <div className="flex flex-col gap-row text-meta text-muted-foreground max-w-5xl leading-relaxed pt-section border-t border-border">
-        <p>
-          One row here is one attempt, not one finding. A finding retried three times writes three
-          attempts on this page and counts once toward the corpus grain, so a total here is larger
-          than the finding count on every other screen and neither figure is wrong.
-        </p>
-        <p>
-          An abandoned attempt is data rather than a failure to hide: the reason code is queryable,
-          and abandonment by change kind is how routing learns which changes are not mechanically
-          safe to attempt at all.
-        </p>
-      </div>
     </section>
   )
 }

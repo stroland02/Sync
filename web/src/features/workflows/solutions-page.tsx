@@ -110,9 +110,8 @@ export function SolutionsPage() {
           }}
           caption={
             <p className="max-w-prose">
-              Every remediation that reached the forge, newest first. The workflow link is the
-              run&rsquo;s own evidence — what each node did — and the pull request link is the
-              diff beside the branch it went to.
+              Every remediation that reached the forge, newest first. One row per attempt: a
+              finding whose retry also opened counts twice, and neither row is wrong.
             </p>
           }
         >
@@ -181,10 +180,6 @@ export function SolutionsPage() {
             busy={query.isFetching}
             onOffsetChange={setOffset}
           />
-          <p className="max-w-prose text-meta text-muted-foreground">
-            One row per attempt, as on Logs: a finding whose retry also opened counts twice
-            here, and neither row is wrong.
-          </p>
         </MetricPanel>
       )}
     </section>

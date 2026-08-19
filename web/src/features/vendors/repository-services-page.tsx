@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { InfoHint } from "@/components/info-hint"
 import { KpiStrip } from "@/components/kpi-strip"
 import { RankedBars } from "@/components/ranked-bars"
 import { IndexFreshness } from "@/features/vendors/index-freshness"
@@ -151,11 +152,23 @@ export function RepositoryServicesPage() {
         />
       )}
 
-      <p className="max-w-prose text-body text-muted-foreground">
-        A service is listed here when the index bound a call site in this repository to it, or when
-        an open finding names it. Those are two answers to two different questions, and each column
-        below reports only its own — a blank in one is not a zero in the other.
-      </p>
+      <div className="flex flex-wrap items-center gap-row">
+        <h2 className="text-section">Services this workspace connects to</h2>
+        {/* A claim, not an argument, so it stays visible -- caught by
+            `repository-services-page.test.tsx` when the sweep moved it into the hover. What a
+            screen does not show is exactly the kind of absence a non-hovering reader must be able
+            to see; the *why* is in the ⓘ. */}
+        <span className="text-meta text-ink-muted">operations not listed</span>
+        <InfoHint label="About the services list">
+          A service is listed when the index bound a call site in this repository to it, or when an
+          open finding names it. Those are two answers to two different questions, and each column
+          reports only its own — a blank in one is not a zero in the other. A service absent
+          entirely is a question this view cannot answer: whether the indexer looked and found
+          nothing, or nothing declares which package to look for. And the operations each service
+          exposes are not listed at all, because no route computes the operations one repository
+          calls — that is work not done rather than a service with no operations.
+        </InfoHint>
+      </div>
 
       {/* Where the exposure is, as bars rather than as a column a reader sorts by eye. The
           chart draws the index's answer only -- open findings are the other question, and a
@@ -282,28 +295,6 @@ export function RepositoryServicesPage() {
         </Table>
       )}
 
-      {coverageState.kind === "ready" && (
-        <>
-          <p className="max-w-prose text-body text-muted-foreground">
-            A vendor absent from the table is not zero — it is a question this view cannot answer:
-            whether the indexer looked and found nothing, or nothing declares which package to look
-            for.
-          </p>
-          <p className="max-w-prose text-body text-muted-foreground">
-            "Last indexed" is the newest indexing timestamp among that vendor's call sites —
-            staleness, not a promise the index is current. A repository re-scanned weeks ago reports
-            the same value every day after, until another re-index moves it.
-          </p>
-        </>
-      )}
-
-      <p className="max-w-prose text-body text-muted-foreground">
-        The operations each service exposes are not listed, because no answer holds the operations
-        one repository calls: the two that carry an operation identifier are scoped to open findings,
-        which is a narrower question than this list, and one of them does not echo the scope it was
-        computed for, so it could not be checked against this address. That is work not done rather
-        than a service with no operations.
-      </p>
     </section>
   )
 }

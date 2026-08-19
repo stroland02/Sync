@@ -182,23 +182,15 @@ function SignalsDetail({ repoId }: { repoId: string }) {
       {/* What the screen draws moves behind the ⓘ (owner direction 2026-08-18); the sentence
           that stays visible is the absence-versus-zero one, because which roles have anything
           behind them is a claim, not an explanation, and a tooltip is a disclosure. */}
-      <div className="flex items-start gap-row">
-        <p className="max-w-prose text-body text-muted-foreground">
-          Roles with an integration attached to this deployment: {names(ATTACHED_ROLES)}.
-          {UNATTACHED_ROLES.length > 0 && (
-            <>
-              {" "}
-              Roles with none: {names(UNATTACHED_ROLES)}. A role with nothing attached was never
-              asked, because there is no adapter, no configuration table and no row here to ask —
-              which is a different fact from an attached integration that was asked and had
-              nothing to report.
-            </>
-          )}
-        </p>
+      <div className="flex items-center gap-row">
+        <h2 className="text-section">Attached by role</h2>
         <InfoHint label="About signals">
-          Every integration attached to this repository&rsquo;s graph, grouped by the role it
-          plays. One card per integration, and a card is not evidence that an integration stands
-          behind it — a group with no rows is a quiet integration rather than a missing one.
+          Every integration attached to this repository&rsquo;s graph, grouped by the role it plays.
+          Roles with something attached here: {names(ATTACHED_ROLES)}.
+          {UNATTACHED_ROLES.length > 0 && <> Roles with none: {names(UNATTACHED_ROLES)}.</>} A role
+          with nothing attached was never asked — there is no adapter, no configuration table and no
+          row to ask, which is a different fact from an attached integration that was asked and had
+          nothing to report. A group with no rows is a quiet integration rather than a missing one.
         </InfoHint>
       </div>
 

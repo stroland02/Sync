@@ -38,6 +38,7 @@ import {
   UnreachableApiError,
 } from "@/api/errors"
 import { InfoHint } from "@/components/info-hint"
+import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
 import { KpiStrip } from "@/components/kpi-strip"
 import { MetricPanel } from "@/components/metric-panel"
 import { Absent } from "@/components/status"
@@ -116,17 +117,11 @@ function AxisPanel({ axis }: { axis: Axis }) {
       </div>
 
       {axis.status === "unmeasured" ? (
-        <div className="flex flex-col gap-field">
-          <span className="text-body">
-            <Absent>not measured yet</Absent>
-          </span>
-          {/* Never "failing", never "0%". An axis with no samples is a measurement nobody could
-              take, which says how much Sync has run rather than how well it works. */}
-          <p className="max-w-prose text-meta text-ink-muted">
-            No sample has reached this axis. That is a fact about how much has run, not a result —
-            there is no value here to be good or bad, and this screen will not invent one.
-          </p>
-        </div>
+        // Never "failing", never "0%". An axis with no samples is a measurement nobody could
+        // take -- a fact about how much has run, not a result -- and the panel's hint carries why.
+        <span className="text-body">
+          <Absent>not measured yet</Absent>
+        </span>
       ) : grouped ? (
         <div className="flex flex-col gap-field">
           {Object.entries(axis.groups!).map(([group, entry]) => (
@@ -215,42 +210,25 @@ export function CorpusPage() {
             ]}
           />
 
-          <div className="flex items-start gap-row">
-            <p className="max-w-prose text-body text-ink-muted">
-              {query.data.summary.has_any_samples ? (
-                <>
-                  What the remediation loop has actually produced, measured over the corpus of
-                  recorded attempts. Every axis names the denominator it was computed over, and an
-                  axis with no samples says so rather than showing a figure.
-                </>
-              ) : (
-                <>
-                  <span className="text-ink">
-                    Nothing has been measured yet, and this screen says so rather than showing a
-                    figure it cannot support.
-                  </span>{" "}
-                  Five quality axes are defined and none has a sample behind it. Each one below
-                  names the denominator it would be computed over, so what is missing is legible
-                  rather than merely absent — this is what Sync knows about itself, and right now
-                  the honest answer is that it has not run enough to know.
-                </>
-              )}
-            </p>
+          <div className="flex items-center gap-row">
+            <h2 className="text-section">Quality axes</h2>
+            <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
             <InfoHint label="About corpus evidence">
               The quality axes Sync measures itself against, computed over{" "}
               <code className="font-mono">migration_outcome</code> — one row per repair attempt,
               not per finding. There is deliberately no combined score: a figure averaging a merge
               rate, a routing accuracy and a token cost would collapse three incommensurable
               measurements, and averaging measured with unmeasured axes would put &ldquo;we could
-              not check&rdquo; on the same axis as &ldquo;we checked and it passed&rdquo;. Every
-              figure here is fleet-wide, because that table stores no repository — which is what
-              makes it safe to aggregate at all.
+              not check&rdquo; on the same axis as &ldquo;we checked and it passed&rdquo;. An axis
+              with no samples is reported unmeasured rather than as nought, and each names the
+              denominator it would be computed over — so what is missing is legible rather than
+              merely absent.
             </InfoHint>
           </div>
 
           <MetricPanel
-            label="Quality axes"
-            caption="Each axis, its value, and the denominator it was computed over. An axis with no samples is reported as unmeasured rather than as nought."
+            label="By axis"
+            caption="Each axis, its value, and the denominator it was computed over."
           >
             <div className="grid auto-rows-fr gap-section xl:grid-cols-2">
               {query.data.axes.map((axis) => (

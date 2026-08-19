@@ -39,6 +39,8 @@ import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { RankedBars } from "@/components/ranked-bars"
 import { ErrorState, LoadingState } from "@/components/states"
+import { Absent } from "@/components/status"
+import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
 
 interface RemediationActivity {
   days: DayEntry[]
@@ -65,15 +67,22 @@ export async function fetchRemediationActivity(
   }
 }
 
+/** A panel title with the corpus scope beside it, written once for both panels. */
+function ScopeLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-row">
+      {children}
+      <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
+    </span>
+  )
+}
+
 function useActivity() {
   return useQuery({
     queryKey: ["corpus-activity"],
     queryFn: ({ signal }) => fetchRemediationActivity(signal),
   })
 }
-
-const SCOPE =
-  "Every figure here is across all workspaces. The corpus table stores no repository — the decision that makes it safe to aggregate at all — so there is no narrower answer being withheld."
 
 /** L2 and T4: attempts per day, stacked by what each reached. */
 export function AttemptsOverTime() {
@@ -105,7 +114,7 @@ export function AttemptsOverTime() {
       times contributes three. Dated by when the attempt happened rather than by when a pull
       request merged, because a series keyed on the merge date would drop every attempt that never
       opened one, which is most of them. Rehearsals are excluded: they halt before the remote and
-      never count toward an activity figure. {SCOPE}
+      never count toward an activity figure.
     </InfoHint>
   )
 
@@ -116,19 +125,16 @@ export function AttemptsOverTime() {
         hint={hint}
         caption="No repair attempt has been recorded on any day."
       >
-        <p className="max-w-prose text-body text-ink-muted">
-          Nothing to draw yet. The pipeline has recorded no attempt, so there is no day with a
-          height — this is an empty record rather than a stretch of idle days, and the two would
-          look the same here once there is history, which is why a day with no bar is never drawn
-          as a zero.
-        </p>
+        <span className="text-body">
+          <Absent>nothing recorded yet</Absent>
+        </span>
       </MetricPanel>
     )
   }
 
   return (
     <MetricPanel
-      label="Repair attempts over time"
+      label={<ScopeLabel>Repair attempts over time</ScopeLabel>}
       hint={hint}
       caption="Attempts by the day they were recorded, stacked by what each reached. One row is one attempt, not one finding."
     >
@@ -137,10 +143,6 @@ export function AttemptsOverTime() {
         ariaLabel="Repair attempts per day, stacked by outcome"
         style={{ height: 260 }}
       />
-      <p className="max-w-prose text-meta text-ink-muted">
-        A day with no bar is a day nothing was recorded — the graph does not record that the
-        pipeline was idle as distinct from not running, so it cannot tell you which. {SCOPE}
-      </p>
     </MetricPanel>
   )
 }
@@ -173,7 +175,7 @@ export function AttemptsByTier() {
       repairs all land at tier 0 is one Sync is fixing cheaply. This is a count and not a success
       rate: how often a tier succeeds is the merge-rate axis on the Corpus tab, computed over a
       denominator these counts do not have. A tier absent here never ran, which is not the same as
-      a tier that ran and failed. {SCOPE}
+      a tier that ran and failed.
     </InfoHint>
   )
 
@@ -184,17 +186,16 @@ export function AttemptsByTier() {
         hint={hint}
         caption="No repair attempt has been recorded."
       >
-        <p className="max-w-prose text-body text-ink-muted">
-          No tier has run. Nothing here says the mechanical path is unavailable — it says the
-          pipeline has not attempted a repair yet, which is a fact about how much has run.
-        </p>
+        <span className="text-body">
+          <Absent>no tier has run</Absent>
+        </span>
       </MetricPanel>
     )
   }
 
   return (
     <MetricPanel
-      label="Attempts by repair tier"
+      label={<ScopeLabel>Attempts by repair tier</ScopeLabel>}
       hint={hint}
       caption="Attempts grouped by the tier that produced them. A count of attempts, never a success rate — and a tier missing here never ran rather than running and reaching nothing."
     >
