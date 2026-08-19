@@ -37,6 +37,15 @@ export function IndexFreshness({
     .sort((a, b) => a[1].localeCompare(b[1]))
   const undated = entries.filter(([, iso]) => iso === null).map(([service]) => service)
 
+  // Every service on one date is the ordinary case, not a coincidence, and listing it as N
+  // identical rows sorted "oldest first" implies a spread the data cannot have. `last_indexed`
+  // is `max(indexed_at)` over each vendor's call sites, and one index pass stamps every row it
+  // writes with one timestamp -- so the dates differ only where a vendor's sites were last
+  // touched by an *earlier* pass, which means that vendor stopped being found. Measured against
+  // this repository: three services, one identical timestamp, three rows saying nothing.
+  const sameDate =
+    dated.length > 1 && dated.every(([, iso]) => iso === dated[0][1])
+
   const hint = (
     <InfoHint label="About index freshness">
       When the index last read a call site binding this codebase to each service, oldest first.
@@ -65,17 +74,27 @@ export function IndexFreshness({
       caption="When the index last read each service's call sites, oldest first. A date here is when Sync looked, not when anything changed."
     >
       <div className="flex flex-col gap-row">
-        {dated.length > 0 && (
-          <ul className="flex flex-col gap-field">
-            {dated.map(([service, iso]) => (
-              <li key={service} className="flex items-baseline justify-between gap-section">
-                <span className="min-w-0 truncate font-mono text-meta text-ink">{service}</span>
-                <span className="shrink-0 text-meta text-ink-muted">
-                  <RelativeTime iso={iso} />
-                </span>
-              </li>
-            ))}
-          </ul>
+        {sameDate ? (
+          <p className="max-w-prose text-body text-ink">
+            All {dated.length} services were last read in the same index pass,{" "}
+            <RelativeTime iso={dated[0][1]} />. They are not listed separately because the dates
+            are identical — one pass stamps every call site it writes with one timestamp, so a
+            per-service date differs only where a service stopped being found and its rows were
+            left behind by a later pass.
+          </p>
+        ) : (
+          dated.length > 0 && (
+            <ul className="flex flex-col gap-field">
+              {dated.map(([service, iso]) => (
+                <li key={service} className="flex items-baseline justify-between gap-section">
+                  <span className="min-w-0 truncate font-mono text-meta text-ink">{service}</span>
+                  <span className="shrink-0 text-meta text-ink-muted">
+                    <RelativeTime iso={iso} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )
         )}
 
         {undated.length > 0 && (

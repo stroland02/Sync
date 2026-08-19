@@ -39,6 +39,8 @@ export function RankedBars({
   colourByKey = true,
   max: cap = 10,
   scale = "linear",
+  annotate,
+  share = false,
   className,
 }: {
   label: string
@@ -64,6 +66,24 @@ export function RankedBars({
    * scale, so the exact values never depend on reading a length.
    */
   scale?: "linear" | "log"
+  /**
+   * A clause under each row saying what the member means.
+   *
+   * For a set whose members are a vocabulary rather than a list of names -- the provenance rungs,
+   * the abandon reasons -- where the label alone does not tell a reader what was measured. A set
+   * of vendor ids needs none, which is why this is optional rather than a required caption.
+   */
+  annotate?: (key: string) => string
+  /**
+   * Print each row's share of the total beside its count.
+   *
+   * Off by default, and that is not timidity: a bar's *length* here is its share of the largest
+   * member, so a printed percentage of the total is a second denominator on the same row. It is
+   * only ever right where the members partition one whole a reader can name -- the provenance
+   * rungs over the open findings -- and it is wrong on a ranking whose members overlap or whose
+   * set is truncated by `max`.
+   */
+  share?: boolean
   className?: string
 }) {
   const ink = seriesScale(rows.map((row) => row.key))
@@ -75,6 +95,7 @@ export function RankedBars({
   const project = (value: number) =>
     scale === "log" ? Math.log1p(value) / Math.log1p(largest) : value / largest
   const restTotal = rest.reduce((sum, row) => sum + row.value, 0)
+  const total = rows.reduce((sum, row) => sum + row.value, 0)
 
   return (
     <div
@@ -107,10 +128,18 @@ export function RankedBars({
               <span className="min-w-0 truncate font-mono text-meta text-ink">{row.key}</span>
               <span className="shrink-0 font-mono text-meta tabular-nums text-ink-muted">
                 {row.value.toLocaleString()}
+                {share && total > 0 && (
+                  <span className="ml-row text-ink-muted">
+                    {Math.round((row.value / total) * 100)}%
+                  </span>
+                )}
               </span>
             </div>
             {/* `role="img"` with a name, because a bar whose only channel is width is
                 unreadable to a screen reader without one. */}
+            {annotate !== undefined && (
+              <span className="text-meta text-ink-muted">{annotate(row.key)}</span>
+            )}
             <div
               className="h-2 w-full overflow-hidden rounded-control bg-surface-muted"
               role="img"
@@ -119,7 +148,12 @@ export function RankedBars({
               <div
                 className={cn("h-full rounded-control", !colourByKey && "bg-line-strong")}
                 style={{
-                  width: `${Math.max(project(row.value) * 100, 1.5)}%`,
+                  // A member measured at nought gets no width at all, where every other member
+                  // gets at least a sliver. That distinction is the point on a set whose zeros are
+                  // measurements: an empty track beside a printed 0 reads as counted-and-none,
+                  // where a minimum-width stub would read as a very small quantity.
+                  width:
+                    row.value === 0 ? "0%" : `${Math.max(project(row.value) * 100, 1.5)}%`,
                   backgroundColor: colourByKey ? ink(row.key) : undefined,
                 }}
               />
