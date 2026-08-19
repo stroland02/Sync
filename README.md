@@ -40,14 +40,17 @@ cd sync
 npm start
 ```
 
-`pnpm start` is the same command; both hand over to `docker compose`, which brings up Postgres,
-the schema, the API, and only then the console. First run builds everything (282 s measured, 22 s
-after); `docker compose -f docker-compose.demo.yml build` moves that wait earlier. Only the
-console is exposed, on loopback. `npm run down` stops it and removes its database.
+`pnpm start` is the same command. It checks for updates and fast-forwards a clean checkout, then
+takes the route that works here: where Docker's daemon answers it hands over to `docker compose`
+(Postgres, schema, API, then the console — 282 s measured cold, 22 s warm); where Docker cannot
+run it takes the user-space route below, automatically, saying why. Only the console is exposed,
+on loopback. `npm run down` stops whichever route is running.
 
-**Stated here rather than discovered: the console comes up empty.** Nothing yet indexes a
-repository into a fresh container — `B188` in `docs/superpowers/BACKLOG.md` carries the ways out.
-Until that lands, this shows you that the product runs, not what it finds in your code.
+**Then put your own code on the screen** — `uv run sync index --repo <your-remote>` reads your
+call sites into the graph, and **[Getting started](docs/getting-started.md)** carries the whole
+journey from nothing to a closed loop, including the
+**[integration catalog](docs/integrations/catalog/index.md)** of every vendor Sync watches or
+recognizes today.
 
 ### No admin rights? No Docker? Still runs.
 

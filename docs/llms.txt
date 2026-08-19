@@ -1,0 +1,49 @@
+# Sync documentation index
+#
+# One line per page, for agents and the future website build.
+
+docs/getting-started.md - from nothing to a closed loop on your own repository
+docs/how-it-works.md - the API Dependency Graph and the five pipeline stages
+docs/architecture.md - the system's shape and its boundaries
+docs/writing-a-vendor-adapter.md - add a vendor; adapters depend on sync.core alone
+docs/developing.md - prerequisites, install, and the quality gates
+docs/integrations/catalog/airtable.md - integration catalog page
+docs/integrations/catalog/algolia.md - integration catalog page
+docs/integrations/catalog/anthropic.md - integration catalog page
+docs/integrations/catalog/bitbucket.md - integration catalog page
+docs/integrations/catalog/browserbase.md - integration catalog page
+docs/integrations/catalog/clerk.md - integration catalog page
+docs/integrations/catalog/cloudflare.md - integration catalog page
+docs/integrations/catalog/datadog.md - integration catalog page
+docs/integrations/catalog/dub.md - integration catalog page
+docs/integrations/catalog/finch.md - integration catalog page
+docs/integrations/catalog/firebase.md - integration catalog page
+docs/integrations/catalog/github.md - integration catalog page
+docs/integrations/catalog/gitlab.md - integration catalog page
+docs/integrations/catalog/groq.md - integration catalog page
+docs/integrations/catalog/hubspot.md - integration catalog page
+docs/integrations/catalog/increase.md - integration catalog page
+docs/integrations/catalog/index.md - integration catalog page
+docs/integrations/catalog/intercom.md - integration catalog page
+docs/integrations/catalog/jira.md - integration catalog page
+docs/integrations/catalog/launchdarkly.md - integration catalog page
+docs/integrations/catalog/linear.md - integration catalog page
+docs/integrations/catalog/lithic.md - integration catalog page
+docs/integrations/catalog/mistral.md - integration catalog page
+docs/integrations/catalog/modern-treasury.md - integration catalog page
+docs/integrations/catalog/netlify.md - integration catalog page
+docs/integrations/catalog/notion.md - integration catalog page
+docs/integrations/catalog/openai.md - integration catalog page
+docs/integrations/catalog/openlayer.md - integration catalog page
+docs/integrations/catalog/orb.md - integration catalog page
+docs/integrations/catalog/pagerduty.md - integration catalog page
+docs/integrations/catalog/resend.md - integration catalog page
+docs/integrations/catalog/salesforce.md - integration catalog page
+docs/integrations/catalog/sendgrid.md - integration catalog page
+docs/integrations/catalog/sentry.md - integration catalog page
+docs/integrations/catalog/shopify.md - integration catalog page
+docs/integrations/catalog/slack.md - integration catalog page
+docs/integrations/catalog/stripe.md - integration catalog page
+docs/integrations/catalog/supabase.md - integration catalog page
+docs/integrations/catalog/twilio.md - integration catalog page
+docs/integrations/catalog/vercel.md - integration catalog page

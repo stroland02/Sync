@@ -1,4 +1,4 @@
-﻿"""Run the operator-console HTTP transport with uvicorn.
+"""Run the operator-console HTTP transport with uvicorn.
 
 `python -m sync.api` starts a local server bound to the graph store the environment names, so
 the frontend has one process to talk to during development. The GraphStore and checkpointer

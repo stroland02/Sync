@@ -1,0 +1,289 @@
+# The vendor knowledge base: every platform Sync can name, whether or not it watches it yet.
+#
+# One entry per vendor. `scripts/build_integration_docs.py` joins this against
+# `sync.signals.registry.registered_adapters()` to generate `docs/integrations/catalog/`, and
+# the join is the honesty mechanism: an entry whose id the registry serves renders as
+# *supported*; any other entry renders as *recognized* -- Sync can name the dependency and say
+# what adding it takes, and claims nothing more. `status` is therefore derived and never written
+# here, and a registered vendor's packages come from `generated-vendors.yaml` via the registry
+# rather than being copied into this file -- a fact written twice will disagree with itself.
+# `tests/test_integration_catalog.py` enforces both.
+#
+# Licensing fence: no line in this file is copied from Nango's ELv2-licensed catalog (their
+# repository shaped the idea; the ruling is in
+# `docs/superpowers/plans/2026-08-18-integration-catalog-and-getting-started.md`). Every entry
+# is a fact about the vendor itself -- its name, its documentation host, the packages its SDK
+# ships under -- written by us and verifiable against the vendor.
+
+# --- registered vendors: display facts only; the registry carries the rest -------------------
+
+- vendor_id: anthropic
+  display_name: Anthropic
+  categories: [ai]
+  docs_url: https://docs.claude.com
+
+- vendor_id: browserbase
+  display_name: Browserbase
+  categories: [dev-tools]
+  docs_url: https://docs.browserbase.com
+
+- vendor_id: cloudflare
+  display_name: Cloudflare
+  categories: [infrastructure]
+  docs_url: https://developers.cloudflare.com
+
+- vendor_id: finch
+  display_name: Finch
+  categories: [hr]
+  docs_url: https://developer.tryfinch.com
+
+- vendor_id: groq
+  display_name: Groq
+  categories: [ai]
+  docs_url: https://console.groq.com/docs
+
+- vendor_id: increase
+  display_name: Increase
+  categories: [banking]
+  docs_url: https://increase.com/documentation
+
+- vendor_id: lithic
+  display_name: Lithic
+  categories: [payment]
+  docs_url: https://docs.lithic.com
+
+- vendor_id: mistral
+  display_name: Mistral AI
+  categories: [ai]
+  docs_url: https://docs.mistral.ai
+
+- vendor_id: modern-treasury
+  display_name: Modern Treasury
+  categories: [banking]
+  docs_url: https://docs.moderntreasury.com
+
+- vendor_id: openai
+  display_name: OpenAI
+  categories: [ai]
+  docs_url: https://platform.openai.com/docs
+
+- vendor_id: openlayer
+  display_name: Openlayer
+  categories: [ai]
+  docs_url: https://docs.openlayer.com
+
+- vendor_id: orb
+  display_name: Orb
+  categories: [invoicing]
+  docs_url: https://docs.withorb.com
+
+- vendor_id: stripe
+  display_name: Stripe
+  categories: [payment]
+  docs_url: https://docs.stripe.com
+
+- vendor_id: twilio
+  display_name: Twilio
+  categories: [communication]
+  docs_url: https://www.twilio.com/docs
+
+- vendor_id: vercel
+  display_name: Vercel
+  categories: [infrastructure]
+  docs_url: https://vercel.com/docs
+
+# --- recognized vendors: Sync can name the dependency; watching it is a config line away ------
+# Packages live here because no registry entry exists to carry them yet. Each one is the name a
+# customer's lockfile declares, verifiable on the npm or PyPI registry.
+
+- vendor_id: github
+  display_name: GitHub
+  categories: [dev-tools]
+  docs_url: https://docs.github.com/rest
+  packages:
+    npm: [octokit, "@octokit/rest"]
+    pypi: [PyGithub]
+
+- vendor_id: slack
+  display_name: Slack
+  categories: [communication]
+  docs_url: https://docs.slack.dev
+  packages:
+    npm: ["@slack/web-api"]
+    pypi: [slack-sdk]
+
+- vendor_id: notion
+  display_name: Notion
+  categories: [productivity]
+  docs_url: https://developers.notion.com
+  packages:
+    npm: ["@notionhq/client"]
+    pypi: [notion-client]
+
+- vendor_id: hubspot
+  display_name: HubSpot
+  categories: [crm]
+  docs_url: https://developers.hubspot.com/docs
+  packages:
+    npm: ["@hubspot/api-client"]
+    pypi: [hubspot-api-client]
+
+- vendor_id: shopify
+  display_name: Shopify
+  categories: [e-commerce]
+  docs_url: https://shopify.dev/docs/api
+  packages:
+    npm: ["@shopify/shopify-api"]
+    pypi: [ShopifyAPI]
+
+- vendor_id: sendgrid
+  display_name: SendGrid
+  categories: [communication]
+  docs_url: https://www.twilio.com/docs/sendgrid
+  packages:
+    npm: ["@sendgrid/mail"]
+    pypi: [sendgrid]
+
+- vendor_id: airtable
+  display_name: Airtable
+  categories: [productivity]
+  docs_url: https://airtable.com/developers/web/api
+  packages:
+    npm: [airtable]
+    pypi: [pyairtable]
+
+- vendor_id: linear
+  display_name: Linear
+  categories: [ticketing]
+  docs_url: https://developers.linear.app
+  packages:
+    npm: ["@linear/sdk"]
+
+- vendor_id: salesforce
+  display_name: Salesforce
+  categories: [crm]
+  docs_url: https://developer.salesforce.com/docs
+  packages:
+    npm: [jsforce]
+    pypi: [simple-salesforce]
+
+- vendor_id: intercom
+  display_name: Intercom
+  categories: [support]
+  docs_url: https://developers.intercom.com
+  packages:
+    npm: [intercom-client]
+    pypi: [python-intercom]
+
+# --- dev tools: the category Sync's own users live in (owner priority, 2026-08-18) -----------
+
+- vendor_id: gitlab
+  display_name: GitLab
+  categories: [dev-tools]
+  docs_url: https://docs.gitlab.com/ee/api
+  packages:
+    npm: ["@gitbeaker/rest"]
+    pypi: [python-gitlab]
+
+- vendor_id: bitbucket
+  display_name: Bitbucket
+  categories: [dev-tools]
+  docs_url: https://developer.atlassian.com/cloud/bitbucket
+  packages:
+    npm: [bitbucket]
+    pypi: [atlassian-python-api]
+
+- vendor_id: jira
+  display_name: Jira
+  categories: [dev-tools, ticketing]
+  docs_url: https://developer.atlassian.com/cloud/jira
+  packages:
+    npm: [jira.js]
+    pypi: [jira]
+
+- vendor_id: sentry
+  display_name: Sentry
+  categories: [dev-tools, analytics]
+  docs_url: https://docs.sentry.io/api
+  packages:
+    npm: ["@sentry/node"]
+    pypi: [sentry-sdk]
+
+- vendor_id: datadog
+  display_name: Datadog
+  categories: [dev-tools, analytics]
+  docs_url: https://docs.datadoghq.com/api
+  packages:
+    npm: ["@datadog/datadog-api-client"]
+    pypi: [datadog-api-client]
+
+- vendor_id: pagerduty
+  display_name: PagerDuty
+  categories: [dev-tools]
+  docs_url: https://developer.pagerduty.com
+  packages:
+    npm: ["@pagerduty/pdjs"]
+    pypi: [pdpyras]
+
+- vendor_id: netlify
+  display_name: Netlify
+  categories: [dev-tools, infrastructure]
+  docs_url: https://docs.netlify.com/api/get-started
+  packages:
+    npm: [netlify]
+
+- vendor_id: algolia
+  display_name: Algolia
+  categories: [dev-tools, search]
+  docs_url: https://www.algolia.com/doc
+  packages:
+    npm: [algoliasearch]
+    pypi: [algoliasearch]
+
+- vendor_id: launchdarkly
+  display_name: LaunchDarkly
+  categories: [dev-tools]
+  docs_url: https://docs.launchdarkly.com
+  packages:
+    npm: ["@launchdarkly/node-server-sdk"]
+    pypi: [launchdarkly-server-sdk]
+
+- vendor_id: supabase
+  display_name: Supabase
+  categories: [dev-tools, infrastructure]
+  docs_url: https://supabase.com/docs
+  packages:
+    npm: ["@supabase/supabase-js"]
+    pypi: [supabase]
+
+- vendor_id: firebase
+  display_name: Firebase
+  categories: [dev-tools, infrastructure]
+  docs_url: https://firebase.google.com/docs
+  packages:
+    npm: [firebase-admin]
+    pypi: [firebase-admin]
+
+- vendor_id: resend
+  display_name: Resend
+  categories: [dev-tools, communication]
+  docs_url: https://resend.com/docs
+  packages:
+    npm: [resend]
+    pypi: [resend]
+
+- vendor_id: dub
+  display_name: Dub
+  categories: [dev-tools, marketing]
+  docs_url: https://dub.co/docs
+  packages:
+    npm: [dub]
+    pypi: [dub]
+
+- vendor_id: clerk
+  display_name: Clerk
+  categories: [dev-tools, iam]
+  docs_url: https://clerk.com/docs
+  packages:
+    npm: ["@clerk/backend"]
+    pypi: [clerk-backend-api]
