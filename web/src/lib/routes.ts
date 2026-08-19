@@ -96,8 +96,8 @@ export interface RouteEntry {
    */
   nav: boolean
   /**
-   * The rail's own ordering, owner-ruled 2026-08-18: Overview, Findings, Integrations,
-   * Connections, Logs, Metrics, Solutions, then the rest. Explicit because the rail no longer
+   * The rail's own ordering, owner-ruled 2026-08-18 and amended the same evening: Overview,
+   * Integrations, Connections, Metrics, Call sites, Logs, Solutions. Explicit because the rail no longer
    * groups by level — the reading order is a product decision, not an accident of registry
    * position — and an entry without one sorts after every entry that has one.
    */
@@ -133,9 +133,6 @@ export const ROUTES: readonly RouteEntry[] = [
     element: CodebasePage,
   },
   {
-    // Call sites: the graph's raw material, browsable. An aggregate over the Binding surface
-    // -- it lists the sites a binding is made of -- so `GRAPH_LEVELS` is untouched, the same
-    // reasoning the findings list and detector attribution already carry.
     path: "/repositories/:repoId/integration-changes",
     reachedFrom: "the Integrations tabs",
     // The changes feed is Integrations' second tab, never its own rail entry: what a vendor
@@ -148,10 +145,13 @@ export const ROUTES: readonly RouteEntry[] = [
     element: IntegrationChangesPage,
   },
   {
+    // Call sites: the graph's raw material, browsable. An aggregate over the Binding surface
+    // -- it lists the sites a binding is made of -- so `GRAPH_LEVELS` is untouched, the same
+    // reasoning the findings list and detector attribution already carry.
     path: "/repositories/:repoId/call-sites",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 3,
+    navOrder: 5,
     label: "Call sites",
     level: "Binding surface",
     question: "Where does this codebase call an integration's API, and what did each call bind to?",
@@ -177,7 +177,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/solutions",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 8,
+    navOrder: 7,
     label: "Solutions",
     level: "Solution Workflow",
     question: "Which remediations reached the forge, and where is each one's evidence?",
@@ -233,7 +233,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // operator opens Metrics for, and the tab strip carries Detectors and Trends beside it.
     // Second in the rail, honouring the owner's "findings above integrations".
     nav: true,
-    navOrder: 2,
+    navOrder: 4,
     label: "Metrics",
     level: "Finding",
     question: "What is broken in this workspace, and what is each finding bound to?",
@@ -244,7 +244,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/services",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 5,
+    navOrder: 3,
     // "Connections" by the owner's naming ruling, 2026-08-18. The LEVEL keeps the
     // specification's words -- presentation vocabulary renames freely, levels do not.
     label: "Connections",
@@ -258,7 +258,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/vendors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 4,
+    navOrder: 2,
     // "Integrations" by the owner's naming ruling, 2026-08-18. Same split as above.
     label: "Integrations",
     level: "API Services",
