@@ -63,6 +63,7 @@ import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { MapPreviews } from "@/features/index-graph/map-previews"
 import { OverviewKpis } from "@/features/repositories/overview-kpis"
+import { RungMixCard } from "@/features/repositories/rung-mix-card"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
 import { useRepositoryGraph } from "@/api/queries"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
@@ -129,10 +130,14 @@ export function CodebasePage() {
           technical census to the file tree's, which is what keeps this screen scannable. */}
       <MapsRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}
-      <div className="grid gap-8 xl:grid-cols-2">
+      <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
         <OpenFindingsCard repoId={repoId} />
         <IndexCoverageCard repoId={repoId} />
       </div>
+      {/* Dashboard O2. The rung mix is the console's own argument drawn once rather than
+          asserted a column at a time, and the payload has carried the facet since dashboard 2
+          was specified without anything rendering it. */}
+      <RungMixCard repoId={repoId} />
       <ChangeUnitsTable repoId={repoId} />
       <ObservedTelemetryCard repoId={repoId} />
     </section>
