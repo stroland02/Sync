@@ -32,6 +32,7 @@ import { ErrorState, LoadingState } from "@/components/states"
 
 import { ApiTopologyCard } from "@/features/repositories/api-topology-card"
 import { TopologyKpis } from "@/features/repositories/topology-kpis"
+import { CouplingChord } from "@/features/index-graph/coupling-chord"
 import { ForceMap } from "@/features/index-graph/force-map"
 import { classifyIndexState } from "@/features/index-graph/index-state"
 import { IndexStreamBanner } from "@/features/index-graph/index-stream-banner"
@@ -142,8 +143,13 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
             <ForceMap rows={graph.bindings} fill />
           </div>
           {/* This page's own analytics: the integration map's subject is what this codebase
-              calls, so the topology figures live here rather than on the Overview. */}
-          <ApiTopologyCard repoId={repoId} />
+              calls, so the topology figures live here rather than on the Overview. The chord
+              beside them answers the one thing the topology card counts but cannot show --
+              *between which* integrations the coupling runs. */}
+          <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
+            <ApiTopologyCard repoId={repoId} />
+            <CouplingChord repoId={repoId} />
+          </div>
           <OffPathNote graph={graph} total={state.offPathTotal} />
         </>
       )}

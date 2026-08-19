@@ -27,6 +27,7 @@ import {
 } from "@/components/data-table"
 import { KpiStrip } from "@/components/kpi-strip"
 import { AttemptsByTier, AttemptsOverTime } from "@/features/workflows/remediation-activity"
+import { RemediationFlow } from "@/features/workflows/remediation-flow"
 import { MetricPanel } from "@/components/metric-panel"
 import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
@@ -96,6 +97,10 @@ export function SolutionsPage() {
           the corpus rather than the runs feed, so a runs failure is no reason to withhold how
           the pipeline got here. Both state their own fleet scope, since the corpus table stores
           no repository. */}
+      {/* The flow leads the corpus panels: it is the only view showing attrition *between*
+          stages, and the two beneath break the attempts down once you have seen where they sit. */}
+      <RemediationFlow repoId={repoId} />
+
       <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
         <AttemptsOverTime />
         <AttemptsByTier />
