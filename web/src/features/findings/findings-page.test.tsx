@@ -77,7 +77,11 @@ function page(items: RiskRow[], overrides: Partial<VendorFindingsPage> = {}) {
   } as unknown as VendorFindingsPage
 }
 
-function renderFindings(entry = "/repositories/org%2Fone/findings") {
+// The flat table is one press away rather than the default since M15 Task 7 -- the change unit
+// leads, because one vendor change breaking eleven call sites is one decision. These guards are
+// about the flat table's rows, so they open it explicitly rather than relying on a default that
+// has deliberately moved.
+function renderFindings(entry = "/repositories/org%2Fone/findings?findings_view=flat") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -160,5 +164,26 @@ describe("the findings screen", () => {
     renderFindings()
 
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
+  })
+})
+
+describe("which question the screen opens on (M15 Task 7)", () => {
+  it("leads with the change rather than the flat list", async () => {
+    // The plan's whole point: 24 findings are 13 change units, and a flat default shows a reader
+    // 24 problems where there are 13. If this regresses, the grouping still exists and nobody
+    // sees it -- which is indistinguishable from not having built it.
+    renderFindings("/repositories/org%2Fone/findings")
+
+    expect(
+      (await screen.findByRole("button", { name: /By change/ })).getAttribute("aria-pressed"),
+    ).toBe("true")
+  })
+
+  it("keeps the flat list reachable, because 'where exactly' is a real question too", async () => {
+    renderFindings("/repositories/org%2Fone/findings?findings_view=flat")
+
+    expect(
+      (await screen.findByRole("button", { name: /Every finding/ })).getAttribute("aria-pressed"),
+    ).toBe("true")
   })
 })
