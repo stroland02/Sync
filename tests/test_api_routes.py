@@ -2887,6 +2887,71 @@ def test_the_dismissal_tally_is_reachable_and_not_shadowed_by_the_finding_route(
     assert response.json() == {"counts": {"wont_fix": 2}, "total": 2}
 
 
+def test_a_repeated_filter_parameter_reaches_the_reader_as_a_set():
+    """M15 Task 4's seam, and `CI-W520` is why it has a test of its own.
+
+    The rail passed, the route passed, and the wiring between them was the defect. Here the
+    equivalent seam is the query string: `?vendor_id=a&vendor_id=b` has to arrive as two values.
+    `request.query_params.get` returns only the first, so a route left on the scalar accessor
+    would narrow to one integration while the rail showed two pressed -- and every isolated test
+    on either side would still be green.
+    """
+    seen: dict[str, Any] = {}
+
+    def reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"items": [], "total": 0, "next_offset": None}
+
+    client = TestClient(
+        _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), call_sites_reader=reader)
+    )
+    client.get("/api/repositories/r1/call-sites?vendor_id=stripe&vendor_id=twilio")
+
+    assert seen["vendor_ids"] == ["stripe", "twilio"]
+
+
+def test_no_filter_parameter_is_an_empty_set_rather_than_a_none():
+    """An absent filter is "do not narrow", spelled the same way an emptied rail spells it.
+
+    Two spellings of unfiltered -- `None` and `[]` -- would each need handling at every layer
+    below, and the one that got forgotten would be the one that silently matched nothing.
+    """
+    seen: dict[str, Any] = {}
+
+    def reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"items": [], "total": 0, "next_offset": None}
+
+    client = TestClient(
+        _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), call_sites_reader=reader)
+    )
+    client.get("/api/repositories/r1/call-sites")
+
+    assert seen["vendor_ids"] == []
+    assert seen["operation_ids"] == []
+    assert seen["loop_depths"] == []
+
+
+def test_an_unparseable_loop_depth_narrows_to_nothing_rather_than_widening():
+    """The one direction a filter must never fail in.
+
+    Dropping the unreadable value would return *more* rows than the URL asks for -- a reader
+    who typed a depth wrong would be shown call sites at every other depth and have no way to
+    tell. `loop_depth` is `NOT NULL` and never negative, so an unmatchable value is what goes
+    down instead and the honest empty page comes back.
+    """
+    seen: dict[str, Any] = {}
+
+    def reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
+        seen.update(kwargs)
+        return {"items": [], "total": 0, "next_offset": None}
+
+    client = TestClient(
+        _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), call_sites_reader=reader)
+    )
+    client.get("/api/repositories/r1/call-sites?loop_depth=2&loop_depth=abc")
+
+    assert seen["loop_depths"] == [2, -1]
 # -- source policy ----------------------------------------------------------------
 #
 # Owner re-ruling 2026-08-19, scoping the threat-model rule at the top of `app.py`: bounded,
