@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The API services one repository calls.
  *
  * The owner asked for *"an api services page that list all the different services"*. Two answers
@@ -70,7 +70,7 @@ export function RepositoryServicesPage() {
   if (overview.isPending || coverage.isPending) {
     return (
       <section className="flex flex-col gap-8">
-        <LoadingState what="the API services this repository calls" />
+        <LoadingState what="the connections this repository has" />
       </section>
     )
   }
@@ -80,7 +80,7 @@ export function RepositoryServicesPage() {
       <section className="flex flex-col gap-8">
         <ErrorState
           error={overview.error}
-          what="the API services this repository calls"
+          what="the connections this repository has"
           onRetry={() => void overview.refetch()}
         />
       </section>

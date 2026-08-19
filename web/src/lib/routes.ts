@@ -140,10 +140,14 @@ export const ROUTES: readonly RouteEntry[] = [
     // over that level the way detector attribution aggregates over Errors & Incidents, and
     // `.claude/rules/console-hierarchy.md` is explicit that an aggregate is not a rung. `GRAPH_LEVELS`
     // is untouched, so no specification amendment was owed before this landed.
+    // Owner naming ruling, 2026-08-18 (amended the same evening): Runs presents as "Logs" —
+    // one row per attempt is the pipeline's own log — with its own rail entry. The LEVEL is
+    // untouched: presentation vocabulary renames freely, the specification's words do not,
+    // which is the fleet screen's own precedent.
     path: "/repositories/:repoId/runs",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    label: "Runs",
+    label: "Logs",
     level: "Solution Workflow",
     question:
       "What did the remediation pipeline attempt, what did it abandon, and which change kinds does it not handle mechanically?",
@@ -160,8 +164,9 @@ export const ROUTES: readonly RouteEntry[] = [
     // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
     path: "/repositories/:repoId/findings",
     reachedFrom: "a workspace in the switcher",
+    // "Metrics" by the same ruling: the measured state of the workspace, its own rail entry.
     nav: true,
-    label: "Findings",
+    label: "Metrics",
     level: "Finding",
     question: "What is broken in this workspace, and what is each finding bound to?",
     params: ["repoId"],
@@ -171,10 +176,12 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/services",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    label: "API services",
+    // "Connections" by the owner's naming ruling, 2026-08-18. The LEVEL keeps the
+    // specification's words -- presentation vocabulary renames freely, levels do not.
+    label: "Connections",
     level: "API Services",
     question:
-      "Which API services does this workspace call, and what does the index know about each?",
+      "Which services is this workspace connected to, and what does the index know about each?",
     params: ["repoId"],
     element: RepositoryServicesPage,
   },
@@ -182,9 +189,10 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/vendors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    label: "Vendors",
+    // "Integrations" by the owner's naming ruling, 2026-08-18. Same split as above.
+    label: "Integrations",
     level: "API Services",
-    question: "Which API vendors does this workspace call, and how much is open against each?",
+    question: "Which integrations does this workspace use, and how much is open against each?",
     params: ["repoId"],
     element: RepositoryVendorsPage,
   },

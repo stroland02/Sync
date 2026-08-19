@@ -62,7 +62,7 @@ export function RunsPage() {
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes — the page keeps the
             segments the bar does not reach, which here is one. */}
-        <Breadcrumbs trail={[{ label: "Runs" }]} />
+        <Breadcrumbs trail={[{ label: "Logs" }]} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

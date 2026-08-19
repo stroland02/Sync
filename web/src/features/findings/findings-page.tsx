@@ -92,7 +92,7 @@ export function FindingsPage() {
       <div className="flex flex-col gap-field">
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes. */}
-        <Breadcrumbs trail={[{ label: "Findings" }]} />
+        <Breadcrumbs trail={[{ label: "Metrics" }]} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 
