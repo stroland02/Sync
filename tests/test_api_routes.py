@@ -166,7 +166,9 @@ def _fake_abandonment_reader() -> dict[str, Any]:
     return {"groups": []}
 
 
-def _fake_change_units_reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0) -> dict[str, Any]:
+def _fake_change_units_reader(
+    *, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0
+) -> dict[str, Any]:
     return {"items": [], "total": 0, "next_offset": None}
 
 
@@ -1130,8 +1132,10 @@ def test_change_units_route_returns_readers_payload_unaltered():
 def test_change_units_route_passes_query_params():
     calls: list[dict[str, Any]] = []
 
-    def reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
-        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
+    def reader(*, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0):
+        calls.append(
+            {"repo_id": repo_id, "severity": severity, "limit": limit, "offset": offset}
+        )
         return {"items": [], "total": 0, "next_offset": None}
 
     app = _build_app(
@@ -1140,8 +1144,16 @@ def test_change_units_route_passes_query_params():
     )
     client = TestClient(app)
 
-    client.get("/api/change-units?repo_id=r1&limit=25&offset=50")
-    assert calls == [{"repo_id": "r1", "limit": 25, "offset": 50}]
+    client.get("/api/change-units?repo_id=r1&severity=breaking&limit=25&offset=50")
+    assert calls == [
+        {"repo_id": "r1", "severity": "breaking", "limit": 25, "offset": 50}
+    ]
+
+    # Absent means unnarrowed, and the reader is told so explicitly rather than by omission:
+    # the severity tabs must be able to return to the whole set.
+    calls.clear()
+    client.get("/api/change-units?repo_id=r1")
+    assert calls[0]["severity"] is None
 
 
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
@@ -1635,7 +1647,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         vendor_findings_reads.append({"vendor_id": vendor_id, **kwargs})
         return _fake_vendor_findings_reader(vendor_id, **kwargs)
 
-    def change_units_reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
+    def change_units_reader(*, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0):
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
@@ -2075,7 +2087,7 @@ def test_every_collection_route_accepts_limit_and_offset():
     def vendor_findings_reader(vendor_id: str, *, limit: int, offset: int, **_) -> dict[str, Any]:
         return _paged(finding_items, limit, offset)
 
-    def change_units_reader(*, repo_id=None, limit: int, offset: int) -> dict[str, Any]:
+    def change_units_reader(*, repo_id=None, severity=None, limit: int, offset: int) -> dict[str, Any]:
         return _paged(change_unit_items, limit, offset)
 
     surface = GraphSurface(FakeGraph(findings=findings, sites=sites, changes=changes), feed_fetched_at=FETCHED)

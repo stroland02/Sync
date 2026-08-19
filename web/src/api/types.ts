@@ -621,6 +621,17 @@ export interface ChangeUnitRow {
   repository_count: number
   call_site_count: number
   binding_rung: string
+  /**
+   * How many findings this unit holds — stated by the payload, never counted from `findings`.
+   *
+   * Under a severity narrowing this is the count *at that severity*, because the narrowing is
+   * applied before the grouping. That is what makes the grouped totals reconcile with the flat
+   * ones on every tab: filtering units afterwards would leave each one counting findings the
+   * reader is not being shown.
+   */
+  finding_count: number
+  /** The constituent findings, in the same shape the flat table renders. */
+  findings: RiskRow[]
   finding_ids: string[]
   repo_ids: string[]
   standing: RunDisposition | "in_progress" | null
@@ -776,11 +787,37 @@ export interface BindingSurfaceResponse {
  * vendor's call sites — staleness, not a promise the index is current: a repository re-scanned
  * weeks ago reports the same value every day after, until another re-index moves it.
  */
+/**
+ * One API product this repository calls, under the vendor that sells it.
+ *
+ * A vendor is the provider Sync watches; a service is one of the APIs it sells — `Payments` under
+ * `stripe`. The graph carried only the provider until 2026-08-19, which is why the console's
+ * Services and Vendors screens listed the same identifier under two headings.
+ */
+export interface ServiceCoverageRow {
+  vendor_id: string
+  /**
+   * `null` where nothing has mapped this vendor's operations onto a product yet.
+   *
+   * **Not grouped, and never a call site outside every service.** Only a vendor adapter can supply
+   * the mapping and none does today, so this null is work not done — a screen rendering it as a
+   * service named nothing, or dropping the row, would report a vendor as having no products when
+   * what it has is no adapter.
+   */
+  service_id: string | null
+  call_sites: number
+  /** Distinct operations in this group, so a reader can see how much of the vendor it covers. */
+  operations: number
+  last_indexed: string
+}
+
 export interface IndexCoverageResponse {
   repo_id: string
   by_vendor: Tally
   last_indexed: Record<string, string>
   total_call_sites: number
+  /** The product question beside the provider question, computed over the same rows. */
+  by_service: ServiceCoverageRow[]
 }
 
 /**
