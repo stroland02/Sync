@@ -269,7 +269,7 @@ export function FilterRail({
   return (
     <aside
       aria-labelledby={headingId}
-      className="flex min-w-0 flex-col gap-section rounded-surface border border-line bg-surface p-section"
+      className="flex min-w-0 flex-col gap-section self-stretch overflow-y-auto rounded-surface border border-line bg-surface p-section lg:sticky lg:top-frame lg:max-h-[calc(100svh-8rem)]"
     >
       <h2 id={headingId} className="furniture text-meta text-ink">
         {label}

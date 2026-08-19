@@ -52,6 +52,7 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useFacetParam } from "@/lib/use-facet-param"
+import { useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 const LIMIT = 50
@@ -159,7 +160,13 @@ function vendorGroup(
 export function CallSitesPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const [offset, setOffset] = useOffsetParam("call_sites_offset")
-  const [vendorId, setSelectedVendor] = useFacetParam("call_sites_vendor")
+  // `useFilterParam` rather than `useFacetParam` plus a separate `setOffset`, and the difference
+  // is a real defect rather than tidiness: both hooks call `setSearchParams`, and React Router
+  // hands the functional form the *current* params rather than a queued value -- so two writes in
+  // one handler give the second a `prev` that predates the first, and the offset reset discarded
+  // the facet it was meant to accompany. The rail looked pressed and nothing was refetched, which
+  // is the owner's report of 2026-08-19. One write does both.
+  const [vendorId, setSelectedVendor] = useFilterParam("call_sites_vendor", ["call_sites_offset"])
   const [pathPrefix] = useFacetParam("call_sites_path")
   // The open row lives in the URL, which is the half of Nango's drawer convention that matters:
   // a reader handing a colleague a link hands them the row they are looking at, not the page.
@@ -176,10 +183,8 @@ export function CallSitesPage() {
 
   // A new narrowing starts at the first page: an offset kept from the previous selection can
   // sit past the narrowed set's end, which renders an empty page over a non-empty answer.
-  function setVendor(next: string | null) {
-    setSelectedVendor(next)
-    setOffset(0)
-  }
+  // One write: the setter clears the offset itself.
+  const setVendor = setSelectedVendor
 
   return (
     <section className="flex min-w-0 flex-col gap-8">
@@ -200,7 +205,7 @@ export function CallSitesPage() {
       )}
 
       {query.isSuccess && (
-        <div className="grid gap-section lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
+        <div className="grid gap-section lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-stretch">
           {(() => {
             const group = vendorGroup(query.data, vendorId, setVendor)
             return group === null ? (

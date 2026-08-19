@@ -16,7 +16,7 @@ import { DEFAULT_LIMIT } from "@/api/client"
 import { hasLiveRun, useRuns } from "@/api/queries"
 import type { RunDisposition, RunRow, RunsPage } from "@/api/types"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
-import { useFacetParam } from "@/lib/use-facet-param"
+import { useFilterParam } from "@/lib/use-filter-param"
 import {
   Table,
   TableBody,
@@ -119,15 +119,19 @@ function RunsCount({ data }: { data: RunsPage }) {
 
 export function RunsCard() {
   const [offset, setOffset] = useOffsetParam("runs_offset")
-  const [outcome, setSelectedOutcome] = useFacetParam("runs_outcome")
+  // `useFilterParam` rather than `useFacetParam` plus a separate `setOffset`, and the difference
+  // is a real defect rather than tidiness: both hooks call `setSearchParams`, and React Router
+  // hands the functional form the *current* params rather than a queued value -- so two writes in
+  // one handler give the second a `prev` that predates the first, and the offset reset discarded
+  // the facet it was meant to accompany. The rail looked pressed and nothing was refetched, which
+  // is the owner's report of 2026-08-19. One write does both.
+  const [outcome, setSelectedOutcome] = useFilterParam("runs_outcome", ["runs_offset"])
   const query = useRuns({ limit: DEFAULT_LIMIT, offset, outcome })
 
   // A new narrowing starts at the first page: an offset kept from the previous selection can
   // sit past the narrowed set's end, which renders an empty page over a non-empty answer.
-  function setOutcome(next: string | null) {
-    setSelectedOutcome(next)
-    setOffset(0)
-  }
+  // One write: the setter clears the offset itself.
+  const setOutcome = setSelectedOutcome
 
   return (
     <div className="flex flex-col gap-section">
@@ -135,7 +139,7 @@ export function RunsCard() {
       {query.error && <ErrorState error={query.error} what="the fleet's runs" onRetry={() => void query.refetch()} />}
 
       {query.isSuccess && (
-        <div className="grid gap-section lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
+        <div className="grid gap-section lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-stretch">
         {/* The rail's counts and the table's record count answer two different questions — the
             rail is counted over every run the deployment holds (the payload computes it before
             the filter applies), the footer over the narrowed set — and each states its scope. */}
