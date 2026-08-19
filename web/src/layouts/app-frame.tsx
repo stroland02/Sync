@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The frame every level renders inside: one full-height sidebar, and the content column beside it.
  */
 
@@ -307,59 +307,53 @@ function AppSidebar({ pathname }: { pathname: string }) {
         className="absolute inset-y-0 left-0 overflow-hidden border-r border-line bg-sidebar"
       >
         <nav aria-label="Destinations" className="flex min-h-0 flex-1 flex-col">
+          {/* The whole header is one cell: exactly the top bar's 48px, closed by the shared
+              hairline. The sidebar border and the top bar border form a cross, and the owner's
+              ruling assigns its quadrants -- the environment lives ABOVE the line in this cell,
+              and the destination buttons start AT the line, so nothing above ever shifts them.
+              Two compact lines inside the cell: the wordmark, then the environment -- deployment
+              and forge credential -- as one truncating link. `px-section` keeps the cell's text
+              on the same 16px left edge the rows below sit on; the workspace rides the cell's
+              title, because three lines do not fit in 48px and the Overview names it in full. */}
           <SidebarHeader className="gap-0 p-0">
-            {/* The wordmark row is exactly the top bar's height and shares its hairline, so the
-                two borders meet as one continuous line at the sidebar's right edge — the owner
-                measured them out of parallel when this header stacked ad-hoc rows inside its own
-                padding. Everything below the line is content; this row alone is chrome. */}
-            {/* `px-section`, because a destination row's label sits at group padding plus the
-                button's own — 16px — and every block in this column shares that left edge, or
-                the sidebar reads as three misaligned grids. */}
-            <div className="flex h-12 shrink-0 items-center gap-field border-b border-line px-section">
-              <span
-                className={
-                  minimised
-                    ? "sr-only"
-                    : "font-semibold text-emphasis tracking-tight text-foreground"
-                }
-              >
-                sync
-              </span>
-              <span
-                className={
-                  minimised
-                    ? "sr-only"
-                    : "font-mono text-meta uppercase tracking-wider text-muted-foreground"
-                }
-              >
-                console
-              </span>
-            </div>
-            {/* The environment, top-left by the owner's direction: which codebase, which
-                deployment, which forge credential. One block with its own hairline, never
-                overlapping the rows beneath — each line truncates instead of wrapping. */}
             <div
-              className={
-                minimised
-                  ? "sr-only"
-                  : "flex min-w-0 flex-col gap-field border-b border-line px-section py-row"
-              }
+              className="flex h-12 shrink-0 flex-col justify-center gap-field border-b border-line px-section"
+              title={workspace ?? undefined}
             >
-              {workspace !== null && (
-                <span className="min-w-0 truncate font-mono text-meta text-ink" title={workspace}>
-                  {workspace}
+              <div className="flex min-w-0 items-center gap-field leading-none">
+                <span
+                  className={
+                    minimised
+                      ? "sr-only"
+                      : "font-semibold text-emphasis tracking-tight text-foreground"
+                  }
+                >
+                  sync
                 </span>
-              )}
+                <span
+                  className={
+                    minimised
+                      ? "sr-only"
+                      : "font-mono text-meta uppercase tracking-wider text-muted-foreground"
+                  }
+                >
+                  console
+                </span>
+              </div>
               <Link
                 to="/settings?group=github-connection"
-                className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
-                title="Connections — Settings"
+                className={
+                  minimised
+                    ? "sr-only"
+                    : "flex min-w-0 items-center gap-row text-meta leading-none text-ink-muted hover:text-ink"
+                }
+                title="Connections - Settings"
               >
                 <span className="shrink-0">local dev</span>
-                <span aria-hidden="true">·</span>
+                <span aria-hidden="true">&middot;</span>
                 <span className="min-w-0 truncate">
                   {setupQuery.isPending
-                    ? "git: asking…"
+                    ? "git: asking..."
                     : forgeLogin !== null
                       ? `git: ${forgeLogin}`
                       : "git: not connected"}

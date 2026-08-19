@@ -122,8 +122,11 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/graph",
-    reachedFrom: "a workspace in the switcher",
-    nav: true,
+    reachedFrom: "the Overview's dependency-graph panel",
+    // Out of the rail on the owner's direction, 2026-08-18: the Overview draws the graph
+    // panel itself, so a rail button for the full canvas was a second door to a screen one
+    // click away. The route stays — the panel links here and the palette still finds it.
+    nav: false,
     label: "Dependency graph",
     level: "Codebase",
     question: "What does this workspace's whole indexed call graph look like, file by file?",
