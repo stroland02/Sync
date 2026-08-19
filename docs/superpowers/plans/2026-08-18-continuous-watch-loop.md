@@ -206,3 +206,18 @@ surprises:
   vendor webhooks only; GitHub's designed ingress is in scope as item 8. The cheap-poll cascade
   and the never-on-a-fixed-clock feed rule are adopted as constraints from the specs rather than
   re-decided here.
+- **2026-08-18 (owner, multiple choice).** Four decisions taken directly:
+  1. **Triggers: all three families**, in tick form so no listener exists in a local-first
+     deployment — vendor-artifact polls; a repo-HEAD poll that re-indexes on movement (the
+     local-honest form of M2's push webhook, since a webhook cannot reach loopback); and a
+     detection pass over the observed-telemetry store so drift already ingested escalates
+     severity. Listeners stay refused per the standing rulings.
+  2. **Default reaction: auto-PR for mechanically-safe breaking changes only**; everything else
+     is a notified finding. Per-repo policy overrides later via the settings surface.
+  3. **Cost: budget-capped ticks** — a per-day model-spend ceiling and a findings-per-tick
+     limit, overflow queued visibly to the next tick, batch remediation routed to the Batches
+     API per `latency-architecture.md:153`. Cheap polls are never budgeted; they are near-free
+     by architectural requirement.
+  4. **Notification: GitHub-native.** The verified pull request is itself the notification for
+     remediated changes; non-PR findings open a GitHub issue on the watched repository. This is
+     B94's first delivery destination; outbound webhooks remain open question 2.

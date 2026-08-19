@@ -605,6 +605,25 @@ def registered_adapters() -> tuple[RegisteredAdapter, ...]:
     return tuple(sorted(entries, key=lambda entry: entry.vendor_id))
 
 
+def generated_spec_source(vendor_id: str, ref: str) -> SpecSource:
+    """What a generated vendor's manifest says about its specification at one SDK commit.
+
+    The watch tick's probe: reading a manifest at two refs and comparing
+    `SpecSource.spec_hash` is how "did the specification move" is answered without
+    downloading a specification, which the substrate spec makes an architectural
+    requirement. Exposed here rather than reimplemented in `sync.watch` because
+    `_spec_source` already owns the URL shape, the failure wording, and the refusal to
+    resolve a broken manifest to a default.
+
+    Raises `KeyError` for a vendor the generated route does not serve -- the caller asked
+    by name, and the coded and MCP routes have no manifest to read.
+    """
+    vendor = _generated_vendors().get(vendor_id)
+    if vendor is None:
+        raise KeyError(f"no generated-SDK vendor is configured as '{vendor_id}'")
+    return _spec_source(vendor, ref)
+
+
 def _builders(vendor_id: str) -> tuple[Callable, Callable]:
     """The staging and loading pair for a vendor, coded first and configured second.
 

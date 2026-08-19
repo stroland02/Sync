@@ -142,6 +142,7 @@ forbidden_modules = [
     "sync.rehearse",
     "sync.context",
     "sync.runner",
+    "sync.watch",
 ]
 
 [[tool.importlinter.contracts]]
@@ -163,5 +164,25 @@ forbidden_modules = ["claude_agent_sdk"]
 # it: what this defends is that no module in `sync.remediate` names the SDK itself, so
 # substituting a runner substitutes every line that knows a model exists. Forbidding the
 # chain would forbid the arrangement the contract was written to require.
+allow_indirect_imports = true
+
+# The watch tick decides; it never spends. Same shape as the remediate contract: the tick
+# reuses `cli`'s scan composition, and that chain reaches the SDK through `sync.runner`
+# legitimately -- what is forbidden is any line in `sync.watch` naming the SDK itself.
+[[tool.importlinter.contracts]]
+name = "sync.watch cannot import a model SDK"
+type = "forbidden"
+source_modules = ["sync.watch"]
+forbidden_modules = ["claude_agent_sdk"]
+allow_indirect_imports = true
+
+# The GitHub-issue notifier lives in `sync.forge` and reaches the tick only as an injected
+# callable, wired in `cli`. Direct imports are forbidden so the injection point stays the
+# only route; the indirect chain through `sync.cli` is the wiring itself.
+[[tool.importlinter.contracts]]
+name = "sync.watch cannot import sync.forge"
+type = "forbidden"
+source_modules = ["sync.watch"]
+forbidden_modules = ["sync.forge"]
 allow_indirect_imports = true
 

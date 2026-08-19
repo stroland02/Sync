@@ -684,3 +684,56 @@ CREATE TABLE IF NOT EXISTS index_run (
 );
 
 CREATE INDEX IF NOT EXISTS index_run_latest_idx ON index_run (repo_id, started_at DESC);
+
+-- Grain: one row per (repo_id, vendor_id) pair -- one watched integration, whatever its state.
+-- Not per check (that is `vendor_cursor`, plus `intake_attempt` for the fetches) and not per
+-- vendor: two repositories bound to one vendor are two subscriptions with two policies.
+--
+-- Rows are SEEDED from graph bindings -- every distinct current (repo_id, vendor_id) pair in
+-- `call_site` whose vendor a registered adapter serves -- so connecting an integration *is*
+-- indexing it. The operator's part is overrides only: `paused`, `cadence`, `policy`. That is why
+-- the seed writes with ON CONFLICT DO NOTHING and never deletes -- a re-derivation that updated
+-- would silently revert every operator edit on every tick, and one that deleted would unsubscribe
+-- a repository because one pass failed to bind it.
+--
+-- `policy` is 'auto_pr_breaking' (owner decision 2, 2026-08-18: auto-PR for mechanically-safe
+-- breaking changes only), 'notify_only', or 'auto_pr_safe'. `cadence` is 'hourly' or 'daily',
+-- defaulted by adapter kind at seed time (generated probes are one small fetch; coded and MCP
+-- staging is dearer). Named in comments rather than CHECKs for the reason `severity` is.
+--
+-- No foreign key anywhere: `call_site` rows retract rather than delete, but a subscription is an
+-- operator-facing durable row like `finding_dismissal`, and it outlives any one binding row.
+CREATE TABLE IF NOT EXISTS watch_subscription (
+    repo_id    TEXT NOT NULL,
+    vendor_id  TEXT NOT NULL,
+    paused     BOOLEAN NOT NULL DEFAULT false,
+    cadence    TEXT NOT NULL DEFAULT 'daily',
+    policy     TEXT NOT NULL DEFAULT 'auto_pr_breaking',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (repo_id, vendor_id)
+);
+
+-- Grain: one row per vendor_id -- where the watch loop's version cursor sits for that vendor.
+-- Per vendor and not per subscription, because a vendor's newest version is a fact about the
+-- vendor: two subscribed repositories share one probe and one scan window, and a per-repo cursor
+-- would fetch the same manifest twice to learn the same answer.
+--
+-- `last_seen_version` is the last version a scan ran to (for a generated vendor, the SDK repo
+-- commit whose manifest was read), or the baseline the first tick established. NULL version on
+-- an existing row is never written over a real one -- the advance COALESCEs -- so a
+-- checked-but-unprobeable tick can stamp `last_checked_at` without erasing where the cursor sits.
+--
+-- Three timestamps two of which are often equal: `last_checked_at` is the last probe, whatever
+-- it found; `last_moved_at` is the last probe that found movement. Staleness apart from
+-- liveness: an old `last_moved_at` under a fresh `last_checked_at` is a quiet vendor, and the
+-- same old value under an old `last_checked_at` is a watch loop that stopped running.
+--
+-- The cursor advances in the same transaction as the scan rows it describes, so at-least-once
+-- delivery composes with the idempotent stages instead of double-counting.
+CREATE TABLE IF NOT EXISTS vendor_cursor (
+    vendor_id         TEXT PRIMARY KEY,
+    last_seen_version TEXT,
+    last_checked_at   TIMESTAMPTZ,
+    last_moved_at     TIMESTAMPTZ
+);

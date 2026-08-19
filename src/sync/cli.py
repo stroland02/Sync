@@ -2271,6 +2271,93 @@ def reconcile_pull_requests(args: argparse.Namespace) -> int:
     return 0
 
 
+def forge_notify_reason(tick_reason: str) -> str:
+    """The tick's free-text decision, folded onto the forge's closed vocabulary.
+
+    The forge refuses a reason outside `NOTIFY_REASONS`, because free text cannot be
+    aggregated -- the same argument the abandonment vocabulary makes. The tick's finer
+    distinctions survive in its printed line; what the issue carries is which of the three
+    stories applies: policy declined, routing declined, or the budget deferred.
+    """
+    lowered = tick_reason.lower()
+    if "policy" in lowered or "severity" in lowered:
+        return "policy-notify-only"
+    if "cap" in lowered or "queued" in lowered:
+        return "budget-deferred"
+    return "not-mechanically-safe"
+
+
+def watch(args: argparse.Namespace) -> int:
+    """One tick of the continuous watch loop, callable by any clock.
+
+    The clock is deliberately not ours -- cron, Task Scheduler, or a CI schedule calls
+    `sync watch --once` and the tick is idempotent, which is the same contract every other
+    stage carries. The forge, the GitHub-issue notifier and the reconcile composition are all
+    wired here rather than inside `sync.watch`, because that package never imports
+    `sync.forge`: the tick takes them as callables.
+    """
+    from sync.forge.notify import IssueNotifier
+    from sync.watch.tick import tick
+
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    def notify(notified, say) -> None:
+        """Owner decision 4: findings that did not get a pull request open a GitHub issue on
+        the watched repository, idempotently. A repository whose remote was never recorded is
+        said out loud and skipped -- an issue cannot be opened on an address nobody stored."""
+        notifier = IssueNotifier()
+        for item in notified:
+            remote = store.repo_settings(item.repo_id).remote_url
+            if remote is None:
+                say(
+                    f"watch: notify: {item.repo_id}: no remote recorded in repo_settings; "
+                    f"finding {item.finding.id} has nowhere to be reported"
+                )
+                continue
+            site = store.get_call_site(item.finding.call_site_id)
+            change = (
+                store.get_vendor_change(item.finding.vendor_change_id)
+                if item.finding.vendor_change_id is not None
+                else None
+            )
+            repo = RepoRef(repo_id=item.repo_id, url=remote, local_path="", head_sha="")
+            outcomes = notifier.notify_findings(
+                repo, [(item.finding, site, change)], forge_notify_reason(item.reason)
+            )
+            for outcome in outcomes:
+                say(
+                    f"watch: notify: {item.repo_id}: {outcome.status} -- {outcome.title}"
+                    + (f" ({outcome.url})" if outcome.url else f": {outcome.detail}")
+                )
+
+    def reconcile() -> None:
+        updated = reconcile_pull_request_outcomes(
+            store,
+            GitHubForge(),
+            lambda repo_id: RepoRef(
+                repo_id=repo_id,
+                url=f"https://github.com/{repo_id}",
+                local_path="",
+                head_sha="",
+            ),
+        )
+        print(f"reconciled {len(updated)} pending pull request outcome(s)")
+
+    tick(
+        store,
+        cache_dir=Path(args.cache),
+        repo_id=args.repo_id,
+        vendor_id=args.vendor,
+        dry_run=args.dry_run,
+        from_version=args.from_version,
+        to_version=args.to_version,
+        notify=notify,
+        reconcile=reconcile,
+    )
+    return 0
+
+
 def index_repository(args: argparse.Namespace) -> int:
     """Index one checkout on disk and write its call sites into the graph.
 
@@ -2554,6 +2641,34 @@ def build_parser() -> argparse.ArgumentParser:
     rehearse_parser.add_argument("--run-id", default=None, help="custom run identifier segment for checkpoint thread IDs")
     rehearse_parser.add_argument("--dsn", default=DEFAULT_DSN, help="Postgres DSN for graph and checkpoints")
     rehearse_parser.set_defaults(func=rehearse_entry)
+
+    watch_parser = sub.add_parser(
+        "watch",
+        help="one idempotent tick of the continuous watch loop over every due subscription",
+    )
+    # Required although it is the only mode: the tick is the contract and the clock is the
+    # operator's, so `sync watch` bare must refuse rather than be read as starting a daemon
+    # Sync deliberately does not ship.
+    watch_parser.add_argument(
+        "--once", action="store_true", required=True,
+        help="run one tick and exit; compose with cron, Task Scheduler, or a CI schedule",
+    )
+    watch_parser.add_argument("--repo-id", dest="repo_id", default=None,
+                              help="only subscriptions for this repository")
+    watch_parser.add_argument("--vendor", dest="vendor", default=None,
+                              help="only subscriptions for this vendor")
+    watch_parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                              help="probe and print decisions; write nothing and reconcile nothing")
+    watch_parser.add_argument(
+        "--from-version", dest="from_version", default=None,
+        help="with --to-version and --vendor: the explicit window for a coded or MCP vendor, "
+             "whose probe is not yet cheap",
+    )
+    watch_parser.add_argument("--to-version", dest="to_version", default=None)
+    watch_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    watch_parser.add_argument("--cache", default=".cache/specs",
+                              help="staging root; each vendor stages under its own subdirectory")
+    watch_parser.set_defaults(func=watch)
 
     context_parser = sub.add_parser(
         "context", help="read or write what stays true of one repository"

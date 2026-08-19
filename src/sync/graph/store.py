@@ -3315,3 +3315,91 @@ class GraphStore:
             ).fetchall()
         return [IntakeAttempt(**dict(row)) for row in rows]
 
+    def bound_repo_vendor_pairs(self) -> list[tuple[str, str]]:
+        """Every (repo_id, vendor_id) pair the graph currently binds, sorted.
+
+        Current only -- `retracted_at IS NULL` -- because this is what seeds
+        `watch_subscription`, and a binding a pass stopped finding is not a reason to
+        subscribe. Existing subscriptions are unaffected either way: the seed never deletes.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT DISTINCT repo_id, vendor_id
+              FROM call_site
+             WHERE retracted_at IS NULL
+             ORDER BY repo_id, vendor_id
+            """
+        ).fetchall()
+        return [(row["repo_id"], row["vendor_id"]) for row in rows]
+
+    def seed_watch_subscription(self, repo_id: str, vendor_id: str, *, cadence: str) -> bool:
+        """Subscribe one bound pair, touching nothing an operator may have edited.
+
+        DO NOTHING rather than DO UPDATE, and that is the contract rather than a shortcut:
+        `paused`, `cadence` and `policy` are the operator's overrides, and a derivation that
+        updated them would revert every override on every tick. Returns whether a row was
+        created, which is what the tick prints.
+        """
+        cursor = self._connect().execute(
+            """
+            INSERT INTO watch_subscription (repo_id, vendor_id, cadence)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (repo_id, vendor_id) DO NOTHING
+            """,
+            [repo_id, vendor_id, cadence],
+        )
+        return cursor.rowcount == 1
+
+    def watch_subscriptions(
+        self, *, repo_id: str | None = None, vendor_id: str | None = None
+    ) -> list[dict]:
+        """The subscriptions, optionally scoped, sorted so a tick's output is stable."""
+        clauses, params = [], []
+        if repo_id is not None:
+            clauses.append("repo_id = %s")
+            params.append(repo_id)
+        if vendor_id is not None:
+            clauses.append("vendor_id = %s")
+            params.append(vendor_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._connect().execute(
+            f"SELECT * FROM watch_subscription {where} ORDER BY repo_id, vendor_id",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def vendor_cursor(self, vendor_id: str) -> dict | None:
+        """Where the watch loop's cursor sits for one vendor, or None before the first probe."""
+        row = self._connect().execute(
+            "SELECT * FROM vendor_cursor WHERE vendor_id = %s", [vendor_id]
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def advance_vendor_cursor(
+        self,
+        vendor_id: str,
+        *,
+        checked_at: datetime,
+        last_seen_version: str | None = None,
+        moved: bool = False,
+    ) -> None:
+        """Record one probe: always the check, the version and movement only when carried.
+
+        Both COALESCEs run in the same direction -- toward keeping what is known. A touch
+        passes no version and must not erase where the cursor sits, and a probe that found
+        nothing must not un-record the last movement. Callers that just wrote scan rows call
+        this inside the same `transaction()` block, which is what the schema's grain comment
+        promises.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO vendor_cursor (vendor_id, last_seen_version, last_checked_at, last_moved_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (vendor_id) DO UPDATE SET
+                last_seen_version = COALESCE(EXCLUDED.last_seen_version, vendor_cursor.last_seen_version),
+                last_checked_at = EXCLUDED.last_checked_at,
+                last_moved_at = COALESCE(EXCLUDED.last_moved_at, vendor_cursor.last_moved_at)
+            """,
+            [vendor_id, last_seen_version, checked_at, checked_at if moved else None],
+        )
+
