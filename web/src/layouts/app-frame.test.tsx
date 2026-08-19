@@ -18,11 +18,12 @@
  * `M14-W273` is the precedent for that distinction.
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { AppFrame } from "@/layouts/app-frame"
+import { AppFrame, navRoutes, SETTINGS_NOTE } from "@/layouts/app-frame"
 import { shortcutHint } from "@/layouts/command-palette"
 import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
 import { DESTINATIONS, ROUTES } from "@/lib/routes"
@@ -57,10 +58,24 @@ afterEach(() => {
 })
 
 function renderAt(path: string) {
+  // A client, even though the two list queries above are mocked. `useChassisIdentity` calls
+  // `useQuery` directly rather than through `@/api/queries`, so the module mock never reaches it
+  // and every render threw "No QueryClient set" -- 34 failures from one missing provider.
+  //
+  // Seeded rather than merely provided. A client with no data leaves the identity query pending
+  // forever, and half this file's assertions are about chrome that only renders once a workspace
+  // is known -- so an unseeded client turns "the scope trail names the subject" into a failure
+  // about nothing. The seed is the smallest shape `useChassisIdentity` reads.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  })
+  client.setQueryData(["setup", "chassis"], { operator: { forge_login: "stroland02" } })
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <AppFrame />
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <AppFrame />
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 
@@ -77,9 +92,10 @@ function destinations(): HTMLElement {
  * duplication the owner saw in the sidebar. Every page is a workspace's page now, and a route whose
  * subject a workspace cannot supply is absent from the rail rather than inert in it.
  */
-function navRoutes() {
-  return ROUTES.filter((route) => route.nav)
-}
+// Imported from the chassis rather than redefined. This file held its own copy that filtered on
+// `nav` and never applied `navOrder`, so when the owner reordered the rail on 2026-08-18 the two
+// definitions disagreed and the assertion failed on an ordering that was correct on screen. A
+// fact written twice disagrees with itself; the component owns this one.
 
 /** A concrete URL for a route, since `:findingId` matches nothing on its own. */
 function concrete(path: string): string {
@@ -135,14 +151,24 @@ describe("the top bar sits above the chassis", () => {
     expect(column!.contains(sidebar)).toBe(false)
   })
 
-  it("carries the scope trail, and it names the subject the address is inside", () => {
+  /**
+   * The scope-trail guard retired with its subject, 2026-08-19.
+   *
+   * It asserted that the banner carries a `navigation` landmark named "Scope" naming the
+   * workspace and the vendor. The owner removed the top-bar directory, and `ScopeSwitchers` is
+   * now mounted nowhere — so this asserted against a component the console does not render, and
+   * had been failing since.
+   *
+   * **What it guaranteed is not dropped.** That the top bar names the workspace is carried by
+   * `EnvironmentBadge`, asserted below; that a screen says what contains what is carried by
+   * `Breadcrumbs` and its own tests. `M14-W273` is the precedent this file already records: a
+   * test whose subject retires may go, but not the coverage it carried.
+   */
+  it("names the workspace in the top bar, which is what the scope trail used to carry", () => {
     renderAt("/repositories/org%2Fone/vendors/stripe")
 
     const banner = screen.getByRole("banner")
-    const trail = within(banner).getByRole("navigation", { name: /scope/i })
-
-    expect(within(trail).getByText("org/one")).toBeTruthy()
-    expect(within(trail).getByText("stripe")).toBeTruthy()
+    expect(banner.textContent ?? "").toContain("org/one")
   })
 
   it("offers the command palette a trigger a pointer can find", () => {
@@ -252,14 +278,14 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     // see what they are tabbing through, and has to keep seeing it after any pointer has left.
     renderAt("/")
 
-    const detectors = within(destinations()).getByRole("link", { name: /detectors/i })
-    fireEvent.focusIn(detectors)
+    const railLink = within(destinations()).getByRole("link", { name: /call sites/i })
+    fireEvent.focusIn(railLink)
     expect(panel().getAttribute("data-state")).toBe("expanded")
 
     fireEvent.pointerLeave(reserve())
     expect(panel().getAttribute("data-state")).toBe("expanded")
 
-    fireEvent.focusOut(detectors)
+    fireEvent.focusOut(railLink)
     expect(panel().getAttribute("data-state")).toBe("minimised")
   })
 
@@ -268,11 +294,11 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     // unconditionally would flicker the panel shut and open again on every arrow key.
     renderAt("/")
 
-    const detectors = within(destinations()).getByRole("link", { name: /detectors/i })
+    const railLink = within(destinations()).getByRole("link", { name: /call sites/i })
     const settings = within(destinations()).getByRole("link", { name: /settings/i })
 
-    fireEvent.focusIn(detectors)
-    fireEvent.focusOut(detectors, { relatedTarget: settings })
+    fireEvent.focusIn(railLink)
+    fireEvent.focusOut(railLink, { relatedTarget: settings })
 
     expect(panel().getAttribute("data-state")).toBe("expanded")
   })
@@ -438,7 +464,7 @@ describe("one sidebar carries every area", () => {
     expect(settings.getAttribute("href")).toBe("/settings")
     expect(settings.getAttribute("aria-disabled")).toBeNull()
     expect(ROUTES.map((route) => route.label)).not.toContain("Settings")
-    expect(settings.getAttribute("title")).toBe("Settings — read-only until the write path lands")
+    expect(settings.getAttribute("title")).toBe(SETTINGS_NOTE)
   })
 
   it("holds every parameterless route as a real link from a single screen", () => {
@@ -560,12 +586,17 @@ describe("the sidebar carries the destinations", () => {
    * survives is both halves of the original claim, split by the condition that actually governs.
    */
   it("links a row whose subject the address already supplies", () => {
-    renderAt("/repositories/org%2Fone/observed")
+    // Signals used to be this row and is a Logs tab now (owner ruling, 2026-08-18), so the
+    // subject moved rather than the property. Asserted against a route still in the rail: the
+    // claim is that a destination the address can build renders as a link, not which one.
+    renderAt("/repositories/org%2Fone/call-sites")
 
-    const row = destinations().querySelector('[data-destination="/repositories/:repoId/observed"]')
+    const row = destinations().querySelector(
+      '[data-destination="/repositories/:repoId/call-sites"]'
+    )
     expect(row).not.toBeNull()
     expect(row!.tagName).toBe("A")
-    expect(row!.getAttribute("href")).toBe("/repositories/org%2Fone/observed")
+    expect(row!.getAttribute("href")).toBe("/repositories/org%2Fone/call-sites")
   })
 
 
@@ -667,7 +698,7 @@ describe("focus follows the route", () => {
     // Clicking it is an in-app navigation rather than a contrived route swap. This used to click
     // the Observe rail item; the rail is gone, and the destination it led to serves the same
     // purpose here.
-    fireEvent.click(within(destinations()).getByRole("link", { name: /detectors/i }))
+    fireEvent.click(within(destinations()).getByRole("link", { name: /call sites/i }))
 
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector("main")))
   })

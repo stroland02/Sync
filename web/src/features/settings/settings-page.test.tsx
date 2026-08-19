@@ -151,7 +151,10 @@ describe("SettingsPage sub-navigation and setting cards", () => {
     fireEvent.click(adaptersBtn)
 
     expect(await screen.findByText("Registered Adapters & Vendor Feeds")).toBeTruthy()
-    expect(screen.getByText("stripe")).toBeTruthy()
+    // `getAllByText` because the adapter row now carries the vendor in more than one cell since
+    // the "Last asked" column landed. The claim is that the inventory renders the vendor, not
+    // that it renders it exactly once.
+    expect(screen.getAllByText("stripe").length).toBeGreaterThan(0)
   })
 
   it("renders About Sync group with platform documentation and explanations", async () => {

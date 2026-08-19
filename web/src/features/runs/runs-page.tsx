@@ -84,6 +84,10 @@ export function RunsPage() {
           is written once in `CORPUS_SCOPE` rather than three times across three screens. */}
       <div className="flex items-center gap-row">
         <h2 className="text-section">The repair corpus</h2>
+        {/* A claim, not an argument: one row is one attempt, and a finding retried three times
+            is three rows here and one finding everywhere else. Short and visible; the why is
+            in the ⓘ beside it. */}
+        <span className="text-meta text-ink-muted">one row is one attempt, and counts once as a finding</span>
         <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
         <InfoHint label="About the repair corpus">
           One row is one <em>attempt</em>, not one finding: a finding retried three times writes

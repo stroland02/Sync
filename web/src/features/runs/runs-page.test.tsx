@@ -33,7 +33,7 @@ const settled = (data: unknown) => ({ isPending: false, isError: false, isSucces
 
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
-  useRuns: () => settled({ items: [], total: 0 }),
+  useRuns: () => settled({ items: [], total: 0, next_offset: null, by_disposition: {}, unfiltered_total: 0 }),
   useAbandonment: () => settled({ groups: [] }),
 }))
 
@@ -68,22 +68,29 @@ describe("the runs screen", () => {
     const { container } = renderRuns()
     const text = container.textContent ?? ""
 
-    // The whole reason this screen is allowed to exist inside a scoped hierarchy. Deleting this
-    // sentence leaves a fleet-wide count sitting under one workspace's breadcrumb, which is the
-    // `codebases-panel` defect exactly -- one figure printed under every card it did not describe.
-    expect(text).toContain("not narrowed to this workspace")
+    // The claim, not its wording. It moved from a bordered paragraph to a `ScopeChip` reading
+    // "all workspaces" in the 2026-08-19 sweep, and pinning the old sentence failed a change
+    // that broke nothing -- which `test-discipline.md` names directly: assert the property the
+    // code promises, never an incidental string.
+    //
+    // What must hold is that a reader who never hovers can tell the figures are not this
+    // workspace's. Deleting that leaves a fleet-wide count under one workspace's breadcrumb,
+    // which is the `codebases-panel` defect exactly.
+    expect(text).toMatch(/all workspaces|not narrowed to this workspace/i)
   })
 
-  it("says why it cannot be narrowed, so the limit reads as a schema fact and not an oversight", () => {
-    const { container } = renderRuns()
-    const text = container.textContent ?? ""
-
-    // "This number is fleet-wide" invites somebody to file a bug asking for a repo filter. Naming
-    // the cause closes that: `migration_outcome` carries no repository at all, deliberately, and
-    // that is what makes the corpus safe to aggregate across customers in the first place.
-    expect(text).toContain("migration_outcome")
-    expect(text).toMatch(/no repository|records no repository|stores no repository/i)
-  })
+  /**
+   * The "why it cannot be narrowed" guard retired with the owner's ⓘ ruling of 2026-08-19.
+   *
+   * It required `migration_outcome` and "stores no repository" in the rendered text. That is the
+   * *argument* for the scope rather than the scope itself, and the amendment moves exactly that
+   * behind the hover: the claim stays visible in the fewest honest words, the reasoning does not.
+   *
+   * **The concern it recorded is still met.** Its comment said a bare "this is fleet-wide"
+   * invites a bug report asking for a repository filter — the `ScopeChip`'s hover answers that,
+   * naming the table and the schema decision, one hover away rather than one paragraph down. The
+   * claim itself is asserted above.
+   */
 
   it("carries no page header, because density is dense", () => {
     renderRuns()
@@ -100,7 +107,9 @@ describe("the runs screen", () => {
     // `migration_outcome` row is one *attempt*, not one finding. A finding retried three times is
     // three rows here and one finding everywhere else, and a reader comparing this screen against
     // the Overview will otherwise conclude one of them is wrong.
+    // Asserted as the property rather than the sentence: one row is one attempt, and it counts
+    // once as a finding. The wording moved in the sweep; the grain did not.
     expect(text).toMatch(/attempt/i)
-    expect(text).toContain("counts once")
+    expect(text).toMatch(/counts once/i)
   })
 })

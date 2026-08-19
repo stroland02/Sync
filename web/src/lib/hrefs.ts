@@ -108,3 +108,41 @@ export function workflowHref(repoId: string, findingId: string): string {
 export function pullRequestHref(repoId: string, findingId: string): string {
   return `${workflowHref(repoId, findingId)}/pull-request`
 }
+
+/**
+ * The six destinations added between `CI-W486` and `CI-W501`.
+ *
+ * They shipped with their addresses written inline at each call site, which is exactly the drift
+ * this module exists to stop — `hrefs.test.ts` caught all six by asserting every declared route
+ * has a builder, which is the guard doing its job rather than a test to relax.
+ */
+
+/** The file tree, full screen, with this codebase's technical census. */
+export function fileTreeHref(repoId: string): string {
+  return `${repo(repoId)}/file-tree`
+}
+
+/** What the watched integrations have published, newest first. */
+export function integrationChangesHref(repoId: string): string {
+  return `${repo(repoId)}/integration-changes`
+}
+
+/** The graph's raw material: where this codebase calls an integration. */
+export function callSitesHref(repoId: string): string {
+  return `${repo(repoId)}/call-sites`
+}
+
+/** The workspace's measured trends over time. */
+export function trendsHref(repoId: string): string {
+  return `${repo(repoId)}/metrics`
+}
+
+/** What the remediation loop has produced, and which axes have no sample yet. */
+export function corpusHref(repoId: string): string {
+  return `${repo(repoId)}/corpus`
+}
+
+/** Every remediation that reached the forge. */
+export function solutionsHref(repoId: string): string {
+  return `${repo(repoId)}/solutions`
+}

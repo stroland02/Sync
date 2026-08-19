@@ -26,6 +26,12 @@ import {
   graphHref,
   overviewHref,
   pullRequestHref,
+  fileTreeHref,
+  integrationChangesHref,
+  callSitesHref,
+  trendsHref,
+  corpusHref,
+  solutionsHref,
   runsHref,
   servicesHref,
   signalsHref,
@@ -64,6 +70,12 @@ describe("every builder lands on a declared route", () => {
     ["finding", findingHref(REPO, FINDING)],
     ["workflow", workflowHref(REPO, FINDING)],
     ["pull request", pullRequestHref(REPO, FINDING)],
+    ["file tree", fileTreeHref(REPO)],
+    ["integration changes", integrationChangesHref(REPO)],
+    ["call sites", callSitesHref(REPO)],
+    ["trends", trendsHref(REPO)],
+    ["corpus", corpusHref(REPO)],
+    ["solutions", solutionsHref(REPO)],
   ]
 
   for (const [name, href] of cases) {

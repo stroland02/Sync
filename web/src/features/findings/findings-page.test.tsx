@@ -51,6 +51,10 @@ const settled = (data: unknown) => ({
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
   useWorkspaceFindings: () => settled(mockState.page),
+  // The page gates its body on this too -- an unmocked detector roll-up stays pending and the
+  // table never renders, so every assertion below fails on a loading state rather than on its
+  // subject. The names matter: the triage header reports which detectors stood behind a zero.
+  useDetectors: () => settled({ detectors: [{ detector: "vendor_change", total: 1 }], by_rung: {}, total_open_findings: 1 }),
 }))
 
 function page(items: RiskRow[], overrides: Partial<VendorFindingsPage> = {}) {
@@ -132,14 +136,22 @@ describe("the findings screen", () => {
   })
 
   it("distinguishes an empty workspace from one nothing has looked at", () => {
-    mockState.page = page([])
-    const { container } = renderFindings()
-    const text = container.textContent ?? ""
+    // Absence apart from zero, which is one of the four distinctions this console exists for.
+    // "No open findings" on its own reads as a clean bill of health, so the screen has to say
+    // which nothing it is -- and the test now asserts *both* sides, which is what its name
+    // promised. It previously ran one fixture and asserted the other branch's wording, so it
+    // failed against a screen that was right.
+    mockState.page = page([], { indexed_at: null })
+    const before = renderFindings().container.textContent ?? ""
+    expect(before).toMatch(/nothing has checked/i)
+    expect(before).not.toMatch(/no open findings under/i)
 
-    // Absence apart from zero, which is one of the four protected distinctions. "No open findings"
-    // on its own reads as a clean bill of health; it has to say what was actually checked.
-    expect(text).toMatch(/no open finding/i)
-    expect(text).toContain("indexed")
+    cleanup()
+
+    mockState.page = page([], { indexed_at: "2026-08-18T00:00:00Z" })
+    const after = renderFindings().container.textContent ?? ""
+    expect(after).toMatch(/no open findings under/i)
+    expect(after).not.toMatch(/nothing has checked/i)
   })
 
   it("carries no page header, because density is dense", () => {

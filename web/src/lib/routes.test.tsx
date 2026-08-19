@@ -139,9 +139,18 @@ describe("one region, and what a workspace can bind", () => {
       expect(route.params).toEqual(["repoId"])
     }
     for (const route of reached) {
-      expect(route.params.length).toBeGreaterThan(1)
-      // Anything the rail cannot reach says where it IS reached from, or a reader meets a dead end.
+      // **Amended 2026-08-19.** This required every non-rail route to need more than a workspace,
+      // which was true while the rail was the only way in. The owner's tab rulings added a second
+      // reason to sit outside it: Detectors, Trends, Corpus, Changes and Signals are tabs, and the
+      // two map pages open from the Overview's panels -- all buildable from a workspace alone and
+      // all deliberately not rail rows, because a second door to a screen one click away is
+      // clutter rather than reach.
+      //
+      // What still holds, and is the half that protects a reader: **a route outside the rail must
+      // say where it is reached from.** Without that a declared route is a dead end nobody can
+      // find, which is the defect this guard was written for.
       expect(route.reachedFrom).not.toBeNull()
+      expect(route.reachedFrom).not.toBe("")
     }
   })
 

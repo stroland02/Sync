@@ -46,6 +46,11 @@ function settled(items: RunRow[], total = items.length) {
       items,
       total,
       next_offset: null,
+      // `sync.dashboard.fleet.runs` always returns these, computed before the outcome filter
+      // applies -- which is what lets the rail's counts say what each selection would return.
+      // Omitting them made every consumer that reads the unfiltered figures crash.
+      by_disposition: {},
+      unfiltered_total: total,
     },
   }
 }

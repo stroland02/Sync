@@ -77,7 +77,7 @@ const DESTINATION_ICON: Record<string, LucideIcon> = {
  * true. The write path landed 2026-08-18 — merge policy, merge method and base branch store
  * and save — so the note says what is editable and names the one thing that never will be.
  */
-const SETTINGS_NOTE =
+export const SETTINGS_NOTE =
   "Settings — automation policy is editable; the codebase's own context file is shown, never written"
 
 /** Where a row goes when its own subject is not bound: the screen a codebase is selected on. */
@@ -226,7 +226,7 @@ function DestinationRow({
  * a finding cannot be built from the selected workspace alone, so it is reached from the page that
  * holds its subject and is absent here. Absent is honest; present and inert reads as broken.
  */
-function navRoutes(): RouteEntry[] {
+export function navRoutes(): RouteEntry[] {
   // The owner's reading order, 2026-08-18, held by `navOrder` rather than by registry
   // position — the rail stopped grouping by level, so its order is a declared product
   // decision and an entry without one sorts last, loudly at the bottom rather than lost.
