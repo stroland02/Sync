@@ -24,6 +24,7 @@ afterEach(() => {
 
 function row(overrides: Partial<RiskRow> = {}): RiskRow {
   return {
+    name: "stripe-postcharges-4b1c9e",
     file: "src/billing/charge.ts",
     line: 42,
     symbol: "createCharge",
