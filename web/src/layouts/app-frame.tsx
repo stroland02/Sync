@@ -386,15 +386,26 @@ function AppSidebar({ pathname }: { pathname: string }) {
               differently-named rows is a different design, and `routes.test.tsx` holds the
               wording apart. The heading row stays in the DOM at the rail width with its text
               `sr-only`, exactly as the row labels do, so no icon moves across the reveal. */}
-          {WORKFLOW_STAGES.map((stage) => {
+          {WORKFLOW_STAGES.map((stage, stageIndex) => {
             const rows = navRoutes().filter((route) => route.stage === stage)
             if (rows.length === 0) return null
             return (
               <SidebarGroup key={stage} className="px-row py-0">
+                {/* The heading keeps its height at the rail width so no icon moves across the
+                    reveal — but an invisible word left a 28px blank the owner read as broken
+                    spacing, so the rail shows a centred hairline instead: the same group
+                    boundary, drawn in the only channel a 48px column has. The first group
+                    skips it, or it doubles the wordmark row's own hairline. */}
                 <div data-stage-heading={stage} className="flex h-7 items-center px-row">
                   <span className={minimised ? "sr-only" : "text-meta text-ink-muted"}>
                     {stage}
                   </span>
+                  <span
+                    aria-hidden="true"
+                    className={
+                      minimised && stageIndex > 0 ? "mx-auto h-px w-4 bg-line" : "hidden"
+                    }
+                  />
                 </div>
                 <SidebarGroupContent>
                   <SidebarMenu className="gap-0">
