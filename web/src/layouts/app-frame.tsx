@@ -24,6 +24,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Link, NavLink, Outlet, useLocation } from "react-router"
 
 import { useRepositories } from "@/api/queries"
+import { WorkspaceSwitcher } from "@/layouts/workspace-switcher"
 import { ErrorSurface } from "@/components/error-surface"
 import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
@@ -139,6 +140,7 @@ function EnvironmentBadge() {
   const { pathname } = useLocation()
   const { workspace, forgeLogin, pending } = useChassisIdentity(pathname)
   return (
+    <span className="flex min-w-0 items-center gap-field">
     <Link
       to="/settings?group=github-connection"
       className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
@@ -158,6 +160,10 @@ function EnvironmentBadge() {
         {pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
       </span>
     </Link>
+    {/* Outside the Link, not inside it: a menu trigger nested in an anchor is a nested
+        interactive element, and the anchor swallows the press. */}
+    <WorkspaceSwitcher current={workspace} />
+    </span>
   )
 }
 
