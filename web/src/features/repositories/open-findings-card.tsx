@@ -127,6 +127,7 @@ export function OpenFindingsCard({ repoId }: { repoId: string }) {
             <EmptyState
               headline={`No open finding against any vendor in ${repoId}.`}
               detail="The API answered, and the graph holds no open finding for this repository. That is a measured zero rather than silence — but it is not a verdict that nothing is wrong: a detector reports what it can see, and the index coverage card beside this one is where what Sync has not read is stated."
+          command={`uv run sync scan --repo-id ${repoId}`}
             />
           ) : (
             <>

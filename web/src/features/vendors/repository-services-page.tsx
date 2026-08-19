@@ -237,6 +237,7 @@ export function RepositoryServicesPage() {
         <EmptyState
           headline={`No API service is bound to ${repoId}.`}
           detail="This repository was never indexed, or it was indexed and nothing bound to a vendor was found. Those are the same answer here: the index has no configuration table, so a repository it has never seen a call site from is indistinguishable from one nobody ever configured."
+          command={`uv run sync index --repo-id ${repoId}`}
         />
       ) : (
         <Table>

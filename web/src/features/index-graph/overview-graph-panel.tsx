@@ -75,6 +75,7 @@ export function OverviewGraphPanel({ repoId }: { repoId: string }) {
         <EmptyState
           headline="No call site has been indexed for this codebase."
           detail="A vendor call appears here once INDEX has run against this repository and found one. A repository the index never ran against shows the same nothing as one that calls no vendor, and neither is a claim that it calls none."
+          command={`uv run sync index --repo-id ${repoId}`}
         />
       ) : (
         <>

@@ -68,6 +68,7 @@ export function DetectorsSummaryCard() {
             <EmptyState
               headline="No detector has an open finding."
               detail="The API answered, and no open finding names a detector — there are no open findings to attribute. That is an answer, not a failure."
+          command="uv run sync scan --repo-id <repo>"
             />
           ) : (
             <>

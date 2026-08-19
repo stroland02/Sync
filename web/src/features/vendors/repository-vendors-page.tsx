@@ -118,6 +118,7 @@ export function RepositoryVendorsPage() {
         <EmptyState
           headline="No vendor is attached to this repository."
           detail="A vendor appears here once INDEX finds a call site binding this repository to it."
+          command={`uv run sync index --repo-id ${repoId}`}
         />
       ) : (
         <div className="flex flex-col gap-section">

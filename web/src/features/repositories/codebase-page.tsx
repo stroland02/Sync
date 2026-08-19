@@ -98,6 +98,7 @@ function MapsRegion({ repoId }: { repoId: string }) {
       <EmptyState
         headline="No call site has been indexed for this codebase."
         detail="Both maps draw indexed call sites, and there are none. A vendor call appears once INDEX has run against this repository and found one -- a repository the index never ran against shows the same nothing as one that calls no vendor, and neither is a claim that it calls none."
+          command={`uv run sync index --repo-id ${repoId}`}
       />
     )
   }

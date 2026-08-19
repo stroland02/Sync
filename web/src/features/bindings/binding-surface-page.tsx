@@ -317,6 +317,7 @@ function CallSitesEmptyState({
     <EmptyState
       headline="No call site in the index is bound to this operation."
       detail={`The API answered with an empty list scoped to ${repoId}. Either nothing in this workspace calls the operation, or this workspace has not been indexed at all — the index cannot tell the two apart.`}
+          command="uv run sync index --repo-id <repo>"
     />
   )
 }
@@ -572,6 +573,7 @@ function BindingSurfaceDetail({
               <EmptyState
                 headline="The vendor has never changed this operation."
                 detail="The API answered with an empty list. No ingested feed names a change against this operation — that is an answer, not a failure."
+          command="uv run sync scan --repo-id <repo>"
               />
             ) : (
               <>

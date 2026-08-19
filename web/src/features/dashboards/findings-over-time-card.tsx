@@ -69,6 +69,7 @@ export function FindingsOverTimeCard() {
         <EmptyState
           headline="No finding has been recorded."
           detail="The graph holds no finding at any severity, so there is no series to draw. This is a read that found nothing rather than a read that did not happen — but it is also a young deployment, so an empty chart means DETECT has produced nothing yet, not that anything was lost."
+          command="uv run sync scan --repo-id <repo>"
         />
       ) : (
         <div className="flex flex-col gap-field">

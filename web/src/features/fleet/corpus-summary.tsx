@@ -99,6 +99,7 @@ export function CorpusSummaryCard() {
             <EmptyState
               headline="The graph holds no repair attempts."
               detail="The API answered, and migration_outcome has no rows. That is an answer, not a failure — nothing has reached a patch attempt on this database yet."
+          command="uv run sync run --repo-id <repo> --vendor <vendor> --from-version <a> --to-version <b>"
             />
           ) : (
             <>

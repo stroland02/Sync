@@ -104,6 +104,7 @@ export function CodebaseFactsCard({ repoId }: { repoId: string }) {
       <EmptyState
         headline="No technical census yet."
         detail="The census is computed when the index walks this codebase, and no pass has run since it existed. `uv run sync index --repo .` produces one."
+          command={`uv run sync index --repo-id ${repoId}`}
       />
     )
   }

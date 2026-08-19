@@ -146,6 +146,7 @@ export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
                 <EmptyState
                   headline="Telemetry is attached, and no call arrived."
                   detail={`Traffic has been watched for this repository since ${formatTimestamp(query.data.telemetry_attached_at)}, and nothing arrived in the window this answer covers. That is a measured nought: the call sites the index found were not exercised, rather than not looked at.`}
+          command={`uv run sync ingest --repo-id ${repoId} --payload <otlp.json>`}
                 />
               )
             ) : (
@@ -184,6 +185,7 @@ export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
               <EmptyState
                 headline="No shape recorded for this repository's operations."
                 detail="Either no traffic for these operations has been shaped yet, or this repository's calls did not correlate to any operation."
+          command={`uv run sync shapes --repo-id ${repoId} --payload <export.json>`}
               />
             ) : (
               <>
@@ -211,11 +213,13 @@ export function ObservedTelemetryCard({ repoId }: { repoId: string }) {
                 <EmptyState
                   headline="Telemetry was never attached, so no error window could be recorded."
                   detail="Nothing has watched this repository's traffic. An empty table here is the absence of a measurement, not a repository that ran without failing."
+          command={`uv run sync ingest --repo-id ${repoId} --payload <otlp.json>`}
                 />
               ) : (
                 <EmptyState
                   headline="No error window recorded for this repository."
                   detail="A traffic source has been watching and recorded no failure window in the period this answer covers. That is a measured nought, and it is still not a success rate — this view has no denominator and does not compute one."
+          command={`uv run sync ingest --repo-id ${repoId} --payload <otlp.json>`}
                 />
               )
             ) : (
