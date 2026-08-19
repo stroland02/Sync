@@ -230,6 +230,7 @@ def create_app(
     staging_reader: StagingReader | None = None,
     staging_writer: StagingWriter | None = None,
     facts_reader: Callable[[str], dict[str, Any] | None] | None = None,
+    call_sites_reader: Callable[..., dict[str, Any]] | None = None,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -495,6 +496,27 @@ def create_app(
             return JSONResponse({"error": "Setup reader not configured"}, status_code=501)
         return JSONResponse(setup_reader(repo_id=request.query_params.get("repo_id")))
 
+    async def call_sites_route(request: Request) -> JSONResponse:
+        """One page of a repository's call sites, with the vendor facet counted beside it.
+
+        The raw material of the graph, browsable: every other screen shows what Sync concluded,
+        and this shows what it read. Filters are passed through unvalidated for the same reason
+        the runs filter is -- a value outside the vocabulary matches nothing, and an empty page
+        is the honest answer to a stale bookmark where a 400 turns yesterday's URL into an
+        error screen.
+        """
+        if call_sites_reader is None:
+            return JSONResponse({"error": "Call sites reader not configured"}, status_code=501)
+        return JSONResponse(
+            call_sites_reader(
+                request.path_params["repo_id"],
+                vendor_id=request.query_params.get("vendor_id"),
+                path_prefix=request.query_params.get("path_prefix"),
+                limit=_limit_param(request),
+                offset=_offset_param(request),
+            )
+        )
+
     async def codebase_facts_route(request: Request) -> JSONResponse:
         """One repository's technical census. `facts: null` is an answer -- indexed never, or
         before the census existed -- and deliberately not a 404, which B147 measured reading
@@ -750,6 +772,7 @@ def create_app(
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/setup", setup, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/facts", codebase_facts_route, methods=["GET"]),
+        Route("/api/repositories/{repo_id:path}/call-sites", call_sites_route, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", get_staging, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", set_staging, methods=["POST"]),
         Route("/api/corpus", corpus, methods=["GET"]),

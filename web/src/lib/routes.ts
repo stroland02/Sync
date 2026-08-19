@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The route registry: the single source of truth for every destination this console
  * declares. `App.tsx` builds its `<Route>` elements from this array, the persistent
  * navigation renders from it, and the command palette searches it. A route that is not an
@@ -45,6 +45,7 @@ import { BindingSurfacePage } from "@/features/bindings/binding-surface-page"
 import { DetectorsPage } from "@/features/detectors/detectors-page"
 import { FindingPage } from "@/features/findings/finding-page"
 import { FindingsPage } from "@/features/findings/findings-page"
+import { CallSitesPage } from "@/features/bindings/call-sites-page"
 import { MetricsPage } from "@/features/dashboards/metrics-page"
 import { SolutionsPage } from "@/features/workflows/solutions-page"
 import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
@@ -131,12 +132,26 @@ export const ROUTES: readonly RouteEntry[] = [
     element: CodebasePage,
   },
   {
+    // Call sites: the graph's raw material, browsable. An aggregate over the Binding surface
+    // -- it lists the sites a binding is made of -- so `GRAPH_LEVELS` is untouched, the same
+    // reasoning the findings list and detector attribution already carry.
+    path: "/repositories/:repoId/call-sites",
+    reachedFrom: "a workspace in the switcher",
+    nav: true,
+    navOrder: 3,
+    label: "Call sites",
+    level: "Binding surface",
+    question: "Where does this codebase call an integration's API, and what did each call bind to?",
+    params: ["repoId"],
+    element: CallSitesPage,
+  },
+  {
     // Metrics: the workspace's charts, its own rail entry by the owner's naming scheme. An
     // aggregate over levels the console already has, not a rung -- `GRAPH_LEVELS` untouched.
     path: "/repositories/:repoId/metrics",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 6,
+    navOrder: 7,
     label: "Metrics",
     level: "Codebase",
     question: "What are this workspace's measured trends -- findings over time, observed volume?",
@@ -149,7 +164,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/solutions",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 7,
+    navOrder: 8,
     label: "Solutions",
     level: "Solution Workflow",
     question: "Which remediations reached the forge, and where is each one's evidence?",
@@ -183,7 +198,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/runs",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 5,
+    navOrder: 6,
     label: "Logs",
     level: "Solution Workflow",
     question:
@@ -215,7 +230,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/services",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 4,
+    navOrder: 5,
     // "Connections" by the owner's naming ruling, 2026-08-18. The LEVEL keeps the
     // specification's words -- presentation vocabulary renames freely, levels do not.
     label: "Connections",
@@ -229,7 +244,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/vendors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 3,
+    navOrder: 4,
     // "Integrations" by the owner's naming ruling, 2026-08-18. Same split as above.
     label: "Integrations",
     level: "API Services",
@@ -241,7 +256,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/observed",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 8,
+    navOrder: 9,
     label: "Signals",
     level: "Signals",
     question:
@@ -253,7 +268,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/repositories/:repoId/detectors",
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 9,
+    navOrder: 10,
     label: "Detectors",
     level: "Errors & Incidents",
     question: "Which detector is producing this workspace's false positives?",

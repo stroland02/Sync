@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   ChartLine,
   CircleUserRound,
+  Code2,
   FileWarning,
   FolderTree,
   GitPullRequest,
@@ -54,6 +55,7 @@ import {
 
 const DESTINATION_ICON: Record<string, LucideIcon> = {
   "/repositories/:repoId": Radar,
+  "/repositories/:repoId/call-sites": Code2,
   "/repositories/:repoId/runs": ScrollText,
   "/repositories/:repoId/metrics": ChartLine,
   "/repositories/:repoId/solutions": GitPullRequest,

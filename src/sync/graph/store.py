@@ -1022,6 +1022,92 @@ class GraphStore:
         ).fetchall()
         return [CallSite(**row) for row in rows]
 
+    def call_sites_page(
+        self,
+        repo_id: str,
+        *,
+        vendor_id: str | None = None,
+        path_prefix: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """One page of a repository's current call sites, with the facets a browser needs.
+
+        The whole-repository read above serves the dependency graph, which needs every row at
+        once and no narrowing; this serves a table a person walks, which needs the opposite --
+        a bounded page and the option lists to narrow it by.
+
+        **The facet counts are computed without the facet's own filter applied**, the same rule
+        the filter rail states on screen: an option list narrowed by the filter it sets
+        collapses to whatever is already selected and leaves no way back to the rest. So the
+        vendor counts honour a path prefix and ignore the vendor selection, and nothing here
+        sums them into a total the caller did not ask for.
+
+        Retracted rows are excluded, as everywhere: a site the last pass stopped finding is not
+        a place this codebase calls the vendor, and `total` counts what the filters admit so
+        the pager walks exactly the set on screen.
+        """
+        limit = max(limit, 1)
+        where = ["repo_id = %s", "retracted_at IS NULL"]
+        params: list[object] = [repo_id]
+        if vendor_id is not None:
+            where.append("vendor_id = %s")
+            params.append(vendor_id)
+        if path_prefix:
+            where.append("path LIKE %s")
+            params.append(f"{path_prefix}%")
+        clause = " AND ".join(where)
+
+        total = int(
+            self._connect().execute(
+                f"SELECT count(*) AS n FROM call_site WHERE {clause}", params
+            ).fetchone()["n"]
+        )
+        rows = self._connect().execute(
+            f"SELECT * FROM call_site WHERE {clause} ORDER BY path, line, col LIMIT %s OFFSET %s",
+            [*params, limit, offset],
+        ).fetchall()
+
+        # The vendor facet, counted over everything the OTHER filters admit.
+        facet_where = ["repo_id = %s", "retracted_at IS NULL"]
+        facet_params: list[object] = [repo_id]
+        if path_prefix:
+            facet_where.append("path LIKE %s")
+            facet_params.append(f"{path_prefix}%")
+        vendor_rows = self._connect().execute(
+            f"""
+            SELECT vendor_id, count(*) AS n
+              FROM call_site
+             WHERE {" AND ".join(facet_where)}
+             GROUP BY vendor_id
+             ORDER BY vendor_id
+            """,
+            facet_params,
+        ).fetchall()
+
+        def rendered(row) -> dict:
+            # `indexed_at` arrives as a datetime and the transport is JSON, so it is rendered
+            # here rather than at the route: one place turns a stored instant into a string,
+            # and every reader of this page gets the same spelling.
+            item = dict(row)
+            for key in ("indexed_at", "retracted_at"):
+                value = item.get(key)
+                if hasattr(value, "isoformat"):
+                    item[key] = value.isoformat()
+            return item
+
+        consumed = offset + len(rows)
+        return {
+            "repo_id": repo_id,
+            "items": [rendered(row) for row in rows],
+            "total": total,
+            "next_offset": consumed if consumed < total else None,
+            "by_vendor": {row["vendor_id"]: int(row["n"]) for row in vendor_rows},
+            "unfiltered_total": sum(int(row["n"]) for row in vendor_rows),
+            "vendor_id": vendor_id,
+            "path_prefix": path_prefix,
+        }
+
     def call_sites_for_repository_count(self, repo_id: str) -> int:
         """How many current call sites one repository holds, read without fetching their columns."""
         row = self._connect().execute(
