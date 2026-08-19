@@ -50,7 +50,7 @@ import { ErrorState, LoadingState } from "@/components/states"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { useFacetParam } from "@/lib/use-facet-param"
+import { useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 const LIMIT = 50
@@ -153,9 +153,15 @@ function facetGroup(
 
 export function IntegrationChangesPage() {
   const { repoId } = useParams<{ repoId: string }>()
+  // `useFilterParam` rather than `useFacetParam` plus a separate `setOffset`, and the difference
+  // is a real defect rather than tidiness: both hooks call `setSearchParams`, and React Router
+  // hands the functional form the *current* params rather than a queued value -- so two writes in
+  // one handler give the second a `prev` that predates the first, and the offset reset discarded
+  // the facet it was meant to accompany. The rail looked pressed and nothing was refetched, which
+  // is the owner's report of 2026-08-19. One write does both.
   const [offset, setOffset] = useOffsetParam("changes_offset")
-  const [vendorId, setSelectedVendor] = useFacetParam("changes_vendor")
-  const [severity, setSelectedSeverity] = useFacetParam("changes_severity")
+  const [vendorId, setSelectedVendor] = useFilterParam("changes_vendor", ["changes_offset"])
+  const [severity, setSelectedSeverity] = useFilterParam("changes_severity", ["changes_offset"])
   const query = useQuery({
     queryKey: ["integration-changes", vendorId, severity, offset],
     queryFn: ({ signal }) => fetchChanges({ vendorId, severity, offset }, signal),
@@ -163,11 +169,9 @@ export function IntegrationChangesPage() {
 
   if (repoId === undefined) return <UnknownRoute />
 
+  // The setter already clears the offset in the same write, so nothing is chained after it.
   function narrow(setter: (value: string | null) => void) {
-    return (value: string | null) => {
-      setter(value)
-      setOffset(0)
-    }
+    return setter
   }
 
   const groups: FilterGroup[] = []
@@ -223,7 +227,7 @@ export function IntegrationChangesPage() {
       )}
 
       {query.isSuccess && (
-        <div className="grid gap-section lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
+        <div className="grid gap-section lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-stretch">
           {groups.length > 0 ? (
             <FilterRail
               label="Narrow the changes"

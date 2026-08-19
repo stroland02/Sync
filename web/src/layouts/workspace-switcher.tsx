@@ -58,29 +58,48 @@ export function switchedPath(pathname: string, nextRepoId: string): string {
   return `/repositories/${encodeURIComponent(nextRepoId)}`
 }
 
-export function WorkspaceSwitcher({ current }: { current: string | null }) {
+export function WorkspaceSwitcher({
+  current,
+  children,
+}: {
+  current: string | null
+  /** The badge's own text, which becomes the trigger's label. */
+  children: React.ReactNode
+}) {
   const repositories = useRepositories()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const repoIds = repositories.data?.repo_ids ?? []
 
-  // One workspace is not a choice, and a control that opens onto a single option reads as
-  // broken. The badge renders its own text; this adds the affordance only when there is
-  // somewhere to go.
-  if (repoIds.length < 2) return null
+  // With one workspace there is nowhere to go, so the badge stays plain text rather than a
+  // control that opens onto a single option -- which reads as broken.
+  if (repoIds.length < 2) {
+    return <span className="flex min-w-0 items-center gap-row">{children}</span>
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {/* The whole badge, not a chevron beside it. It used to be a `Link` into Settings with
+            the trigger alongside, so pressing the text a reader thought was the switcher
+            navigated them away -- the owner's report of 2026-08-19. */}
         <button
           type="button"
           aria-label="Switch codebase"
-          className="inline-flex shrink-0 items-center rounded-control text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex min-w-0 items-center gap-row rounded-control px-field text-meta text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <ChevronsUpDown aria-hidden="true" className="size-3.5" />
+          {children}
+          <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[18rem]">
+      {/* `sideOffset` clears the top bar's own border, and the alignment offset pulls the panel
+          back under the badge rather than off the right edge of the window. */}
+      <DropdownMenuContent
+        align="end"
+        alignOffset={-8}
+        sideOffset={10}
+        className="min-w-[20rem]"
+      >
         <DropdownMenuLabel className="furniture text-meta text-ink-muted">
           Connected codebases
         </DropdownMenuLabel>

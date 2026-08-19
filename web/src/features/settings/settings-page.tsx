@@ -21,6 +21,7 @@ import { CodebasesSettingsPanel } from "@/features/settings/codebases-settings-p
 import { GithubConnectionSettingsPanel } from "@/features/settings/github-connection-settings-panel"
 import { AdaptersSettingsPanel } from "@/features/settings/adapters-settings-panel"
 import { ModelSettingsPanel } from "@/features/settings/model-settings-panel"
+import { activeWorkspace, rememberedWorkspace } from "@/layouts/active-workspace"
 import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
 import { IntegrationsCataloguePanel } from "@/features/settings/integrations-catalogue-panel"
 import { PagesGuidePanel } from "@/features/settings/pages-guide-panel"
@@ -127,7 +128,17 @@ export function SettingsPage() {
     setSearchParams(nextParams, { replace: true })
   }
 
-  const activeRepo = selectedRepoId || "stroland02/Sync"
+  // **Was `selectedRepoId || "stroland02/Sync"`.** That literal is not a repository this
+  // deployment holds -- the real identity is `github.com/stroland02/Sync`, derived from the git
+  // remote -- so Settings opened on a workspace that does not exist, every panel below it asked
+  // the API about nothing, and the reader's own codebase was dropped. That is the owner's report
+  // of 2026-08-19 in full: a hardcoded fallback, stale by one identity change.
+  //
+  // The chassis knows which workspace is attached and keeps it across unscoped screens
+  // (`active-workspace.ts`), so this reads that rather than guessing, and falls back to the first
+  // repository the graph actually holds.
+  const activeRepo =
+    selectedRepoId || activeWorkspace(undefined, rememberedWorkspace(), repos) || repos[0] || ""
 
   return (
     <div className="flex flex-col gap-section min-w-0">
@@ -144,7 +155,10 @@ export function SettingsPage() {
               </SelectTrigger>
               <SelectContent>
                 {repos.length === 0 ? (
-                  <SelectItem value={activeRepo}>{activeRepo}</SelectItem>
+                  // No invented value: an id nobody can select is a control that looks broken.
+                  <SelectItem value="none" disabled>
+                    No codebase indexed yet
+                  </SelectItem>
                 ) : (
                   repos.map((repoId) => (
                     <SelectItem key={repoId} value={repoId} className="font-mono text-meta">

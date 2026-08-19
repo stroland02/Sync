@@ -134,6 +134,16 @@ export interface RouteEntry {
    */
   reachedFrom: string | null
   /**
+   * `true` where the screen is a table first and the page's reading cap costs it columns.
+   *
+   * The chassis caps content at 1400px so prose lines stay readable, which is right for a screen
+   * of panels and wrong for one whose subject is fifteen recorded fields per row. Declared here
+   * rather than achieved with negative margins in the page: a full-bleed hack fights the
+   * scrollbar and lands differently on every browser, where a flag the frame reads is one rule
+   * in one place. `M15` Task 1.
+   */
+  wide?: boolean
+  /**
    * Names of the dynamic segments in `path`, in order. A non-empty list means this
    * destination needs a subject the registry does not hold — the navigation and the palette
    * render it as a place to look one up rather than as a direct link, so neither ever
@@ -170,6 +180,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/integration-changes",
+    wide: true,
     reachedFrom: "the Vendors tabs",
     // The changes feed is Vendors' second tab, never its own rail entry: what a vendor
     // published belongs beside the vendors it describes.
@@ -185,6 +196,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // -- it lists the sites a binding is made of -- so `GRAPH_LEVELS` is untouched, the same
     // reasoning the findings list and detector attribution already carry.
     path: "/repositories/:repoId/call-sites",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 2,
@@ -227,6 +239,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // Solutions: every run that reached a pull request, the owner's page of 2026-08-18. An
     // aggregate over Solution Workflow and Pull Request, not a rung.
     path: "/repositories/:repoId/solutions",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 9,
@@ -262,6 +275,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // suggested a text stream this screen does not hold. The LEVEL is untouched: presentation
     // vocabulary renames freely, the specification's words do not.
     path: "/repositories/:repoId/runs",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 8,
@@ -282,6 +296,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // `Finding` is the specification's own level, not a promotion: a list of findings aggregates
     // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
     path: "/repositories/:repoId/findings",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 6,
@@ -297,6 +312,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/services",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 3,
@@ -314,6 +330,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/vendors",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 4,
@@ -542,3 +559,16 @@ export const DESTINATIONS: readonly DestinationEntry[] = [
 
 
 
+
+
+/**
+ * Whether the address is a table-first screen that should use the full window.
+ *
+ * Matched through `matchPath` rather than by string prefix, for the reason `isActiveMenuItem`
+ * gives: a parameterised pattern matched by prefix claims every route nested under it, so
+ * `/findings` would widen `/findings/:findingId/workflow` — a detail screen, which the cap is
+ * right for.
+ */
+export function isWideRoute(pathname: string): boolean {
+  return ROUTES.some((route) => route.wide === true && matchPath(route.path, pathname) !== null)
+}

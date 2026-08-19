@@ -42,8 +42,15 @@ import {
   boundParams,
   destinationHref,
   isActiveMenuItem,
+  isWideRoute,
   type RouteEntry,
 } from "@/lib/routes"
+import {
+  activeWorkspace,
+  rememberWorkspace,
+  rememberedWorkspace,
+} from "@/layouts/active-workspace"
+import { cn } from "@/lib/utils"
 import {
   Sidebar,
   SidebarContent,
@@ -116,11 +123,18 @@ function useChassisIdentity(pathname: string) {
   const routeBound = boundParams(pathname)
   const repositories = useRepositories()
   const repoIds = repositories.data?.repo_ids ?? []
-  const soleRepoId = repoIds.length === 1 ? repoIds[0] : null
-  const bound =
-    routeBound.repoId === undefined && soleRepoId !== null
-      ? { ...routeBound, repoId: soleRepoId }
-      : routeBound
+  // The chassis stays attached on screens that name no workspace -- Settings is a destination
+  // rather than a level, so it binds no `repoId`, and reading the route alone blanked the badge
+  // and made every repository-scoped rail row unlinkable there (owner report, 2026-08-19).
+  // `active-workspace.ts` owns the rule and its test; the address always wins.
+  const active = activeWorkspace(routeBound.repoId, rememberedWorkspace(), repoIds)
+  const bound = active !== null ? { ...routeBound, repoId: active } : routeBound
+
+  // Remember only what the address itself named. Persisting the inherited value would let a
+  // fallback promote itself into a choice the reader never made.
+  useEffect(() => {
+    if (routeBound.repoId !== undefined) rememberWorkspace(routeBound.repoId)
+  }, [routeBound.repoId])
   const setupQuery = useQuery({
     queryKey: ["setup", "chassis"],
     queryFn: ({ signal }) => fetchSetup(null, signal),
@@ -142,12 +156,10 @@ function EnvironmentBadge() {
   const { pathname } = useLocation()
   const { workspace, forgeLogin, pending } = useChassisIdentity(pathname)
   return (
-    <span className="flex min-w-0 items-center gap-field">
-    <Link
-      to="/settings?group=github-connection"
-      className="flex min-w-0 items-center gap-row text-meta text-ink-muted hover:text-ink"
-      title="GitHub connection — Settings"
-    >
+    // No longer a link into Settings. Pressing the text a reader takes for the codebase name
+    // navigated them to a different screen entirely (owner report, 2026-08-19); the badge is the
+    // switcher now, and Settings is reachable from the rail where it always was.
+    <WorkspaceSwitcher current={workspace}>
       {workspace !== null && (
         <>
           <span className="min-w-0 truncate font-mono text-ink" title={workspace}>
@@ -161,11 +173,7 @@ function EnvironmentBadge() {
       <span className="shrink-0">
         {pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
       </span>
-    </Link>
-    {/* Outside the Link, not inside it: a menu trigger nested in an anchor is a nested
-        interactive element, and the anchor swallows the press. */}
-    <WorkspaceSwitcher current={workspace} />
-    </span>
+    </WorkspaceSwitcher>
   )
 }
 
@@ -570,7 +578,17 @@ export function AppFrame() {
               the sidebar with dead space to the right, which reads as a misaligned screen rather
               than a large one. `w-full` keeps narrow viewports exactly as they were. */}
           <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col outline-none">
-            <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-8 p-frame">
+            {/* The cap keeps a prose line readable, which is right for a screen of panels and
+                wrong for one whose subject is fifteen recorded fields per row -- a table-first
+                route declares itself wide in the registry and gets the window (M15 Task 1). A
+                flag read here rather than a full-bleed hack in the page: negative margins fight
+                the scrollbar and land differently per browser. */}
+            <div
+              className={cn(
+                "mx-auto flex w-full flex-1 flex-col gap-8 p-frame",
+                isWideRoute(pathname) ? "max-w-none" : "max-w-[1400px]",
+              )}
+            >
               <Outlet />
             </div>
           </main>
