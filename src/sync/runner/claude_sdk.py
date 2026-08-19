@@ -20,7 +20,21 @@ from typing import Any, Callable
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, ResultMessage, query
 
-MODEL = "claude-opus-5"
+# The default, and the only model spend in the product: this runner is the patch agent, and no
+# other code path here calls a model. `SYNC_MODEL` overrides it so a deployment can point at a
+# cheaper tier, or at whatever model its own session is already paying for, without a fork.
+#
+# Read at call time rather than at import, so a caller that sets the variable after importing
+# this module still gets what it asked for -- an import-time read makes the override depend on
+# module ordering, which is the kind of failure nobody debugs twice.
+DEFAULT_MODEL = "claude-opus-5"
+
+
+def configured_model() -> str:
+    """The model this runner will drive, honouring `SYNC_MODEL`."""
+    import os
+
+    return os.environ.get("SYNC_MODEL", "").strip() or DEFAULT_MODEL
 
 # ClaudeAgentOptions has no raw max_tokens knob -- the SDK manages its own
 # multi-turn budget -- so the project's max_tokens=64000 binding does not
@@ -79,7 +93,7 @@ class ClaudeSdkRunner:
         refusals: list[str] = []
         options = ClaudeAgentOptions(
             cwd=repo_path,
-            model=MODEL,
+            model=configured_model(),
             thinking={"type": "adaptive"},
             effort="xhigh",
             allowed_tools=ALLOWED_TOOLS,

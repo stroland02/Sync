@@ -15,7 +15,13 @@ argument rather than reaching for it -- which is also what keeps an ungated runn
 to build by forgetting one.
 """
 
-from sync.runner.claude_sdk import ALLOWED_TOOLS, DISALLOWED_TOOLS, MODEL, ClaudeSdkRunner
+from sync.runner.claude_sdk import (
+    ALLOWED_TOOLS,
+    DEFAULT_MODEL as MODEL,
+    DISALLOWED_TOOLS,
+    ClaudeSdkRunner,
+    configured_model,
+)
 from sync.runner.outcome_tools import (
     ABANDON_SCHEMA,
     ASK_HUMAN_SCHEMA,
@@ -37,6 +43,7 @@ __all__ = [
     "ClaudeSdkRunner",
     "DISALLOWED_TOOLS",
     "MODEL",
+    "configured_model",
     "OUTCOME_TOOL_SCHEMAS",
     "OutcomeToolValidator",
     "OutcomeValidationResult",
