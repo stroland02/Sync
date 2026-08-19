@@ -142,6 +142,43 @@ park rather than a blocking sleep**, and state is checkpointed at every node. Tw
   later, so deserialising arbitrary types out of it is a remote-code-execution shape.
   `serde.CHECKPOINTED_TYPES` is exactly six types, and the msgpack decoder is constrained to them.
 
+### The watch loop — how "watches" stops being a verb and becomes a mechanism
+
+Everything above is a reactor: it runs when something asks. The watch loop is the thing that asks,
+and it is deliberately **one idempotent tick, callable by any clock** — `sync watch --once` from
+cron, Windows Task Scheduler, or a CI schedule. Sync ships no daemon; a tick that can be re-run
+safely composes with whatever clock a deployment already has, which is the same idempotency
+contract every pipeline stage carries.
+
+**Subscriptions are derived, not configured.** A repository is watched against every vendor its
+indexed call sites bind to — connecting an integration *is* indexing it. The `watch_subscription`
+table is seeded from the graph and carries only the operator's overrides: pause, cadence, and the
+reaction policy. The default policy opens a pull request automatically for **mechanically-safe
+breaking changes only** — safe meaning the routing table settles the fix below the agent tier, so
+nothing marked safe can become an open-ended agent run.
+
+**Detection is a cheap-poll cascade, because checking must cost almost nothing.** The tick never
+downloads a specification to learn nothing changed: it reads the tiny artifact a vendor's SDK
+generator already publishes — a manifest hash — and fetches the spec only when that moved. A
+**version cursor** per vendor records the last version scanned and advances **in the same
+transaction as the scan's rows**, so a tick that dies mid-scan rescans the same window onto the
+same natural keys instead of double-counting. Spend on remediation is capped per tick, and
+overflow is queued *visibly* — a silent tick is indistinguishable from a dead one, so every
+subscription prints what was decided, including "nothing moved."
+
+**Notification is GitHub-native.** A remediated change's notification *is* the verified pull
+request. A finding that does not get one — policy said notify-only, routing said not mechanically
+safe, or the budget deferred it — opens a **deduplicated GitHub issue** on the watched repository:
+a deterministic title built from the finding's graph identity, the affected call sites, the
+provenance rung, the reason Sync did not act, and the exact command to act by hand. The same
+finding never opens a second issue.
+
+Honest boundaries, stated rather than discovered: coded and MCP vendors do not yet have a cheap
+probe, and the tick says so instead of faking one; the tick currently **records** its remediation
+decisions rather than invoking the remediation composition, and prints exactly that; and the spend
+cap counts findings rather than dollars, because no cost figure is recorded anywhere yet — the
+tick tells you that too.
+
 ### Containing the agent
 
 The patch agent holds `Bash`, `Write` and `Edit` **inside a customer's clone** — a directory that
