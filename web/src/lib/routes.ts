@@ -214,6 +214,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // Solutions: every run that reached a pull request, the owner's page of 2026-08-18. An
     // aggregate over Solution Workflow and Pull Request, not a rung.
     path: "/repositories/:repoId/solutions",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 7,
@@ -298,6 +299,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/vendors",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 2,

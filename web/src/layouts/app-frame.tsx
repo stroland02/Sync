@@ -43,6 +43,11 @@ import {
   isWideRoute,
   type RouteEntry,
 } from "@/lib/routes"
+import {
+  activeWorkspace,
+  rememberWorkspace,
+  rememberedWorkspace,
+} from "@/layouts/active-workspace"
 import { cn } from "@/lib/utils"
 import {
   Sidebar,
@@ -116,11 +121,18 @@ function useChassisIdentity(pathname: string) {
   const routeBound = boundParams(pathname)
   const repositories = useRepositories()
   const repoIds = repositories.data?.repo_ids ?? []
-  const soleRepoId = repoIds.length === 1 ? repoIds[0] : null
-  const bound =
-    routeBound.repoId === undefined && soleRepoId !== null
-      ? { ...routeBound, repoId: soleRepoId }
-      : routeBound
+  // The chassis stays attached on screens that name no workspace -- Settings is a destination
+  // rather than a level, so it binds no `repoId`, and reading the route alone blanked the badge
+  // and made every repository-scoped rail row unlinkable there (owner report, 2026-08-19).
+  // `active-workspace.ts` owns the rule and its test; the address always wins.
+  const active = activeWorkspace(routeBound.repoId, rememberedWorkspace(), repoIds)
+  const bound = active !== null ? { ...routeBound, repoId: active } : routeBound
+
+  // Remember only what the address itself named. Persisting the inherited value would let a
+  // fallback promote itself into a choice the reader never made.
+  useEffect(() => {
+    if (routeBound.repoId !== undefined) rememberWorkspace(routeBound.repoId)
+  }, [routeBound.repoId])
   const setupQuery = useQuery({
     queryKey: ["setup", "chassis"],
     queryFn: ({ signal }) => fetchSetup(null, signal),
