@@ -15,6 +15,7 @@
  */
 
 import type { RepositoryGraphResponse } from "@/api/types"
+import { Tag } from "@/components/tag"
 
 export function OffPathNote({
   graph,
@@ -25,9 +26,7 @@ export function OffPathNote({
 }) {
   return (
     <p className="text-meta text-ink-muted leading-relaxed">
-      <span className="furniture rounded-control border border-line px-field text-meta">
-        off path
-      </span>{" "}
+      <Tag>off path</Tag>{" "}
       {total === 0 ? (
         <>
           Nothing is off the path here: no uncorrelated span and no unattributed finding. Both

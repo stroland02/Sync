@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { AdapterTierTag } from "@/components/tag"
 import { TableEmptyState } from "@/components/table-empty"
 import { Absent, Formatted } from "@/components/status"
 import type { AdapterRow } from "@/api/types"
@@ -131,7 +132,7 @@ export function AdapterTable({ adapters }: { adapters: AdapterRow[] }) {
               </span>
             </TableCell>
             <TableCell>
-              <span className="font-mono">{adapter.kind}</span>
+              <AdapterTierTag tier={adapter.kind} />
               <div className="mt-field text-meta text-muted-foreground">
                 {KIND_NOTE[adapter.kind]}
               </div>

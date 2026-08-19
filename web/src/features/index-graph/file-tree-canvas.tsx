@@ -28,6 +28,7 @@ import { useMemo, useRef, useState } from "react"
 import type { PointerEvent as ReactPointerEvent } from "react"
 
 import { BINDING_SOURCES, type RepositoryGraphBinding } from "@/api/types"
+import { Tag } from "@/components/tag"
 import { Button } from "@/components/ui/button"
 import { describeRung } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -437,7 +438,7 @@ export function FileTreeCanvas({
       <ul aria-label="Provenance rungs" className="flex flex-wrap gap-section">
         {BINDING_SOURCES.map((rung) => (
           <li key={rung} className="flex min-w-0 flex-col gap-field">
-            <span className="furniture rounded-control border border-line px-field text-meta">{rung}</span>
+            <Tag>{rung}</Tag>
             <span className="text-meta text-ink-muted">{describeRung(rung)}</span>
           </li>
         ))}

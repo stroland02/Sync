@@ -53,6 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { type Fact, FactList } from "@/components/fact-list"
 import { MetricPanel } from "@/components/metric-panel"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
@@ -464,8 +465,12 @@ function FindingDetailPage({
                     {query.data.known_changes.map((change) => (
                       <TableRow key={change.change_id}>
                         <TableCell className="font-mono">{change.change_id}</TableCell>
-                        <TableCell>{change.kind}</TableCell>
-                        <TableCell>{change.severity}</TableCell>
+                        <TableCell>
+                          <ChangeKindTag kind={change.kind} />
+                        </TableCell>
+                        <TableCell>
+                          <SeverityTag severity={change.severity} />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

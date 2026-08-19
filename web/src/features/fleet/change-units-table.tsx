@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { Tag, ChangeKindTag, SeverityTag } from "@/components/tag"
 import { MetricPanel } from "@/components/metric-panel"
 import { RelativeTime } from "@/components/relative-time"
 import { IndexRunNote } from "@/features/fleet/index-run-note"
@@ -102,12 +103,7 @@ export function describeChangeUnitRung(rung: string): string {
 
 function ChangeUnitRungBadge({ rung }: { rung: string }) {
   return (
-    <span
-      className="furniture rounded-control border border-line px-field py-field font-mono text-meta"
-      title={describeChangeUnitRung(rung)}
-    >
-      {rung}
-    </span>
+    <Tag title={describeChangeUnitRung(rung)}>{rung}</Tag>
   )
 }
 
@@ -221,12 +217,16 @@ export function ChangeUnitsTable({ repoId }: { repoId: string }) {
                       </Link>
                     )}
                   </TableCell>
-                  <TableCell>{unit.change_kind}</TableCell>
+                  <TableCell>
+                    <ChangeKindTag kind={unit.change_kind} />
+                  </TableCell>
                   <TableCell className="font-mono">
                     <Formatted value={orAbsent(unit.from_version)} /> →{" "}
                     <Formatted value={orAbsent(unit.to_version)} />
                   </TableCell>
-                  <TableCell>{unit.severity}</TableCell>
+                  <TableCell>
+                    <SeverityTag severity={unit.severity} />
+                  </TableCell>
                   <TableCell className="text-right font-mono">
                     {unit.repository_count.toLocaleString()}
                   </TableCell>
