@@ -12,6 +12,7 @@ import { useParams } from "react-router"
 
 import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
 import { ChangesOverTimeCard } from "@/features/dashboards/changes-over-time-card"
+import { TrendsKpis } from "@/features/dashboards/trends-kpis"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
 import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
@@ -25,6 +26,11 @@ export function MetricsPage() {
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Metrics" }]} />
       <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
+      {/* Dashboard T1. Every page opens with its strip (owner ruling), and here the tiles
+          are the totals the two charts below sum to -- which is what makes the charts
+          checkable rather than merely decorative. */}
+      <TrendsKpis />
+
       {/* Two subjects, deliberately adjacent (T2 and T3). The findings series is what Sync
           produced; the changes series is what the vendors published. A day with changes and no
           findings is the product working rather than a gap, and neither chart says that on its

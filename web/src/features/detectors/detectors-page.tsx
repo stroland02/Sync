@@ -78,6 +78,12 @@ export function DetectorsPage() {
   return (
     <section className="flex flex-col gap-8">
       <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
+
+      {/* Dashboards D1 and D2, opening the page with every other screen's strip. This page
+          carried one chart and a table; the strip says how much was attributed and to how
+          many detectors, and the ranking says which detector is loudest -- which the rung
+          chart further down deliberately does not answer. */}
+      <DetectorsDashboards repoId={repoId} />
       <div className="flex flex-col gap-section">
         <ControlBar>
           <div className="flex min-w-0 flex-col gap-field">
@@ -89,11 +95,6 @@ export function DetectorsPage() {
           </div>
         </ControlBar>
       </div>
-
-      {/* Dashboards D1 and D2. This screen carried one chart and a table; the strip says how much
-          was attributed and to how many detectors, and the ranking says which detector is loudest
-          -- which the rung chart beneath deliberately does not answer. */}
-      <DetectorsDashboards repoId={repoId} />
 
       {/* What the screen measures beside what it refuses to measure and what it cannot see. A
           reader who takes the rung breakdown as a ranking has misread the screen, and the column

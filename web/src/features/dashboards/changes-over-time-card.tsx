@@ -39,14 +39,14 @@ import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { ErrorState, LoadingState } from "@/components/states"
 
-interface ChangesOverTime {
+export interface ChangesOverTime {
   vendor_id: string | null
   vendors: string[]
   days: DayEntry[]
   total: number
 }
 
-async function fetchChangesOverTime(signal?: AbortSignal): Promise<ChangesOverTime> {
+export async function fetchChangesOverTime(signal?: AbortSignal): Promise<ChangesOverTime> {
   const path = "/api/integration-changes/over-time"
   let response: Response
   try {

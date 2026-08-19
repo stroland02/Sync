@@ -50,12 +50,12 @@ interface CodebaseFacts {
   computed_at: string
 }
 
-interface FactsResponse {
+export interface FactsResponse {
   repo_id: string
   facts: CodebaseFacts | null
 }
 
-async function fetchFacts(repoId: string, signal?: AbortSignal): Promise<FactsResponse> {
+export async function fetchFacts(repoId: string, signal?: AbortSignal): Promise<FactsResponse> {
   const path = `/api/repositories/${encodeURIComponent(repoId)}/facts`
   let response: Response
   try {

@@ -118,12 +118,12 @@ export function CodebasePage() {
           below Getting Started, the strip and both maps — which left everything above it
           unlabelled and unscoped on the one screen a workspace opens on. */}
       <PageHeaderRegion repoId={repoId} />
-      {/* Getting started leads the body, by the owner's direction: the workspace identity and
-          the full loop's probed prerequisites are the first thing under the header. */}
-      <GettingStartedCard repoId={repoId} />
-      {/* The page's opening facts (owner ruling 2026-08-19: strip only on this screen — the
-          rung chart stays on Detectors where it is built rather than being drawn twice). */}
+      {/* The strip opens the body on every page (owner ruling), this one included -- it sat
+          below Getting Started, which made the Overview the one screen whose facts did not lead. */}
       <OverviewKpis repoId={repoId} />
+      {/* Getting started follows: the workspace identity and the full loop's probed
+          prerequisites, which are instructions rather than measurements. */}
+      <GettingStartedCard repoId={repoId} />
       {/* Both maps, side by side, each opening its own full view. A codebase has two shapes
           worth seeing — what it calls, and how it is laid out — and neither summarises the
           other. Their analytics moved with them: topology to the integration map's page, the

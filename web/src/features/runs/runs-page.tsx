@@ -47,6 +47,7 @@ import { PageTabs, logsTabs } from "@/components/page-tabs"
 import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
 import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { RunsCard } from "@/features/fleet/runs-table"
+import { RunsKpisRegion } from "@/features/runs/runs-kpis-region"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -68,8 +69,14 @@ export function RunsPage() {
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 
-      {/* The scope statement leads, because a reader who meets a count first has already formed a
-          belief about it by the time a caveat arrives. It is one sentence about the whole screen
+      {/* Dashboard R1, at the page's top with every other screen's strip. It sits ABOVE the
+          scope statement and states its own scope in the tiles' notes instead -- the statement
+          below is about the corpus panels, and a strip placed under it would read as covered by
+          a caveat that is not about it. */}
+      <RunsKpisRegion />
+
+      {/* The scope statement leads the corpus half, because a reader who meets a count first has
+          already formed a belief about it by the time a caveat arrives. It is one sentence about the whole screen
           rather than one per card: all three read the same two fleet-wide routes, and three copies
           of one fact is the disagreement `CLAUDE.md` names as the most expensive kind of debt. */}
       <p className="text-body text-muted-foreground max-w-3xl leading-relaxed border-l border-line pl-field">

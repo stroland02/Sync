@@ -31,6 +31,7 @@ import { useRepositoryGraph } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 
 import { ApiTopologyCard } from "@/features/repositories/api-topology-card"
+import { TopologyKpis } from "@/features/repositories/topology-kpis"
 import { ForceMap } from "@/features/index-graph/force-map"
 import { classifyIndexState } from "@/features/index-graph/index-state"
 import { IndexStreamBanner } from "@/features/index-graph/index-stream-banner"
@@ -88,6 +89,11 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
         status={stream.status}
         onReread={() => void query.refetch()}
       />
+
+      {/* The strip opens this page as it opens every other (owner ruling), and its subject is
+          the map's: how wide the API surface this canvas draws actually is. Same key as the
+          topology card below, so the pair is one read. */}
+      <TopologyKpis repoId={repoId} />
       {state.kind === "never-recorded" && (
         <div className="flex flex-col gap-field rounded-surface border border-line bg-surface p-section">
           <h2 className="text-emphasis font-medium text-ink">

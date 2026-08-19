@@ -17,6 +17,7 @@ import { useRepositoryGraph } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 import { TreeMapD3 } from "@/features/index-graph/tree-map-d3"
 import { CodebaseFactsCard } from "@/features/repositories/codebase-facts-card"
+import { CodebaseFactsKpis } from "@/features/repositories/codebase-facts-kpis"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -32,6 +33,11 @@ function FileTreeDetail({ repoId }: { repoId: string }) {
   return (
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "File tree" }]} />
+
+      {/* The strip opens this page as it opens every other (owner ruling). Its subject is
+          the tree's -- how large this codebase is and what it is made of -- so it reads the
+          same census the card at the foot of the page draws in full, on one key. */}
+      <CodebaseFactsKpis repoId={repoId} />
 
       {query.isPending && <LoadingState what={`the file tree for ${repoId}`} />}
       {query.isError && (
