@@ -47,6 +47,20 @@ _EVIDENCE_KEYS = {
 
 _FINISHED = ("opened", "abandoned", "reported")
 
+# The outcomes a run has something to report for. `_FINISHED` is the terminal three; `parked` is
+# a run that stopped and is waiting on a human, which is a disposition without being an ending.
+#
+# **M15 Task 8, and the distinction is the whole fix.** `make_park` has always written
+# `outcome: "parked"` with a `parked_reason`, and `Outcome` has always held it -- but every
+# display site asks `outcome in _FINISHED else None`, and the console renders `None` as *in
+# flight*. So a run waiting on a review reported as busy: not running, nobody coming back to it
+# on their own, and the one screen that would say so claiming otherwise.
+#
+# `parked` is deliberately **not** added to `_FINISHED` instead. A tuple named for finishing,
+# holding a state that did not finish, is a name that misleads the next reader into counting a
+# parked run as an ending -- and the corpus's rates are built on exactly that word.
+DISPOSITIONS = (*_FINISHED, "parked")
+
 
 def _compiler_wrote_diagnostics(values: dict) -> bool:
     """Whether `diagnostics` currently holds what the compiler said.
@@ -170,7 +184,7 @@ def workflow_state(checkpointer_dsn: str, finding_id: str) -> dict | None:
     # `sync.remediate.state.Outcome` also holds `running`, which `locate` writes on the
     # first hop of every run. Only a finished value is reported: `outcome` is the console's
     # terminal signal, and a live run reaching it stops the poll on a run still in flight.
-    outcome = values.get("outcome") if values.get("outcome") in _FINISHED else None
+    outcome = values.get("outcome") if values.get("outcome") in DISPOSITIONS else None
     current = None if outcome is not None else _pending_node(versions, seen)
 
     nodes = []
