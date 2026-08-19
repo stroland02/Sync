@@ -362,7 +362,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
               absent because it is not needed. Below it the region still scrolls, silently: a clipped
               destination is unreachable and no route test would catch it, which is a worse fault
               than a scrollbar the owner did not want. */}
-          <SidebarContent className="gap-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <SidebarContent className="gap-0 pt-row overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* One flat set in the owner's declared order. The workspace is chosen above;
               everything here is that workspace's. */}
           <SidebarGroup className="px-row py-0">

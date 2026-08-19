@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Metrics: the workspace's measured trends, in one place — the owner's naming scheme of
  * 2026-08-18 gives charts their own rail entry beside Findings' list.
  *
@@ -12,6 +12,7 @@ import { useParams } from "react-router"
 
 import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
+import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -22,6 +23,7 @@ export function MetricsPage() {
   return (
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Metrics" }]} />
+      <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
       <FindingsOverTimeCard />
       <ObservedVolumeCard />
     </section>

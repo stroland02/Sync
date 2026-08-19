@@ -1308,6 +1308,93 @@ class GraphStore:
         ).fetchall()
         return [VendorChange(**row) for row in rows]
 
+    def vendor_changes_page(
+        self,
+        *,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """One page of every integration change the graph holds, newest first.
+
+        **Deliberately not scoped to a repository, and the payload says so rather than
+        implying otherwise.** What a vendor published is a fact about the vendor; it becomes a
+        fact about a codebase only where a call site binds to it, which is what a finding is.
+        A feed narrowed to one repository would be a different question with the same rows.
+
+        Facets are counted without their own filter applied -- the rail's rule -- and one
+        source is worth naming here rather than in the console: `oasdiff` rows do not converge
+        across runs (`CLAUDE.md`'s named idempotency exemption), so a count over them is
+        at-least-once rather than a measurement, and the caller is handed the source column to
+        say so on screen.
+        """
+        limit = max(limit, 1)
+        where: list[str] = []
+        params: list[object] = []
+        if vendor_id is not None:
+            where.append("vendor_id = %s")
+            params.append(vendor_id)
+        if severity is not None:
+            where.append("severity = %s")
+            params.append(severity)
+        clause = f"WHERE {' AND '.join(where)}" if where else ""
+
+        total = int(
+            self._connect().execute(
+                f"SELECT count(*) AS n FROM vendor_change {clause}", params
+            ).fetchone()["n"]
+        )
+        rows = self._connect().execute(
+            f"""
+            SELECT id, vendor_id, from_version, to_version, kind, operation_id,
+                   path_ptr, severity, source, detected_at
+              FROM vendor_change {clause}
+             ORDER BY detected_at DESC, id
+             LIMIT %s OFFSET %s
+            """,
+            [*params, limit, offset],
+        ).fetchall()
+
+        def facet(column: str, ignoring: str) -> dict[str, int]:
+            facet_where: list[str] = []
+            facet_params: list[object] = []
+            if vendor_id is not None and ignoring != "vendor_id":
+                facet_where.append("vendor_id = %s")
+                facet_params.append(vendor_id)
+            if severity is not None and ignoring != "severity":
+                facet_where.append("severity = %s")
+                facet_params.append(severity)
+            facet_clause = f"WHERE {' AND '.join(facet_where)}" if facet_where else ""
+            found = self._connect().execute(
+                f"SELECT {column} AS key, count(*) AS n FROM vendor_change {facet_clause}"
+                f" GROUP BY {column} ORDER BY {column}",
+                facet_params,
+            ).fetchall()
+            return {row["key"]: int(row["n"]) for row in found}
+
+        by_vendor = facet("vendor_id", ignoring="vendor_id")
+        by_severity = facet("severity", ignoring="severity")
+        consumed = offset + len(rows)
+        return {
+            "items": [
+                {
+                    **dict(row),
+                    "detected_at": row["detected_at"].isoformat()
+                    if hasattr(row["detected_at"], "isoformat")
+                    else row["detected_at"],
+                }
+                for row in rows
+            ],
+            "total": total,
+            "next_offset": consumed if consumed < total else None,
+            "by_vendor": by_vendor,
+            "by_severity": by_severity,
+            "unfiltered_total": sum(by_vendor.values()),
+            "vendor_id": vendor_id,
+            "severity": severity,
+        }
+
     def vendor_intake_rollup(self) -> dict[str, dict]:
         """Per vendor id, what the graph has ever received: rows, distinct operations, the newest
         `detected_at`, and the `source` values those rows carry.

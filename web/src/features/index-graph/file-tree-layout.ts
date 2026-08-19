@@ -12,7 +12,14 @@
  * layout pass.
  */
 
-export { fitViewport, panViewport, zoomViewport, type Viewport, type Bounds } from "@/features/index-graph/viewport"
+export {
+  fitViewport,
+  panViewport,
+  readableViewport,
+  zoomViewport,
+  type Viewport,
+  type Bounds,
+} from "@/features/index-graph/viewport"
 
 import type { Bounds } from "@/features/index-graph/viewport"
 import type { FolderNode, TreeNode } from "@/features/index-graph/file-tree-graph"

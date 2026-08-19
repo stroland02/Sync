@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Signals: a catalogue of what is attached to one repository's graph, grouped by the role it plays.
  *
  * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:435` places this
@@ -83,6 +83,7 @@ import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
 import type { ReactNode } from "react"
 
 import { InfoHint } from "@/components/info-hint"
+import { PageTabs, logsTabs } from "@/components/page-tabs"
 
 import { SignalSourcePanel } from "@/features/telemetry/signal-source-panel"
 import { NotAttachedState } from "@/features/signals/not-attached-state"
@@ -149,6 +150,7 @@ export function SignalsPage() {
 function SignalsDetail({ repoId }: { repoId: string }) {
   return (
     <section className="flex flex-col gap-8">
+      <PageTabs label="Logs" tabs={logsTabs(repoId)} />
 
       {/* What the screen draws moves behind the ⓘ (owner direction 2026-08-18); the sentence
           that stays visible is the absence-versus-zero one, because which roles have anything

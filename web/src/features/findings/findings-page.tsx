@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Findings: what is broken in this workspace.
  *
  * **The console did not have this screen.** Five destinations sat in the rail — Overview, API
@@ -45,6 +45,7 @@ import { useParams } from "react-router"
 import { useDetectors, useWorkspaceFindings } from "@/api/queries"
 import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
+import { PageTabs, metricsTabs } from "@/components/page-tabs"
 import { ErrorState, LoadingState } from "@/components/states"
 import { MetricPanel } from "@/components/metric-panel"
 import {
@@ -93,6 +94,7 @@ export function FindingsPage() {
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes. */}
         <Breadcrumbs trail={[{ label: "Metrics" }]} />
+        <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The vendors attached to one repository — integration grid and table view.
  *
  * The owner's instruction was a vendors page listing *"all the vendors part of that codebase"*, at
@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { PageTabs, integrationsTabs } from "@/components/page-tabs"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 
 
@@ -93,6 +94,7 @@ export function RepositoryVendorsPage() {
 
   return (
     <section className="flex min-w-0 flex-col gap-8">
+      <PageTabs label="Integrations" tabs={integrationsTabs(repoId ?? "")} />
 
       {!scopeMatches ? (
         <EmptyState

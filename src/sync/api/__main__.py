@@ -166,6 +166,17 @@ def app_factory() -> Starlette:
     def facts_reader(repo_id: str):
         return store.codebase_facts(repo_id)
 
+    def integration_changes_reader(
+        *,
+        vendor_id: str | None = None,
+        severity: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        return store.vendor_changes_page(
+            vendor_id=vendor_id, severity=severity, limit=limit, offset=offset
+        )
+
     def call_sites_reader(
         repo_id: str,
         *,
@@ -388,6 +399,7 @@ def app_factory() -> Starlette:
         staging_writer=staging_writer,
         facts_reader=facts_reader,
         call_sites_reader=call_sites_reader,
+        integration_changes_reader=integration_changes_reader,
         api_password=configured_api_password(),
     )
 

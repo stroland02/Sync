@@ -55,6 +55,7 @@ import { SettingsPage } from "@/features/settings/settings-page"
 import { SignalsPage } from "@/features/signals/signals-page"
 import { RunsPage } from "@/features/runs/runs-page"
 import { RepositoryServicesPage } from "@/features/vendors/repository-services-page"
+import { IntegrationChangesPage } from "@/features/vendors/integration-changes-page"
 import { RepositoryVendorsPage } from "@/features/vendors/repository-vendors-page"
 import { VendorPage } from "@/features/vendors/vendor-page"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
@@ -135,6 +136,18 @@ export const ROUTES: readonly RouteEntry[] = [
     // Call sites: the graph's raw material, browsable. An aggregate over the Binding surface
     // -- it lists the sites a binding is made of -- so `GRAPH_LEVELS` is untouched, the same
     // reasoning the findings list and detector attribution already carry.
+    path: "/repositories/:repoId/integration-changes",
+    reachedFrom: "the Integrations tabs",
+    // The changes feed is Integrations' second tab, never its own rail entry: what a vendor
+    // published belongs beside the integrations it describes.
+    nav: false,
+    label: "Integration changes",
+    level: "API Services",
+    question: "What have the integrations this codebase uses published, newest first?",
+    params: ["repoId"],
+    element: IntegrationChangesPage,
+  },
+  {
     path: "/repositories/:repoId/call-sites",
     reachedFrom: "a workspace in the switcher",
     nav: true,
@@ -149,10 +162,10 @@ export const ROUTES: readonly RouteEntry[] = [
     // Metrics: the workspace's charts, its own rail entry by the owner's naming scheme. An
     // aggregate over levels the console already has, not a rung -- `GRAPH_LEVELS` untouched.
     path: "/repositories/:repoId/metrics",
-    reachedFrom: "a workspace in the switcher",
-    nav: true,
-    navOrder: 7,
-    label: "Metrics",
+    reachedFrom: "the Metrics tabs",
+    // The charts are the third Metrics tab; the rail slot lands on Findings.
+    nav: false,
+    label: "Trends",
     level: "Codebase",
     question: "What are this workspace's measured trends -- findings over time, observed volume?",
     params: ["repoId"],
@@ -216,11 +229,12 @@ export const ROUTES: readonly RouteEntry[] = [
     // over findings, and an aggregate is not a rung. `GRAPH_LEVELS` is untouched.
     path: "/repositories/:repoId/findings",
     reachedFrom: "a workspace in the switcher",
-    // Findings keeps its name and sits above Integrations by the owner's ordering; Metrics is
-    // its own charts page below.
+    // The Metrics rail slot lands here rather than on the charts: findings are the screen an
+    // operator opens Metrics for, and the tab strip carries Detectors and Trends beside it.
+    // Second in the rail, honouring the owner's "findings above integrations".
     nav: true,
     navOrder: 2,
-    label: "Findings",
+    label: "Metrics",
     level: "Finding",
     question: "What is broken in this workspace, and what is each finding bound to?",
     params: ["repoId"],
@@ -255,8 +269,7 @@ export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/repositories/:repoId/observed",
     reachedFrom: "a workspace in the switcher",
-    nav: true,
-    navOrder: 9,
+    nav: false,
     label: "Signals",
     level: "Signals",
     question:
@@ -267,8 +280,7 @@ export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/repositories/:repoId/detectors",
     reachedFrom: "a workspace in the switcher",
-    nav: true,
-    navOrder: 10,
+    nav: false,
     label: "Detectors",
     level: "Errors & Incidents",
     question: "Which detector is producing this workspace's false positives?",

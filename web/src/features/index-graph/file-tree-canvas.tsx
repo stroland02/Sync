@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The indexing canvas, owner decision 8 (2026-08-18): a repository's own file tree, with an edge
  * from each file to the vendors its call sites bind -- `src/api/billing.ts ──▶ stripe`, framed as
  * the reader's own codebase rather than as Sync's internal model of it. Replaces
@@ -35,7 +35,9 @@ import { buildFileTree } from "@/features/index-graph/file-tree-graph"
 import { buildOperationGraph, type CallBindingRow } from "@/features/index-graph/operation-graph"
 import {
   fitViewport,
+  readableViewport,
   layoutOperationGraph,
+  ROW_HEIGHT,
   panViewport,
   visibleNodes,
   zoomViewport,
@@ -53,6 +55,8 @@ export const EMPTY_GRAPH_NOTE =
   "Nothing was passed to this canvas. That is a statement about what this view was given, not about what the index holds."
 
 const CANVAS_HEIGHT = "h-[36rem]"
+/** The same 36rem, in the pixels the legibility arithmetic is done in. */
+const CANVAS_HEIGHT_PX = 576
 
 function rowToBinding(row: RepositoryGraphBinding): CallBindingRow {
   return {
@@ -157,10 +161,20 @@ export function FileTreeCanvas({
   )
   const layout = useMemo(() => layoutOperationGraph(tree, graph), [tree, graph])
   const fit = useMemo(() => fitViewport(layout.bounds), [layout.bounds])
+  // Where the canvas opens. On a small graph this *is* the fit; on a large one it is the
+  // top-left at the scale where a row still reads, because fitting a codebase with hundreds of
+  // call sites into 576px renders every row at about three pixels -- a texture, not a graph.
+  const readable = useMemo(
+    () => readableViewport(fit, { rowHeight: ROW_HEIGHT, canvasHeightPx: CANVAS_HEIGHT_PX }),
+    [fit]
+  )
   const [panned, setPanned] = useState<Viewport | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
 
-  const view = panned ?? fit
+  const view = panned ?? readable
+  // Whether the opening view is showing less than the whole tree, which decides whether the
+  // "Fit tree" control has anything to do and whether the notice below has anything to say.
+  const clipped = readable.height < fit.height
   const byId = useMemo(() => new Map(layout.nodes.map((n) => [n.id, n] as const)), [layout.nodes])
   const shown = useMemo(() => visibleNodes(layout.nodes, view), [layout.nodes, view])
   const shownIds = useMemo(() => new Set(shown.map((n) => n.id)), [shown])
@@ -218,11 +232,23 @@ export function FileTreeCanvas({
           <Button variant="outline" size="sm" onClick={() => setPanned(zoomViewport(view, 0.5, fit))}>
             Zoom out
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setPanned(null)}>
-            Fit tree
+          <Button variant="outline" size="sm" onClick={() => setPanned(readable)}>
+            Readable view
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPanned(fit)}>
+            Fit whole tree
           </Button>
         </div>
-        <p className="max-w-prose text-meta text-ink-muted">{SCOPE_NOTE}</p>
+        <p className="max-w-prose text-meta text-ink-muted">
+          {SCOPE_NOTE}
+          {clipped && (
+            <>
+              {" "}
+              This tree is larger than one screen can render legibly, so it opens at the top at
+              a scale where a row still reads — pan, or use the minimap, to reach the rest.
+            </>
+          )}
+        </p>
       </div>
 
       <div className="relative min-w-0 overflow-hidden rounded-surface border border-line bg-background">

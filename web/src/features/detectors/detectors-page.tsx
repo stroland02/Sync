@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Which detector said what, and on what evidence.
  *
  * The console renders findings today and never who raised one or what kind of claim it
@@ -53,6 +53,8 @@
 
 import { useParams } from "react-router"
 
+import { PageTabs, metricsTabs } from "@/components/page-tabs"
+
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
@@ -74,6 +76,7 @@ export function DetectorsPage() {
 
   return (
     <section className="flex flex-col gap-8">
+      <PageTabs label="Metrics" tabs={metricsTabs(repoId)} />
       <div className="flex flex-col gap-section">
         <ControlBar>
           <div className="flex min-w-0 flex-col gap-field">

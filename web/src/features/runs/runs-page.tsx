@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Runs: what the remediation pipeline attempted, and what it gave up on.
  *
  * Owner decision 30 gives Runs its own destination rather than a panel on the Overview. It
@@ -43,6 +43,7 @@
 
 import { useParams } from "react-router"
 
+import { PageTabs, logsTabs } from "@/components/page-tabs"
 import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
 import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { RunsCard } from "@/features/fleet/runs-table"
@@ -63,6 +64,7 @@ export function RunsPage() {
             M7-W195 trimmed exactly this repetition from five other routes — the page keeps the
             segments the bar does not reach, which here is one. */}
         <Breadcrumbs trail={[{ label: "Logs" }]} />
+        <PageTabs label="Logs" tabs={logsTabs(repoId)} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 
