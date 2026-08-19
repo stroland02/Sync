@@ -20,6 +20,8 @@ from typing import Any, Callable
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, ResultMessage, query
 
+from sync.runner.provider import DEFAULT_MODEL, resolve_provider
+
 # The default, and the only model spend in the product: this runner is the patch agent, and no
 # other code path here calls a model. `SYNC_MODEL` overrides it so a deployment can point at a
 # cheaper tier, or at whatever model its own session is already paying for, without a fork.
@@ -27,14 +29,15 @@ from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, ResultMessage, que
 # Read at call time rather than at import, so a caller that sets the variable after importing
 # this module still gets what it asked for -- an import-time read makes the override depend on
 # module ordering, which is the kind of failure nobody debugs twice.
-DEFAULT_MODEL = "claude-opus-5"
 
 
 def configured_model() -> str:
-    """The model this runner will drive, honouring `SYNC_MODEL`."""
-    import os
+    """The model this runner will drive.
 
-    return os.environ.get("SYNC_MODEL", "").strip() or DEFAULT_MODEL
+    Kept as a function because callers and tests import it; `sync.runner.provider` is where the
+    decision now lives, so the model and the endpoint cannot be resolved by two different rules.
+    """
+    return resolve_provider().model
 
 # ClaudeAgentOptions has no raw max_tokens knob -- the SDK manages its own
 # multi-turn budget -- so the project's max_tokens=64000 binding does not
@@ -91,14 +94,20 @@ class ClaudeSdkRunner:
         # A hook cannot abandon a run -- an exception raised inside one is answered to the
         # CLI, not to this frame -- so the caller's hooks record their refusals here instead.
         refusals: list[str] = []
+        provider = resolve_provider()
         options = ClaudeAgentOptions(
             cwd=repo_path,
-            model=configured_model(),
+            model=provider.model,
             thinking={"type": "adaptive"},
             effort="xhigh",
             allowed_tools=ALLOWED_TOOLS,
             disallowed_tools=DISALLOWED_TOOLS,
             setting_sources=SETTING_SOURCES,
+            # A self-hosted endpoint reaches the SDK's CLI subprocess through the environment
+            # rather than through an option field, because the SDK has none: `sandbox.py`
+            # records `options.env` as the channel. An empty mapping when nothing is
+            # configured, so a default deployment passes nothing rather than an empty base URL.
+            env=({"ANTHROPIC_BASE_URL": provider.base_url} if provider.base_url else {}),
             hooks={
                 event: [HookMatcher(matcher=None, hooks=callbacks)]
                 for event, callbacks in self._hooks_for(identity, refusals).items()

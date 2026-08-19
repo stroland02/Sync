@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python scripts/hook_guard_reads.py",
+            "command": "python \"$CLAUDE_PROJECT_DIR/scripts/hook_guard_reads.py\"",
             "timeout": 30
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python scripts/hook_check_edit.py",
+            "command": "python \"$CLAUDE_PROJECT_DIR/scripts/hook_check_edit.py\"",
             "timeout": 60
           }
         ]

@@ -193,6 +193,31 @@ def _policy_item(store: GraphStore, repo_id: str | None) -> dict:
     )
 
 
+def _model_item() -> dict:
+    """What the patch agent will drive, and whether that is a frontier or a self-hosted endpoint.
+
+    **One cost, not several.** `sync.runner.claude_sdk` is the only file in the product that
+    imports a model SDK; telemetry records spans of calls that already happened and calls no model
+    at all. So this describes the whole of Sync's AI spend.
+
+    A misconfiguration is reported rather than raised: the console asks what is configured, and a
+    Settings screen that 500s because an environment variable is wrong is worse than one that says
+    which variable and why.
+    """
+    from sync.runner.provider import UnusableProvider, resolve_provider
+
+    try:
+        provider = resolve_provider()
+    except UnusableProvider as exc:
+        return {"kind": "unusable", "model": None, "base_url": None, "detail": str(exc)}
+    return {
+        "kind": provider.kind,
+        "model": provider.model,
+        "base_url": provider.base_url,
+        "detail": provider.describe(),
+    }
+
+
 def setup_checklist(store: GraphStore, *, repo_id: str | None, cache_dir: str = "vendor-cache") -> dict:
     """Every prerequisite of the full loop, probed now, for one repository's point of view.
 
@@ -204,6 +229,11 @@ def setup_checklist(store: GraphStore, *, repo_id: str | None, cache_dir: str = 
     return {
         "repo_id": repo_id,
         "operator": {"forge_login": forge_login},
+        # The product's whole AI cost surface, described once. `sync.runner.provider` is the
+        # authority and this forwards it rather than restating -- a second description would
+        # eventually disagree about which provider is in use, which is the sentence an operator
+        # checking their spend most needs to be right.
+        "model": _model_item(),
         "items": [
             _index_item(store, repo_id),
             _vendor_cache_item(Path(cache_dir)),

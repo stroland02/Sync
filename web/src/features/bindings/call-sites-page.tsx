@@ -40,6 +40,7 @@ import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { ErrorState, LoadingState } from "@/components/states"
 import { CallSitesDashboards } from "@/features/bindings/call-sites-dashboards"
+import { CallSiteDrawer } from "@/features/bindings/call-site-drawer"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -57,6 +58,8 @@ interface CallSiteRow {
   vendor_id: string
   operation_id: string
   symbol: string
+  args_keys: string[]
+  response_fields_read: string[]
   loop_depth: number
   sdk_version: string
   indexed_at: string | null
@@ -75,11 +78,12 @@ interface CallSitesPage {
 
 async function fetchCallSites(
   repoId: string,
-  params: { vendorId: string | null; offset: number },
+  params: { vendorId: string | null; pathPrefix: string | null; offset: number },
   signal?: AbortSignal,
 ): Promise<CallSitesPage> {
   const query = new URLSearchParams({ limit: String(LIMIT), offset: String(params.offset) })
   if (params.vendorId !== null) query.set("vendor_id", params.vendorId)
+  if (params.pathPrefix) query.set("path_prefix", params.pathPrefix)
   const path = `/api/repositories/${encodeURIComponent(repoId)}/call-sites?${query.toString()}`
   let response: Response
   try {
@@ -126,9 +130,14 @@ export function CallSitesPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const [offset, setOffset] = useOffsetParam("call_sites_offset")
   const [vendorId, setSelectedVendor] = useFacetParam("call_sites_vendor")
+  const [pathPrefix] = useFacetParam("call_sites_path")
+  // The open row lives in the URL, which is the half of Nango's drawer convention that matters:
+  // a reader handing a colleague a link hands them the row they are looking at, not the page.
+  const [openSite, setOpenSite] = useFacetParam("call_sites_open")
   const query = useQuery({
-    queryKey: ["call-sites", repoId ?? "", vendorId, offset],
-    queryFn: ({ signal }) => fetchCallSites(repoId ?? "", { vendorId, offset }, signal),
+    queryKey: ["call-sites", repoId ?? "", vendorId, pathPrefix, offset],
+    queryFn: ({ signal }) =>
+      fetchCallSites(repoId ?? "", { vendorId, pathPrefix, offset }, signal),
     enabled: repoId !== undefined,
   })
 
@@ -224,7 +233,11 @@ export function CallSitesPage() {
                   </TableEmptyRow>
                 )}
                 {query.data.items.map((site) => (
-                  <TableRow key={site.id}>
+                  <TableRow
+                    key={site.id}
+                    onClick={() => setOpenSite(site.id)}
+                    className="cursor-pointer"
+                  >
                     <TableCell className="font-mono text-meta">
                       <span className="break-all">{site.path}</span>
                       <span className="text-ink-muted">
@@ -239,6 +252,7 @@ export function CallSitesPage() {
                       <Link
                         to={`/repositories/${encodeURIComponent(repoId)}/bindings/vendors/${encodeURIComponent(site.vendor_id)}/operations/${encodeURIComponent(site.operation_id)}`}
                         className="underline underline-offset-2"
+                        onClick={(event) => event.stopPropagation()}
                       >
                         {site.operation_id}
                       </Link>
@@ -266,6 +280,15 @@ export function CallSitesPage() {
               A loop that never runs still counts — this is what the code says, not what ran.
             </p>
           </MetricPanel>
+
+          {/* The row's detail, opened from the row and addressable from the URL -- Nango's
+              convention (`references/notes/nango-integration-architecture.md` §4), taken because
+              15 recorded fields do not fit a scannable row and a reader handing a colleague a
+              link should be handing them the row they are looking at. */}
+          <CallSiteDrawer
+            site={query.data.items.find((row) => row.id === openSite) ?? null}
+            onClose={() => setOpenSite(null)}
+          />
         </div>
       )}
     </section>
