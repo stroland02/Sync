@@ -1,4 +1,4 @@
-/**
+﻿/**
  * A level says what contains it.
  *
  * The companion to `vendors/vendor-page.test.tsx`: these were the two routes of nine that rendered
@@ -6,7 +6,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, render } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -42,21 +42,20 @@ function renderCodebase(path: string) {
 // one question; the page's was the duplicate. What they guaranteed -- what contains what, ending
 // on the subject -- is now asserted in `layouts/scope-switchers.test.tsx` against the trail that
 // survived, which also carries the page's name and the page's only `h1`.
-describe("CodebasePage's outbound links", () => {
-  /**
-   * `/repositories/:repoId/vendors` is routed and built, and nothing in the application linked to
-   * it: the sidebar renders it as unlinkable text until an address binds `repoId`, which means it
-   * was reachable only by typing the URL. This repository's own screen is where a link to it can
-   * exist, because this is where `repoId` is already bound.
-   */
-  it("links to this repository's own vendors list", () => {
-    renderCodebase("/repositories/org%2Fpayments")
-
-    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"))
-    expect(hrefs.length).toBeGreaterThan(0)
-    expect(hrefs).toContain("/repositories/org%2Fpayments/vendors")
-  })
-})
+/**
+ * The vendors-list link guard stood here and was retired with its subject, because the condition
+ * it was written for stopped holding.
+ *
+ * It existed because `/repositories/:repoId/vendors` was routed, built, and linked from nowhere:
+ * the rail rendered it as unlinkable text until an address bound `repoId`, so this screen was the
+ * only place a link to it could exist. The rail now carries Integrations at `navOrder: 2`, and
+ * this route binds `repoId` — so on this very screen the rail renders it as a link. A button here
+ * to a destination two rows away in the persistent navigation is a second door, which is the
+ * reasoning that already kept the graph and file-tree routes out of the rail.
+ *
+ * `routes.test.tsx` holds the reachability that actually matters: every declared route is
+ * reachable from the shell.
+ */
 
 describe("CodebasePage's scope", () => {
   /**

@@ -59,7 +59,6 @@
 
 import { Link, useParams } from "react-router"
 
-import { InfoHint } from "@/components/info-hint"
 import { Button } from "@/components/ui/button"
 import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { MapPreviews } from "@/features/index-graph/map-previews"
@@ -73,38 +72,6 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ControlBar } from "@/layouts/control-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
-
-/**
- * The one sentence that makes `/repositories/:repoId/vendors` reachable.
- *
- * That route is declared, built and tested, and nothing in the application linked to it: the
- * sidebar renders a route with an unbound parameter as plain text, so the vendors list could be
- * opened only from an address that already named a repository — which is this screen. The link
- * belongs in prose rather than in the control bar's action slot, for the reason this file's
- * docstring already gives about the Signals link: a qualification with its link taken out is a
- * qualification shortened, and the sentence here is what says the list is of vendors and not of
- * the calls made to them.
- */
-function VendorsListLink({ repoId }: { repoId: string }) {
-  // A button rather than a sentence carrying a link (owner direction 2026-08-18); the
-  // explanation rides the ⓘ, and the qualification it carried — no route computes the
-  // operations a repository calls — moves with it rather than being dropped.
-  return (
-    <div className="flex items-center gap-row">
-      <Button asChild variant="outline" size="sm">
-        <Link to={`/repositories/${encodeURIComponent(repoId)}/vendors`}>
-          Vendors attached to this repository
-        </Link>
-      </Button>
-      <InfoHint label="About the vendors list">
-        Which API vendors this repository is bound to, and how much is open against each. A
-        vendor appears there once INDEX finds a call site binding this repository to it. It is a
-        list of vendors, never of the individual operations called — no route computes the
-        operations a repository calls, so nothing here can be read as an inventory of them.
-      </InfoHint>
-    </div>
-  )
-}
 
 /**
  * The two map previews, fed one read.
@@ -146,8 +113,12 @@ export function CodebasePage() {
 
   return (
     <section className="flex flex-col gap-8">
-      {/* Getting started leads, by the owner's direction: the workspace identity and the full
-          loop's probed prerequisites are the first thing on the Overview. */}
+      {/* The header opens the page, as it does on every other screen. It rendered fourth here —
+          below Getting Started, the strip and both maps — which left everything above it
+          unlabelled and unscoped on the one screen a workspace opens on. */}
+      <PageHeaderRegion repoId={repoId} />
+      {/* Getting started leads the body, by the owner's direction: the workspace identity and
+          the full loop's probed prerequisites are the first thing under the header. */}
       <GettingStartedCard repoId={repoId} />
       {/* The page's opening facts (owner ruling 2026-08-19: strip only on this screen — the
           rung chart stays on Detectors where it is built rather than being drawn twice). */}
@@ -157,13 +128,11 @@ export function CodebasePage() {
           other. Their analytics moved with them: topology to the integration map's page, the
           technical census to the file tree's, which is what keeps this screen scannable. */}
       <MapsRegion repoId={repoId} />
-      <PageHeaderRegion repoId={repoId} />
       {/* The two halves of the route's own question, beside one another */}
       <div className="grid gap-8 xl:grid-cols-2">
         <OpenFindingsCard repoId={repoId} />
         <IndexCoverageCard repoId={repoId} />
       </div>
-      <VendorsListLink repoId={repoId} />
       <ChangeUnitsTable repoId={repoId} />
       <ObservedTelemetryCard repoId={repoId} />
     </section>
