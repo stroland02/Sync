@@ -49,16 +49,37 @@ carry a claim, because the data holds one: the run outcome, the error state, and
 colour never travels alone — it ships with an icon and a word, because colour is never the only
 channel, whatever it measures.
 
-## The protected sentences
+## The protected distinctions
 
-Twenty-four sentences on screen carry the honesty distinctions, reproduced with file and line in
-`docs/superpowers/plans/2026-08-05-sync-console-architecture.md:102-207` (*Establish 2*). Restyling
-one is allowed. Deleting one, shortening one, collapsing one behind a disclosure, or moving one
-into a tooltip is not.
+**Amended by the owner, 2026-08-19.** This section used to protect twenty-four specific sentences,
+reproduced with file and line in
+`docs/superpowers/plans/2026-08-05-sync-console-architecture.md:102-207` (*Establish 2*): restyling
+allowed, deleting, shortening, collapsing behind a disclosure or moving into a tooltip refused. The
+owner's instruction is that a screen carrying its full explanation as body prose is cluttered, and
+`CLAUDE.md` carries the resolution. It is repeated here in the form you need while editing a screen.
 
-**Verification for any change to a screen includes re-reading its own diff for a deleted
-qualification.** That is the whole mechanism. Nothing tests prose, the sentences sit in ad-hoc
-containers, and a screen gets shorter every time somebody tidies it.
+**The distinction is protected. The paragraph explaining it is not.**
+
+- **Visible, always, in the fewest words that are still honest**: the claim itself. *not measured
+  yet* · *no source attached* · *never indexed* · *all workspaces* · *counted before this filter* ·
+  *static evidence*. A reader who never hovers must not be misled about what a figure covers or
+  whether it was measured at all.
+- **Behind the ⓘ**: why that distinction exists, what the alternative reading would have been, and
+  what the payload can and cannot support. This is the material that used to sit in a paragraph.
+
+Two things are still refused outright, and neither was relaxed:
+
+- **A figure with no indication that its scope or its emptiness is qualified.** A fleet-wide number
+  under a workspace heading with nothing saying so is the same defect it always was, whether the
+  qualification was deleted or merely never written.
+- **Rendering one nothing as another.** A measured zero drawn as an absence, or an absence drawn as
+  a zero, is the failure this console exists to replace. The `ⓘ` does not license it; a short label
+  that says which nothing it is, is what does.
+
+**Verification for any change to a screen is still re-reading its own diff — now asking a different
+question.** Not *was a sentence deleted* but *can a reader who does not hover still tell what this
+figure covers and whether it was measured*. If the answer is no, the claim was moved when only the
+argument should have been.
 
 ## Measure, do not describe
 
