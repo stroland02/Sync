@@ -65,8 +65,7 @@ import { MapPreviews } from "@/features/index-graph/map-previews"
 import { OverviewKpis } from "@/features/repositories/overview-kpis"
 import { RungMixCard } from "@/features/repositories/rung-mix-card"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
-import { useRepositoryCoverage, useRepositoryGraph } from "@/api/queries"
-import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
+import { useRepositoryGraph } from "@/api/queries"
 import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
 import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
 import { ObservedTelemetryCard } from "@/features/telemetry/observed-telemetry-card"
@@ -106,29 +105,6 @@ function MapsRegion({ repoId }: { repoId: string }) {
   return <MapPreviews repoId={repoId} bindings={query.data.bindings} />
 }
 
-/**
- * The API surface panel and its own read, on its own key.
- *
- * Its own query rather than a prop threaded from above, the same shape every other region here
- * takes: coverage answers a different question over the same rows, and a failure to read it is no
- * reason to withhold the rest of the screen.
- */
-function ApiSurfaceRegion({ repoId }: { repoId: string }) {
-  const query = useRepositoryCoverage(repoId)
-
-  if (query.isPending) return <LoadingState what={`the API surface of ${repoId}`} />
-  if (query.isError) {
-    return (
-      <ErrorState
-        error={query.error}
-        what={`the API surface of ${repoId}`}
-        onRetry={() => void query.refetch()}
-      />
-    )
-  }
-  return <ApiSurfacePanel counts={query.data.by_binding_status ?? {}} />
-}
-
 export interface CodebasePageProps {
   readonly question?: string
 }
@@ -159,11 +135,6 @@ export function CodebasePage() {
         <OpenFindingsCard repoId={repoId} />
         <IndexCoverageCard repoId={repoId} />
       </div>
-      {/* Owner question, 2026-08-19: every other panel here counts problems, so a codebase where
-          nothing is wrong renders as a screen full of nothing -- indistinguishable from one nobody
-          has looked at. This is the panel that tells those two apart, and it sits beside the
-          findings count deliberately: the two are the same set of operations, split. */}
-      <ApiSurfaceRegion repoId={repoId} />
       {/* Dashboard O2. The rung mix is the console's own argument drawn once rather than
           asserted a column at a time, and the payload has carried the facet since dashboard 2
           was specified without anything rendering it. */}

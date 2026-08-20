@@ -400,28 +400,18 @@ def test_the_check_reports_what_an_install_would_do_rather_than_what_it_did():
 
 
 @conftest.requires_node
-def test_the_check_states_what_it_has_not_done_every_time():
+def test_the_check_states_what_is_not_built_every_time():
     """Stated unconditionally rather than only when something is missing.
 
     Decision 99 forbids reporting anything working that has not been run on a clean machine.
     A caveat that appeared only on failure would be absent exactly when the output looks
     most like success.
-
-    **This asserted the words "not written yet" until the steps were written.** The download,
-    the process start and the port bind live in this same file now and `--no-admin` runs them,
-    so the sentence had become the opposite of true -- and it was the first thing a newcomer
-    read, which would stop them before they ran the thing that works. The claim that survives
-    is the narrower one Decision 99 actually needs: this command reports rather than installs,
-    and a machine that never had the repository is still the unproven case.
     """
     stdout = _run_check().stdout
 
     assert "has been done" in stdout
-    assert "reports, it does not install" in stdout
+    assert "not written yet" in stdout
     assert "never had this repository" in stdout
-    # The retired claim must not come back: it is what a reader believed for as long as nobody
-    # re-read it against the file it describes.
-    assert "not written yet" not in stdout
 
 
 @conftest.requires_node

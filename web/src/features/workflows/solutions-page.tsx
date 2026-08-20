@@ -36,8 +36,6 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { PageTabs, solutionsTabs } from "@/components/page-tabs"
-import { useTickets } from "@/api/queries"
-import { TicketFunnel } from "@/features/tickets/ticket-funnel"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 export function SolutionsPage() {
@@ -51,7 +49,6 @@ export function SolutionsPage() {
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Solutions" }]} />
       <PageTabs label="Solutions" tabs={solutionsTabs(repoId)} />
-      <SolutionsFunnelRegion repoId={repoId} />
 
       {query.isPending && <LoadingState what="the opened pull requests" />}
       {query.isError && (
@@ -194,14 +191,4 @@ export function SolutionsPage() {
       )}
     </section>
   )
-}
-
-/**
- * The funnel's own read, kept out of the page body so a tickets route that does not answer
- * costs the diagram and not the solutions table beneath, which reads a different route.
- */
-function SolutionsFunnelRegion({ repoId }: { repoId: string }) {
-  const query = useTickets(repoId, null, { refetchIntervalMs: 15_000 })
-  if (!query.isSuccess) return null
-  return <TicketFunnel tickets={query.data.tickets} />
 }

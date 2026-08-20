@@ -31,24 +31,6 @@ export const BINDING_SOURCES = [
 export type BindingSource = (typeof BINDING_SOURCES)[number]
 
 /**
- * Whether a call this codebase makes is known to be at risk, known to be clean, or unexamined.
- *
- * **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it —
- * severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
- * `safe` severity would be Sync putting a judgement about this codebase in a column that
- * otherwise holds only the vendor's own words. This is the honest form of the same question,
- * computed by `sync.graph.store` rather than stored.
- *
- * **`unchecked` is the member that earns the other two.** It means no successful intake attempt
- * for the vendor — the graph has never read its specification — and without it, `clean` would be
- * an all-clear the console never earned. Most-wanting-attention first, matching
- * `BINDING_STATUSES` in the store, which is what `tests/test_api_routes.py` holds the two to.
- */
-export const BINDING_STATUSES = ["at_risk", "unchecked", "clean"] as const
-
-export type BindingStatus = (typeof BINDING_STATUSES)[number]
-
-/**
  * On every payload the API returns.
  *
  * `binding_source` is null when the answer rests on no single binding — either the payload
@@ -836,16 +818,6 @@ export interface IndexCoverageResponse {
   total_call_sites: number
   /** The product question beside the provider question, computed over the same rows. */
   by_service: ServiceCoverageRow[]
-  /**
-   * How much of this codebase's API surface is at risk, clean, or unexamined — counted over
-   * **operations**, not call sites, so one heavily-called operation cannot dominate a figure
-   * meant to describe breadth.
-   *
-   * A status absent here was not counted at nought, and an empty object is a repository with no
-   * call sites at all. Only ApiSurfacePanel fills a missing member with a zero, and only after
-   * establishing that a surface exists — see its own note for why that is honest there.
-   */
-  by_binding_status: Tally
 }
 
 /**
@@ -1274,30 +1246,4 @@ export interface FindingsOverTimeResponse {
   total: number
   /** How many of them are still open, reported beside the series rather than folded into it. */
   still_open: number
-}
-
-/**
- * One remediation request — the console's ticket lane (owner ruling 2026-08-19).
- *
- * `status` is the lifecycle the Solutions funnel draws: `requested` (initiated), `picked_up`
- * (in progress), `done` (complete, with `outcome` saying how — the run's own vocabulary).
- * `source` is which lane asked: `operator` from the Findings page, `watch` from the loop.
- */
-export interface Ticket {
-  id: number
-  finding_id: string
-  repo_id: string
-  source: string
-  status: string
-  requested_at: string
-  picked_up_at: string | null
-  done_at: string | null
-  thread_id: string | null
-  outcome: string | null
-  detail: string | null
-}
-
-export interface TicketsResponse {
-  repo_id: string
-  tickets: Ticket[]
 }

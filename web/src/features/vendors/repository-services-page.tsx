@@ -29,7 +29,6 @@
  * panel carrying the never-measured marker.
  */
 
-import { ApiTaxonomyPanel } from "@/features/vendors/api-taxonomy-panel"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
@@ -122,11 +121,6 @@ export function RepositoryServicesPage() {
 
   return (
     <section className="flex flex-col gap-8">
-
-      {/* The breadth question first (owner ruling 2026-08-19): what KINDS of API service the
-          platform watches or intends to. The workspace's own indexed services follow -- the
-          narrow answer under the wide one. */}
-      <ApiTaxonomyPanel />
 
       {/* The page's own facts, ahead of the table (owner ruling 2026-08-19). None restates the
           table's footer: the counts split the list by *which answer* names each service, which

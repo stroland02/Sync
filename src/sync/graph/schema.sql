@@ -745,39 +745,3 @@ CREATE TABLE IF NOT EXISTS vendor_cursor (
     last_checked_at   TIMESTAMPTZ,
     last_moved_at     TIMESTAMPTZ
 );
-
--- Grain: one row per remediation request -- a *ticket*: somebody (an operator pressing the
--- console's one write, or the watch loop acting on a subscription's policy) asking the pipeline
--- to attempt one finding. NOT one row per finding (a finding retried after an abandoned run is
--- a new ticket) and NOT one row per run (`run_heartbeat` and the checkpointer own execution;
--- a ticket is the request, and `thread_id` is how the two join once a runner picks it up).
---
--- `status` is 'requested' | 'picked_up' | 'done', named in a comment rather than a CHECK for
--- the reason `severity` is. `source` is 'operator' | 'watch' -- the console's Findings page is
--- the manual lane and the watch tick is the automatic one, and the Detectors page renders the
--- split, so a row that could not say which lane it came from would erase the page's question.
---
--- The partial unique index is the idempotence rule: one finding holds at most one ticket that
--- is not yet done, so an operator's double-click converges instead of queueing two attempts.
-CREATE TABLE IF NOT EXISTS remediation_ticket (
-    id           BIGSERIAL PRIMARY KEY,
-    finding_id   TEXT NOT NULL,
-    repo_id      TEXT NOT NULL,
-    source       TEXT NOT NULL,
-    status       TEXT NOT NULL DEFAULT 'requested',
-    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    picked_up_at TIMESTAMPTZ,
-    done_at      TIMESTAMPTZ,
-    -- The checkpointer thread the runner invoked for this ticket, NULL until picked up.
-    thread_id    TEXT,
-    -- The run's terminal outcome ('opened' | 'abandoned' | 'reported'), NULL until done.
-    outcome      TEXT,
-    -- What the outcome points at: a pull request URL, an abandon reason, a report reason.
-    detail       TEXT
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS remediation_ticket_open_idx
-    ON remediation_ticket (finding_id) WHERE status <> 'done';
-
-CREATE INDEX IF NOT EXISTS remediation_ticket_repo_idx
-    ON remediation_ticket (repo_id, requested_at DESC);
