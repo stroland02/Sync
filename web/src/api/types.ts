@@ -31,24 +31,6 @@ export const BINDING_SOURCES = [
 export type BindingSource = (typeof BINDING_SOURCES)[number]
 
 /**
- * Whether a call this codebase makes is known to be at risk, known to be clean, or unexamined.
- *
- * **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it —
- * severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
- * `safe` severity would be Sync putting a judgement about this codebase in a column that
- * otherwise holds only the vendor's own words. This is the honest form of the same question,
- * computed by `sync.graph.store` rather than stored.
- *
- * **`unchecked` is the member that earns the other two.** It means no successful intake attempt
- * for the vendor — the graph has never read its specification — and without it, `clean` would be
- * an all-clear the console never earned. Most-wanting-attention first, matching
- * `BINDING_STATUSES` in the store, which is what `tests/test_api_routes.py` holds the two to.
- */
-export const BINDING_STATUSES = ["at_risk", "unchecked", "clean"] as const
-
-export type BindingStatus = (typeof BINDING_STATUSES)[number]
-
-/**
  * On every payload the API returns.
  *
  * `binding_source` is null when the answer rests on no single binding — either the payload

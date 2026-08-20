@@ -28,7 +28,7 @@ from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.core.models import UNATTRIBUTED, BindingRung
 from sync.dashboard.queries import DISPOSITIONS, _FINISHED
-from sync.graph.store import BINDING_STATUSES, FINDING_ORDERS, GraphStore
+from sync.graph.store import FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)

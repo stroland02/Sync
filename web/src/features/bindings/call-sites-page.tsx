@@ -36,7 +36,6 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
-import { BindingStatusTag } from "@/components/tag"
 import { InfoHint } from "@/components/info-hint"
 import { RelativeTime } from "@/components/relative-time"
 import { Absent } from "@/components/status"
@@ -81,7 +80,6 @@ const CALL_SITE_COLUMNS: readonly ColumnSpec[] = [
   { id: "vendor", label: "Vendor" },
   { id: "operation", label: "Operation" },
   { id: "loops", label: "Loops" },
-  { id: "status", label: "Status" },
   { id: "args", label: "Arguments sent", defaultVisible: false },
   { id: "reads", label: "Response fields read", defaultVisible: false },
   { id: "sdk", label: "SDK version", defaultVisible: false },
@@ -100,7 +98,6 @@ interface CallSiteRow {
   args_keys: string[]
   response_fields_read: string[]
   loop_depth: number
-  binding_status: string
   sdk_version: string
   indexed_at: string | null
   snippet?: string | null
@@ -116,12 +113,10 @@ interface CallSitesPage {
   by_operation: Record<string, number>
   // Keyed by depth. JSON object keys are strings, so the numeric depth arrives spelled as one.
   by_loop_depth: Record<string, number>
-  by_binding_status: Record<string, number>
   unfiltered_total: number
   vendor_ids: string[]
   operation_ids: string[]
   loop_depths: number[]
-  binding_statuses: string[]
   path_prefix: string | null
   source_served: boolean
 }
@@ -132,7 +127,6 @@ async function fetchCallSites(
     vendorIds: readonly string[]
     operationIds: readonly string[]
     loopDepths: readonly string[]
-    bindingStatuses: readonly string[]
     pathPrefix: string | null
     offset: number
   },
@@ -145,7 +139,6 @@ async function fetchCallSites(
   for (const vendorId of params.vendorIds) query.append("vendor_id", vendorId)
   for (const operationId of params.operationIds) query.append("operation_id", operationId)
   for (const depth of params.loopDepths) query.append("loop_depth", depth)
-  for (const status of params.bindingStatuses) query.append("binding_status", status)
   if (params.pathPrefix) query.set("path_prefix", params.pathPrefix)
   const path = `/api/repositories/${encodeURIComponent(repoId)}/call-sites?${query.toString()}`
   let response: Response
@@ -210,19 +203,6 @@ function facetGroup(
  * value of this facet is that a reader hunting a call inside a loop can find one. It stays
  * static evidence either way -- a loop that never runs still counts.
  */
-/**
- * A binding status, in the rail's own words.
- *
- * The rail's options are what a reader presses to ask a question, so they read as questions
- * answered rather than as the payload's keys. `not checked` rather than `unchecked` because the
- * negation is the whole point of the option and a prefix is easy to skim past.
- */
-function describeStatus(status: string): string {
-  if (status === "at_risk") return "at risk"
-  if (status === "unchecked") return "not checked"
-  return status
-}
-
 function describeDepth(depth: string): string {
   if (depth === "0") return "0 - once per unit of work"
   if (depth === "1") return "1 - inside a loop"
@@ -248,10 +228,6 @@ export function CallSitesPage() {
     "call_sites_operation",
     ["call_sites_offset"],
   )
-  const [bindingStatuses, toggleStatus, clearStatuses] = useFilterListParam(
-    "call_sites_status",
-    ["call_sites_offset"],
-  )
   const [loopDepths, toggleDepth, clearDepths] = useFilterListParam("call_sites_loops", [
     "call_sites_offset",
   ])
@@ -262,11 +238,11 @@ export function CallSitesPage() {
   const [openSite, setOpenSite] = useSelectionParam("call_sites_open")
   const columns = useColumnVisibility("call-sites", CALL_SITE_COLUMNS)
   const query = useQuery({
-    queryKey: ["call-sites", repoId ?? "", vendorIds, operationIds, loopDepths, bindingStatuses, pathPrefix, offset],
+    queryKey: ["call-sites", repoId ?? "", vendorIds, operationIds, loopDepths, pathPrefix, offset],
     queryFn: ({ signal }) =>
       fetchCallSites(
         repoId ?? "",
-        { vendorIds, operationIds, loopDepths, bindingStatuses, pathPrefix, offset },
+        { vendorIds, operationIds, loopDepths, pathPrefix, offset },
         signal,
       ),
     enabled: repoId !== undefined,
@@ -293,11 +269,7 @@ export function CallSitesPage() {
     return (value: string | null) => (value === null ? clear() : toggle(value))
   }
 
-  const narrowed =
-    vendorIds.length > 0 ||
-    operationIds.length > 0 ||
-    loopDepths.length > 0 ||
-    bindingStatuses.length > 0
+  const narrowed = vendorIds.length > 0 || operationIds.length > 0 || loopDepths.length > 0
 
   return (
     <section className="flex min-w-0 flex-col gap-8">
@@ -321,16 +293,6 @@ export function CallSitesPage() {
         <div className="grid gap-section lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-stretch">
           {(() => {
             const groups = [
-              facetGroup(
-                "status",
-                "Binding status",
-                query.data.by_binding_status,
-                "Every status",
-                query.data.unfiltered_total,
-                bindingStatuses,
-                narrow(toggleStatus, clearStatuses),
-                describeStatus,
-              ),
               facetGroup(
                 "vendor",
                 "Integration",
@@ -421,7 +383,6 @@ export function CallSitesPage() {
                     {columns.isVisible("vendor") && <TableHead>Integration</TableHead>}
                     {columns.isVisible("operation") && <TableHead>Operation</TableHead>}
                     {columns.isVisible("loops") && <TableHead>Loops</TableHead>}
-                    {columns.isVisible("status") && <TableHead>Status</TableHead>}
                     {columns.isVisible("args") && <TableHead>Arguments sent</TableHead>}
                     {columns.isVisible("reads") && <TableHead>Response fields read</TableHead>}
                     {columns.isVisible("sdk") && <TableHead>SDK version</TableHead>}
@@ -480,11 +441,6 @@ export function CallSitesPage() {
                           {site.operation_id}
                         </Link>
                       </TableCell>
-                      )}
-                      {columns.isVisible("status") && (
-                        <TableCell>
-                          <BindingStatusTag status={site.binding_status} />
-                        </TableCell>
                       )}
                       {columns.isVisible("loops") && (
                         <TableCell className="font-mono text-meta tabular-nums">
