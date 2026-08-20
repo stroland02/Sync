@@ -56,7 +56,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sync.context import render_section
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
@@ -147,6 +147,7 @@ def build_patch_prompt(
     site: CallSite,
     diagnostics: str = "",
     repo_context: str = "",
+    corpus_lessons: str = "",
 ) -> str:
     """Everything the agent needs, and nothing it does not."""
     field = changed_field(change)
@@ -196,6 +197,12 @@ def build_patch_prompt(
     context_section = render_section(repo_context)
     if context_section:
         sections += [*fenced_block(REPOSITORY, context_section.splitlines()), ""]
+
+    # Sync's own aggregate over closed vocabularies -- tiers and reason codes, never a quoted
+    # sentence -- which is why it travels unfenced where every vendor line above is fenced.
+    # Empty appends nothing, the same byte-identity guarantee `repo_context` makes.
+    if corpus_lessons:
+        sections += ["What past attempts at this change kind learned:", corpus_lessons, ""]
 
     sections.append(_SCOPE_RULES)
 
@@ -328,13 +335,22 @@ class AgentRemediator:
 
     strategy = "agent"
 
-    def __init__(self, repo_context: str = "", runner: PatchRunner | None = None) -> None:
+    def __init__(
+        self,
+        repo_context: str = "",
+        runner: PatchRunner | None = None,
+        lessons_for: Callable[[VendorChange], str] | None = None,
+    ) -> None:
         # Bound once at construction rather than threaded through `propose()`. The caller
         # constructs one `AgentRemediator` per run, after reading the stored context once, so
         # every finding in the run sees the same repository facts without widening the shared
         # `Remediator` protocol -- and every codemod tier that never reads it -- to carry a
         # value only this tier consumes.
         self._repo_context = repo_context
+        # A callable rather than a store: what the corpus learned about a change kind is a
+        # per-change lookup, and taking a function keeps the database driver on the caller's
+        # side of the seam the same way `repo_context` keeps the read there.
+        self._lessons_for = lessons_for
         # The default is the production path, carrying the gate. A caller that names no runner
         # gets a hardened one; the seam serves tests and M9's outcome vocabulary rather than
         # being a switch somebody has to remember to set.
@@ -362,7 +378,10 @@ class AgentRemediator:
         repo: RepoRef,
         diagnostics: str = "",
     ) -> Patch:
-        prompt = build_patch_prompt(finding, change, site, diagnostics, self._repo_context)
+        lessons = self._lessons_for(change) if self._lessons_for is not None else ""
+        prompt = build_patch_prompt(
+            finding, change, site, diagnostics, self._repo_context, corpus_lessons=lessons,
+        )
         repo_path = Path(repo.local_path)
 
         identity = _identity(finding, repo)

@@ -70,6 +70,23 @@ SDK options' `disallowed_tools` (a real block, per `src/sync/CLAUDE.md`) so the 
 attempts it -- and the owner's ask for a software-engineering skill *inside* the solutions
 workflow becomes its own designed change, not a gate loosened in passing.
 
+## S1 live pass, 2026-08-20 05:08
+
+Ticket 12 (finding `072c3676`, `response-optional-property-removed` on `GetAccounts`, the
+removed property nineteen levels below the `data` the call site actually reads, binding
+*operation match only*). Three agent-lane attempts, each concluding no edit was needed, then an
+honest abandonment: `patch_attempts_exhausted`, "the remediator produced no change".
+
+Scored: the verdict is **correct** -- the call site never touches the removed property, so no
+change *is* the right resolution -- and the recording is honest. What the run bought at three
+model attempts is the finding it surfaced: **the outcome vocabulary has no way to say "examined
+and nothing to change"**. `reported` exists for exactly that shape, and a first attempt that
+ends in a clean no-change verdict should route there instead of retrying twice more and booking
+a true negative as an abandonment. Filed as the next remediation-graph change; until it lands,
+the corpus rows this run wrote are what the new lessons reader will hand the next agent that
+meets this change kind: *3 past attempts, 3 abandoned, patch_attempts_exhausted* -- which is
+the retrieval loop doing its job one run after it was built.
+
 ## Ledger
 
 | When | Ruling | Against | Why |

@@ -75,7 +75,10 @@ def _wire_fakes(monkeypatch, graph: _FakeGraph) -> None:
     monkeypatch.setattr(cli, "_clone", lambda url, dest: REPO)
     monkeypatch.setattr(cli, "select_language_adapter", lambda repo, vendor: _Adapter())
     monkeypatch.setattr(cli, "load_catalogue", lambda: "catalogue")
-    monkeypatch.setattr(cli, "build_remediator", lambda catalogue, repo_context: "remediator")
+    monkeypatch.setattr(
+        cli, "build_remediator",
+        lambda catalogue, repo_context, lessons_for=None: "remediator",
+    )
     monkeypatch.setattr(cli, "GitHubForge", lambda: "forge")
     monkeypatch.setattr(cli, "build_graph", lambda **kw: graph)
     monkeypatch.setattr(cli, "_thread_to_invoke", lambda g, base: (f"{base}:1", False))
@@ -135,6 +138,45 @@ def test_a_ticket_whose_finding_was_retracted_closes_honestly(monkeypatch):
     assert settled["status"] == "done"
     assert settled["outcome"] == "reported"
     assert settled["detail"] is not None and "retracted" in settled["detail"]
+
+
+def test_the_corpus_teaches_the_agent_about_its_change_kind():
+    """The lessons reader narrows both aggregates to the change's kind and says the counts.
+
+    Closed vocabularies only -- tier numbers and reason codes -- because the text travels
+    unfenced in the patch prompt.
+    """
+    class _CorpusStore:
+        def migration_outcome_rollup_by_kind(self):
+            return [
+                {"change_kind": "response-property-removed", "tier": 2,
+                 "attempt_count": 3, "abandoned_attempt_count": 2},
+                {"change_kind": "parameter-renamed", "tier": 0,
+                 "attempt_count": 9, "abandoned_attempt_count": 0},
+            ]
+
+        def migration_outcome_abandon_reasons_by_kind(self):
+            return [
+                {"change_kind": "response-property-removed", "tier": 2,
+                 "attempt_count": 2, "abandon_reason_code": "static_verify_exhausted"},
+            ]
+
+    from sync.core.models import VendorChange as VC
+
+    change = VC(vendor_id="stripe", from_version="a", to_version="b",
+                kind="response-property-removed", operation_id="GetAccounts",
+                path_ptr="/x", severity="warning", source="oasdiff")
+    text = cli.corpus_lessons_reader(_CorpusStore())(change)
+
+    assert "3 past attempt(s)" in text
+    assert "2 abandoned" in text
+    assert "static_verify_exhausted" in text
+    assert "parameter-renamed" not in text
+
+    quiet = VC(vendor_id="stripe", from_version="a", to_version="b",
+               kind="never-attempted", operation_id="GetAccounts",
+               path_ptr="/x", severity="warning", source="oasdiff")
+    assert cli.corpus_lessons_reader(_CorpusStore())(quiet) == ""
 
 
 def test_the_limit_stops_the_loop_before_the_queue_is_empty(monkeypatch):

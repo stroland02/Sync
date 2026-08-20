@@ -129,8 +129,45 @@ def load_catalogue() -> dict[str, dict]:
     return catalogue_index(run_oasdiff_checks())
 
 
+def corpus_lessons_reader(store) -> "Callable[[VendorChange], str]":
+    """A per-change lookup of what the corpus already learned about its kind.
+
+    Composed from the two closed-vocabulary aggregates -- tiers and reason codes, never a
+    quoted sentence -- so the text is Sync's own and travels unfenced in the patch prompt.
+    Reads at call time rather than snapshotting at construction: a `--limit 0` run writes
+    outcomes as it goes, and the tenth finding deserves what the first nine taught.
+    """
+
+    def lessons(change: VendorChange) -> str:
+        rows = [
+            row for row in store.migration_outcome_rollup_by_kind()
+            if row["change_kind"] == change.kind
+        ]
+        if not rows:
+            return ""
+        attempts = sum(row["attempt_count"] for row in rows)
+        abandoned = sum(row["abandoned_attempt_count"] for row in rows)
+        lines = [
+            f"{attempts} past attempt(s) at `{change.kind}` in this workspace, "
+            f"{abandoned} abandoned."
+        ]
+        reasons = [
+            row for row in store.migration_outcome_abandon_reasons_by_kind()
+            if row["change_kind"] == change.kind
+        ]
+        for row in sorted(reasons, key=lambda r: -r["attempt_count"])[:3]:
+            lines.append(
+                f"- tier {row['tier']} abandoned {row['attempt_count']} time(s): "
+                f"{row['abandon_reason_code']}"
+            )
+        return "\n".join(lines)
+
+    return lessons
+
+
 def build_remediator(
-    catalogue: dict[str, dict] | None = None, repo_context: str = ""
+    catalogue: dict[str, dict] | None = None, repo_context: str = "",
+    lessons_for: "Callable[[VendorChange], str] | None" = None,
 ) -> TieredRemediator:
     """The tier cascade, cheapest first, with the agent last and unconditional.
 
@@ -170,7 +207,7 @@ def build_remediator(
             ParameterOmitRemediator(),
             ParameterRenameRemediator(),
             PropertyOmitRemediator(),
-            TerminalTier(AgentRemediator(repo_context=repo_context)),
+            TerminalTier(AgentRemediator(repo_context=repo_context, lessons_for=lessons_for)),
         ],
         catalogue=catalogue,
     )
@@ -1194,7 +1231,10 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
             catalogue = load_catalogue()
             graph = build_graph(
                 store=store, adapter=adapter,
-                remediator=build_remediator(catalogue, repo_context=repo_context),
+                remediator=build_remediator(
+                    catalogue, repo_context=repo_context,
+                    lessons_for=corpus_lessons_reader(store),
+                ),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )
             for finding in selected:
@@ -1274,7 +1314,10 @@ def cmd_tickets(args) -> int:
             catalogue = load_catalogue()
             graph = build_graph(
                 store=store, adapter=adapter,
-                remediator=build_remediator(catalogue, repo_context=repo_context),
+                remediator=build_remediator(
+                    catalogue, repo_context=repo_context,
+                    lessons_for=corpus_lessons_reader(store),
+                ),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )
             executed = 0

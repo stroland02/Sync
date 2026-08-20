@@ -640,10 +640,10 @@ class _EditingRemediator:
     """Stands in for the patch agent: edits the call site's file on disk and
     returns the diff, which is what `AgentRemediator` does. No model call."""
 
-    def __init__(self, repo_context: str = "") -> None:
-        # `build_remediator` now constructs the real `AgentRemediator` with this kwarg, and
+    def __init__(self, repo_context: str = "", lessons_for=None) -> None:
+        # `build_remediator` now constructs the real `AgentRemediator` with these kwargs, and
         # this class replaces that constructor via `monkeypatch.setattr`, so it takes the same
-        # argument -- unused, since this stand-in never builds a prompt.
+        # arguments -- unused, since this stand-in never builds a prompt.
         pass
 
     def propose(self, finding, change, site, repo, diagnostics=""):

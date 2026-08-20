@@ -344,6 +344,57 @@ def test_the_retry_heading_does_not_name_a_stage_the_caller_never_reported():
     assert "failed typechecking" not in prompt.lower()
 
 
+def test_corpus_lessons_reach_the_prompt_ahead_of_the_scope_rules():
+    """What past attempts at this change kind learned, in the prompt when the corpus holds any.
+
+    The lessons block is Sync's own aggregate over closed vocabularies -- tiers and reason
+    codes, never free text -- which is why it travels unfenced where every vendor sentence
+    is fenced. The scope rules keep the last position.
+    """
+    prompt = build_patch_prompt(
+        FINDING, CHANGE, SITE,
+        corpus_lessons="3 of 4 past attempts at response-property-removed abandoned at tier 0.",
+    )
+    assert "3 of 4 past attempts" in prompt
+    assert prompt.index("3 of 4 past attempts") < prompt.index("Do not")
+
+
+def test_no_lessons_appends_nothing():
+    # Byte-identical without lessons, the same guarantee repo_context makes: a corpus with
+    # nothing to say must not move the cacheable prefix or add an empty heading.
+    assert build_patch_prompt(FINDING, CHANGE, SITE) == build_patch_prompt(
+        FINDING, CHANGE, SITE, corpus_lessons="",
+    )
+
+
+def test_the_agent_asks_for_lessons_about_the_change_it_holds(tmp_path):
+    """`lessons_for` is called with the change, so the lookup can narrow to its kind."""
+    prompts: list[str] = []
+
+    class _CapturingRunner:
+        def run(self, prompt, repo_path, identity):
+            prompts.append(prompt)
+
+    remediator = AgentRemediator(
+        runner=_CapturingRunner(),
+        lessons_for=lambda change: f"lessons about {change.kind}",
+    )
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    identity = ["-c", "user.name=t", "-c", "user.email=t@invalid"]
+    (tmp_path / "a.txt").write_text("a\n", encoding="utf-8")
+    subprocess.run(["git", *identity, "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", *identity, "commit", "-q", "-m", "seed", "--no-gpg-sign"],
+        cwd=tmp_path, check=True,
+    )
+    repo = RepoRef(repo_id="r1", url="u", local_path=str(tmp_path), head_sha="0" * 40)
+    remediator.propose(FINDING, CHANGE, SITE, repo)
+
+    assert prompts and f"lessons about {CHANGE.kind}" in prompts[0]
+
+
 def _ok_result(**overrides) -> ResultMessage:
     fields = dict(
         subtype="success", duration_ms=1, duration_api_ms=1, is_error=False, num_turns=1, session_id="s1"
