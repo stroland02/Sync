@@ -56,7 +56,7 @@ function levelGroup(overrides: Partial<FilterGroup> = {}): FilterGroup {
     id: "level",
     legend: "Level",
     options: LEVEL_OPTIONS,
-    selected: [],
+    selected: null,
     onSelect: () => {},
     ...overrides,
   }
@@ -67,7 +67,7 @@ function rangeGroup(overrides: Partial<FilterGroup> = {}): FilterGroup {
     id: "range",
     legend: "Time range",
     options: RANGE_OPTIONS,
-    selected: [],
+    selected: null,
     onSelect: () => {},
     ...overrides,
   }
@@ -149,7 +149,7 @@ describe("unansweredCounts", () => {
 
 describe("activeSelections", () => {
   it("reports a selection through the option it names, and nothing for a group at rest", () => {
-    const selections = activeSelections([rangeGroup(), levelGroup({ selected: ["warning"] })])
+    const selections = activeSelections([rangeGroup(), levelGroup({ selected: "warning" })])
 
     expect(selections).toEqual([
       { kind: "option", legend: "Level", value: "warning", label: "Warning" },
@@ -157,7 +157,7 @@ describe("activeSelections", () => {
   })
 
   it("reports a selection its group's vocabulary does not hold, rather than dropping it", () => {
-    const selections = activeSelections([levelGroup({ selected: ["retracted"] })])
+    const selections = activeSelections([levelGroup({ selected: "retracted" })])
 
     expect(selections).toEqual([
       { kind: "outside-vocabulary", legend: "Level", value: "retracted" },
@@ -242,38 +242,17 @@ describe("FilterRail", () => {
     ).toBe("false")
   })
 
-  it("sends the value itself when an option is picked, pressed or not", () => {
-    // The contract moved with M15 Task 4: a press is a *toggle* of one value rather than a
-    // replacement of the selection, so the rail names the value and the caller owns membership.
-    // A rail that still sent `null` for a pressed option would clear the whole facet when a
-    // reader meant to remove one of the three integrations they had chosen.
+  it("clears a group when its selected option is picked again", () => {
     const onSelect = vi.fn()
-    renderRail({ groups: [levelGroup({ selected: ["deprecation"], onSelect })] })
+    renderRail({ groups: [levelGroup({ selected: "deprecation", onSelect })] })
 
     fireEvent.click(screen.getByRole("button", { name: /Deprecation/ }))
-
-    expect(onSelect).toHaveBeenCalledWith("deprecation")
-  })
-
-  it("clears the whole facet only from the unfiltered option", () => {
-    const onSelect = vi.fn()
-    renderRail({
-      groups: [
-        levelGroup({
-          selected: ["deprecation", "warning"],
-          onSelect,
-          unfiltered: { label: "Every level", count: { kind: "counted", value: 44 } },
-        }),
-      ],
-    })
-
-    fireEvent.click(screen.getByRole("button", { name: /Every level/ }))
 
     expect(onSelect).toHaveBeenCalledWith(null)
   })
 
   it("marks exactly one option pressed inside a group that has a selection", () => {
-    renderRail({ groups: [levelGroup({ selected: ["warning"] })] })
+    renderRail({ groups: [levelGroup({ selected: "warning" })] })
 
     const group = screen.getByRole("group", { name: /Level/ })
     const buttons = within(group).getAllByRole("button")
@@ -314,7 +293,7 @@ describe("FilterRail", () => {
     renderRail({
       groups: [
         levelGroup({
-          selected: ["warning"],
+          selected: "warning",
           onSelect,
           unfiltered: { label: "All levels", count: { kind: "counted", value: 15 } },
         }),
@@ -355,91 +334,10 @@ describe("FilterRail", () => {
   })
 
   it("says so when a group is narrowed by a value its own vocabulary does not hold", () => {
-    renderRail({ groups: [levelGroup({ selected: ["retracted"] })] })
+    renderRail({ groups: [levelGroup({ selected: "retracted" })] })
 
     const group = screen.getByRole("group", { name: /Level/ })
     expect(within(group).getAllByRole("button").filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(0)
     expect(screen.getByText(/retracted/)).toBeTruthy()
-  })
-})
-
-describe("multi-select and per-facet search (M15 Task 4)", () => {
-  const MANY = Array.from({ length: 12 }, (_, index) => ({
-    value: `vendor-${index}`,
-    label: `Vendor ${index}`,
-    count: { kind: "counted" as const, value: index },
-  })) as unknown as FilterGroup["options"]
-
-  it("presses every value the caller holds, not just one", () => {
-    // The claim multi-select is for. A rail that pressed only the first would look like a
-    // single-select rail over a table narrowed by two, and nothing on screen would say so.
-    renderRail({ groups: [levelGroup({ selected: ["deprecation", "warning"] })] })
-
-    const group = screen.getByRole("group", { name: /Level/ })
-    const pressed = within(group)
-      .getAllByRole("button")
-      .filter((button) => button.getAttribute("aria-pressed") === "true")
-
-    expect(pressed).toHaveLength(2)
-  })
-
-  it("offers no search box for a facet a reader can simply read", () => {
-    // A search box over four options costs a decision and returns nothing.
-    renderRail({ groups: [levelGroup()] })
-
-    expect(screen.queryByRole("searchbox")).toBeNull()
-  })
-
-  it("offers a search box once a facet outgrows the threshold", () => {
-    renderRail({ groups: [levelGroup({ options: MANY })] })
-
-    expect(screen.getByRole("searchbox", { name: /Search level/i })).toBeTruthy()
-  })
-
-  it("narrows the options to the term, on the value as well as the label", () => {
-    renderRail({ groups: [levelGroup({ options: MANY })] })
-
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "vendor-1" } })
-
-    const group = screen.getByRole("group", { name: /Level/ })
-    const labels = within(group)
-      .getAllByRole("button")
-      .map((button) => button.textContent)
-    // A substring match, so vendor-1 brings vendor-10 and vendor-11 with it -- three of twelve.
-    // Prefix-only matching would be the wrong rule here: a reader searching an operation facet
-    // types a fragment they remember from the middle of a name at least as often as the start.
-    expect(labels.filter((label) => label?.includes("Vendor")).length).toBe(3)
-  })
-
-  it("keeps a chosen option visible however the term is narrowed", () => {
-    // Otherwise typing hides an option that is currently narrowing the table, and the only
-    // control that would clear it is the one that just disappeared.
-    renderRail({ groups: [levelGroup({ options: MANY, selected: ["vendor-7"] })] })
-
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "vendor-2" } })
-
-    expect(screen.getByRole("button", { name: /Vendor 7/ }).getAttribute("aria-pressed")).toBe(
-      "true",
-    )
-  })
-
-  it("says the facet is not empty when a term matches none of it", () => {
-    renderRail({ groups: [levelGroup({ options: MANY })] })
-
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zzz" } })
-
-    // The distinction the console exists for: no value *matches*, against no value existing.
-    expect(screen.getByText(/No value in this facet matches/)).toBeTruthy()
-    expect(screen.getByText(/The facet holds 12/)).toBeTruthy()
-  })
-
-  it("reports every selection a facet's vocabulary does not hold", () => {
-    // A stale URL carrying two retired values must report both. Reporting one would leave a
-    // table narrowed by something with nothing on screen accounting for it.
-    const selections = activeSelections([
-      levelGroup({ selected: ["retracted", "rescinded"] }),
-    ])
-
-    expect(selections.filter((s) => s.kind === "outside-vocabulary")).toHaveLength(2)
   })
 })

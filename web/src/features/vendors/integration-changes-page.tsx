@@ -36,7 +36,6 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { ChangeKindTag, SeverityTag } from "@/components/tag"
-import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
@@ -52,7 +51,7 @@ import { ErrorState, LoadingState } from "@/components/states"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { useFilterListParam } from "@/lib/use-filter-list-param"
+import { useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 const LIMIT = 50
@@ -102,15 +101,12 @@ function facetsOf(page: ChangesPage): ChangesFacets {
 }
 
 async function fetchChanges(
-  params: { vendorIds: readonly string[]; severities: readonly string[]; offset: number },
+  params: { vendorId: string | null; severity: string | null; offset: number },
   signal?: AbortSignal,
 ): Promise<ChangesPage> {
   const query = new URLSearchParams({ limit: String(LIMIT), offset: String(params.offset) })
-  // Appended once per value: `?vendor_id=a&vendor_id=b` is the union, and it is what
-  // `sync.api.app._values_param` reads. A comma-joined value would need a separator that cannot
-  // occur inside a vendor identifier, and there is no such character.
-  for (const vendorId of params.vendorIds) query.append("vendor_id", vendorId)
-  for (const severity of params.severities) query.append("severity", severity)
+  if (params.vendorId !== null) query.set("vendor_id", params.vendorId)
+  if (params.severity !== null) query.set("severity", params.severity)
   const path = `/api/integration-changes?${query.toString()}`
   let response: Response
   try {
@@ -133,7 +129,7 @@ function facetGroup(
   counts: Record<string, number>,
   unfilteredLabel: string,
   unfilteredTotal: number,
-  selected: readonly string[],
+  selected: string | null,
   onSelect: (value: string | null) => void,
 ): FilterGroup | null {
   const keys = Object.keys(counts).sort()
@@ -165,27 +161,18 @@ export function IntegrationChangesPage() {
   // the facet it was meant to accompany. The rail looked pressed and nothing was refetched, which
   // is the owner's report of 2026-08-19. One write does both.
   const [offset, setOffset] = useOffsetParam("changes_offset")
-  // Sets rather than single values (M15 Task 4): the narrowing a reviewer actually wants here is
-  // breaking *and* deprecation -- two of the five-member vocabulary -- and no sequence of presses
-  // reached it while a facet held one value.
-  const [vendorIds, toggleVendor, clearVendors] = useFilterListParam("changes_vendor", [
-    "changes_offset",
-  ])
-  const [severities, toggleSeverity, clearSeverities] = useFilterListParam(
-    "changes_severity",
-    ["changes_offset"],
-  )
+  const [vendorId, setSelectedVendor] = useFilterParam("changes_vendor", ["changes_offset"])
+  const [severity, setSelectedSeverity] = useFilterParam("changes_severity", ["changes_offset"])
   const query = useQuery({
-    queryKey: ["integration-changes", vendorIds, severities, offset],
-    queryFn: ({ signal }) => fetchChanges({ vendorIds, severities, offset }, signal),
+    queryKey: ["integration-changes", vendorId, severity, offset],
+    queryFn: ({ signal }) => fetchChanges({ vendorId, severity, offset }, signal),
   })
 
   if (repoId === undefined) return <UnknownRoute />
 
-  // The rail sends `null` for its unfiltered option and a value for a press. The toggle owns
-  // membership; clearing is the same toggle handed nothing to add.
-  function narrow(toggle: (value: string) => void, clear: () => void) {
-    return (value: string | null) => (value === null ? clear() : toggle(value))
+  // The setter already clears the offset in the same write, so nothing is chained after it.
+  function narrow(setter: (value: string | null) => void) {
+    return setter
   }
 
   const groups: FilterGroup[] = []
@@ -196,8 +183,8 @@ export function IntegrationChangesPage() {
       query.data.by_vendor,
       "Every integration",
       query.data.unfiltered_total,
-      vendorIds,
-      narrow(toggleVendor, clearVendors),
+      vendorId,
+      narrow(setSelectedVendor),
     )
     const severityFacet = facetGroup(
       "severity",
@@ -205,8 +192,8 @@ export function IntegrationChangesPage() {
       query.data.by_severity,
       "Every severity",
       query.data.unfiltered_total,
-      severities,
-      narrow(toggleSeverity, clearSeverities),
+      severity,
+      narrow(setSelectedSeverity),
     )
     if (vendorFacet !== null) groups.push(vendorFacet)
     if (severityFacet !== null) groups.push(severityFacet)
@@ -283,7 +270,7 @@ export function IntegrationChangesPage() {
               <TableBody>
                 {query.data.items.length === 0 && (
                   <TableEmptyRow colSpan={7}>
-                    {vendorIds.length > 0 || severities.length > 0 ? (
+                    {vendorId !== null || severity !== null ? (
                       <>
                         <span className="text-ink">No change matches this narrowing.</span> The
                         graph holds {query.data.unfiltered_total.toLocaleString()} changes —
@@ -337,7 +324,7 @@ export function IntegrationChangesPage() {
               nextOffset={query.data.next_offset}
               busy={query.isFetching}
               unfilteredTotal={
-                vendorIds.length > 0 || severities.length > 0 ? query.data.unfiltered_total : undefined
+                vendorId !== null || severity !== null ? query.data.unfiltered_total : undefined
               }
               onOffsetChange={setOffset}
             />
@@ -350,12 +337,6 @@ export function IntegrationChangesPage() {
           </MetricPanel>
         </div>
       )}
-
-      {/* What a published change actually cost this workspace, beside the changes themselves.
-          It sat on the Overview until 2026-08-19, where it was the only table on a screen whose
-          job is the shape of the loop; a change unit is a published change with its blast radius
-          attached, so it belongs under the feed that lists them. */}
-      <ChangeUnitsTable repoId={repoId} />
     </section>
   )
 }
