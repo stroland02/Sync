@@ -25,7 +25,17 @@ export function TrafficOverTimeCard({ series }: { series: TrafficBucket[] }) {
   const days = seriesToDays(series)
   const build = useCallback(
     (tokens: ChartTokens) =>
-      buildDayStackOption({ days, members: TRAFFIC_MEMBERS, stackId: "traffic" }, tokens),
+      buildDayStackOption(
+        {
+          days,
+          members: TRAFFIC_MEMBERS,
+          stackId: "traffic",
+          // Errored is a state, never a category: painted from the reserved serious
+          // ink so it cannot land on green by slot order, which it did.
+          memberColors: { errored: tokens.seriousInk },
+        },
+        tokens,
+      ),
     [days],
   )
 

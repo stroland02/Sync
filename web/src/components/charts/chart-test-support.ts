@@ -26,6 +26,9 @@ export const CHART_TOKENS: ChartTokens = {
   grid: "token:grid",
   axis: "token:axis",
   labelOnLight: "token:label-on-light",
+  goodInk: "#3ecf8e",
+  warningInk: "#ffb224",
+  seriousInk: "#f76b15",
   series: Array.from({ length: 8 }, (_, i) => `token:series-${i + 1}`),
 }
 

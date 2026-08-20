@@ -32,6 +32,7 @@
 
 import type { ReactNode } from "react"
 
+import { Status, type StatusTone } from "@/components/status"
 import { cn } from "@/lib/utils"
 
 export function Tag({
@@ -120,7 +121,24 @@ export function CountTag({ count, unit }: { count: number; unit: string }) {
 }
 
 
-/** A run outcome in the tag register — monochrome, the word carries the state. */
+/**
+ * A run outcome in the tag register. The one vocabulary that wears the reserved status ramp,
+ * by the owner's ruling of 2026-08-20 ("outcomes only"): opened is the loop closing, abandoned
+ * graver than reported, and anything the console has not caught up with stays monochrome.
+ * Colour never travels alone — the glyph and the word ship with it.
+ */
+const OUTCOME_TONE: Record<string, StatusTone> = {
+  opened: "good",
+  abandoned: "serious",
+  reported: "warning",
+}
+
 export function OutcomeTag({ outcome }: { outcome: string }) {
-  return <Tag>{outcome}</Tag>
+  const tone = OUTCOME_TONE[outcome]
+  if (tone === undefined) return <Tag>{outcome}</Tag>
+  return (
+    <span className="furniture inline-flex shrink-0 items-center rounded-control border px-field py-0.5 font-mono text-meta">
+      <Status tone={tone} label={outcome} />
+    </span>
+  )
 }

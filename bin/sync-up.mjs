@@ -323,7 +323,17 @@ export function preflight({ docker, uv, environment, postgres }) {
   return {
     supported,
     heading: "A zero-prerequisite install would:",
-    actions: [uv.message, environment.message, postgres.message],
+    actions: [
+      uv.message,
+      environment.message,
+      postgres.message,
+      ...(yarnProbe() === null
+        ? [
+            "yarn is not on PATH, and the remediation pipeline runs it as the customer's own " +
+              "toolchain -- the first real repair will abandon without it. `npm install -g yarn`.",
+          ]
+        : []),
+    ],
     // Stated every time rather than only when something is missing. A check that lists four
     // confident lines and omits what it has not done reads as a readiness report.
     //
@@ -361,6 +371,18 @@ function uvProbe() {
   if (result.error || result.status !== 0) return null
   const match = /([0-9]+\.[0-9]+(?:\.[0-9]+)?)/.exec(result.stdout ?? "")
   return match ? match[1] : null
+}
+
+/**
+ * Yarn, probed the way uv is. The remediation pipeline shells out to the customer's own
+ * toolchain, and the first real run on this machine abandoned with "yarn not found on PATH".
+ * An honest abandonment, but not one a fresh install should have to repeat -- the fix is one
+ * command, so the quickstart says it rather than letting the first remediation discover it.
+ */
+function yarnProbe() {
+  const result = spawnSync("yarn", ["--version"], { encoding: "utf-8", shell: true })
+  if (result.error || result.status !== 0) return null
+  return (result.stdout ?? "").trim() || null
 }
 
 function environmentProbe(record) {

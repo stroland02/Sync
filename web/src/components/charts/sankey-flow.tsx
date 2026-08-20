@@ -142,7 +142,11 @@ export function SankeyFlow({
             stroke={ramp((link.value ?? 0) / total)}
             strokeOpacity={0.55}
             strokeWidth={Math.max(link.width ?? 1, 1)}
-          />
+          >
+            <title>
+              {`${link.value} ${unit}: ${(link.source as LaidOutNode).label} to ${(link.target as LaidOutNode).label}`}
+            </title>
+          </path>
         ))}
       </g>
       <g>
@@ -156,7 +160,9 @@ export function SankeyFlow({
                 width={node.x1 - node.x0}
                 height={Math.max(node.y1 - node.y0, 1)}
                 fill={ramp((node.value ?? 0) / total)}
-              />
+              >
+                <title>{`${node.label}: ${(node.value ?? 0).toLocaleString()} ${unit}`}</title>
+              </rect>
               {/* The count travels with the label. A reader must never have to recover a
                   quantity from a band's thickness. */}
               <text

@@ -21,6 +21,9 @@ const TOKENS: ChartTokens = {
   grid: "#222",
   axis: "#333",
   labelOnLight: "#000",
+  goodInk: "#3ecf8e",
+  warningInk: "#ffb224",
+  seriousInk: "#f76b15",
   series: ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"],
 }
 

@@ -38,6 +38,12 @@ export interface DayStackInput {
   readonly members: readonly string[]
   /** Distinguishes this chart's stack from another's on the same screen. */
   readonly stackId: string
+  /**
+   * A colour for a member whose identity IS a state — errors, outcomes — resolved by the
+   * caller from the reserved status inks. Members absent here keep the categorical slot for
+   * their index, so a chart of plain categories changes nothing by ignoring this.
+   */
+  readonly memberColors?: Readonly<Record<string, string>>
 }
 
 export function buildDayStackOption(input: DayStackInput, tokens: ChartTokens): EChartsOption {
@@ -81,7 +87,10 @@ export function buildDayStackOption(input: DayStackInput, tokens: ChartTokens): 
       type: "bar" as const,
       stack: input.stackId,
       data: input.days.map((entry) => entry.counts[member] ?? 0),
-      itemStyle: { color: tokens.series[index % tokens.series.length] },
+      itemStyle: {
+        color:
+          input.memberColors?.[member] ?? tokens.series[index % tokens.series.length],
+      },
     })),
   }
 }

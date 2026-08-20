@@ -27,6 +27,11 @@ export interface ChartTokens {
   labelOnLight: string
   /** Fixed slot order, index 0 is series-1. Never reassigned by value or reversed. */
   series: string[]
+  /** The reserved status inks, for the one series meaning a state — an error band painted
+   * from a categorical slot once rendered errors green and successes orange. */
+  goodInk: string
+  warningInk: string
+  seriousInk: string
 }
 
 const TOKEN_PROPERTIES = {
@@ -37,6 +42,9 @@ const TOKEN_PROPERTIES = {
   grid: "--color-chart-grid",
   axis: "--color-chart-axis",
   labelOnLight: "--color-chart-label-on-light",
+  goodInk: "--color-good-ink",
+  warningInk: "--color-warning-ink",
+  seriousInk: "--color-serious-ink",
 } as const
 
 const SERIES_PROPERTIES = Array.from({ length: 8 }, (_, i) => `--color-series-${i + 1}`)
@@ -64,6 +72,9 @@ function readTokens(): ChartTokens {
     grid: read(TOKEN_PROPERTIES.grid),
     axis: read(TOKEN_PROPERTIES.axis),
     labelOnLight: read(TOKEN_PROPERTIES.labelOnLight),
+    goodInk: "#3ecf8e",
+    warningInk: "#ffb224",
+    seriousInk: "#f76b15",
     series: SERIES_PROPERTIES.map(read),
   }
 }
