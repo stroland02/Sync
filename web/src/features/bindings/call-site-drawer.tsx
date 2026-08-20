@@ -24,7 +24,6 @@
 
 import { CodeSnippet, absentSnippetReason } from "@/components/code-snippet"
 import { InfoHint } from "@/components/info-hint"
-import { vendorName } from "@/features/vendors/vendor-name"
 import { RungBadge } from "@/components/provenance"
 import { Absent } from "@/components/status"
 export interface CallSiteRow {
@@ -126,7 +125,7 @@ export function CallSiteDetail({
       )}
 
       <div className="grid gap-section sm:grid-cols-2">
-        <Fact label="Integration" value={vendorName(site.vendor_id)} />
+        <Fact label="Integration" value={site.vendor_id} />
         <Fact label="Operation" value={site.operation_id} />
         <Fact label="Symbol invoked" value={site.symbol} />
         <Fact

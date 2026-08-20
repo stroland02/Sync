@@ -45,7 +45,6 @@ import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { RungBadge } from "@/components/provenance"
 import { Absent } from "@/components/status"
 import { FindingsTable } from "@/features/findings/findings-table"
-import { vendorName } from "@/features/vendors/vendor-name"
 
 /**
  * How many findings a set of units holds, from the payload's own counts.
@@ -93,7 +92,7 @@ function UnitRow({ repoId, unit }: { repoId: string; unit: ChangeUnitRow }) {
           </button>
         </TableCell>
         <TableCell className="font-mono text-meta">
-          <span className="text-ink">{vendorName(unit.vendor_id)}</span>
+          <span className="text-ink">{unit.vendor_id}</span>
           {unit.operation_id === null ? (
             <Absent>no operation recorded</Absent>
           ) : (
