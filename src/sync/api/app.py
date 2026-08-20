@@ -647,20 +647,10 @@ def create_app(
             return JSONResponse({"error": "Call sites reader not configured"}, status_code=501)
         page = call_sites_reader(
             request.path_params["repo_id"],
-            vendor_ids=_values_param(request, "vendor_id"),
-            operation_ids=_values_param(request, "operation_id"),
-            loop_depths=_int_values_param(request, "loop_depth"),
+            vendor_id=request.query_params.get("vendor_id"),
             path_prefix=request.query_params.get("path_prefix"),
             limit=_limit_param(request),
             offset=_offset_param(request),
-        return JSONResponse(
-            call_sites_reader(
-                request.path_params["repo_id"],
-                vendor_id=request.query_params.get("vendor_id"),
-                path_prefix=request.query_params.get("path_prefix"),
-                limit=_limit_param(request),
-                offset=_offset_param(request),
-            )
         )
         return JSONResponse(_with_source_policy(page, page.get("items", [])))
 

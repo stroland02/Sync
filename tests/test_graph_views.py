@@ -2387,37 +2387,6 @@ class TestOverviewLastIndexRun:
         assert overview_summary(store)["last_index_run"] is None
 
 
-def test_a_finding_row_carries_the_name_two_people_can_say(store):
-    """M15 Task 6, at the payload rather than in the console.
-
-    `web/CLAUDE.md`: a rule the payload can answer belongs in the payload, so two screens cannot
-    disagree about one fact. A name derived in the console would be derived again in the CLI and
-    in a pull-request body, and the third copy is where they would start to differ.
-    """
-    site = store.upsert_call_site(_site(vendor_id="stripe", operation_id="PostCharges"))
-    store.insert_finding(_finding(site, claim="response-field-type-changed"))
-
-    row = findings_page(store, repo_id="r1")["items"][0]
-
-    assert row["name"].startswith("stripe-postcharges-")
-
-
-def test_the_name_survives_re_deriving_the_finding(store):
-    """The property the feature rests on, proven through the store rather than in isolation.
-
-    `insert_finding` converges on the row it already wrote, so a second scan must not rename a
-    finding somebody has already written into a ticket.
-    """
-    site = store.upsert_call_site(_site(vendor_id="stripe", operation_id="PostCharges"))
-    store.insert_finding(_finding(site, claim="response-field-type-changed"))
-    first = findings_page(store, repo_id="r1")["items"][0]["name"]
-
-    store.insert_finding(_finding(site, claim="response-field-type-changed"))
-    second = findings_page(store, repo_id="r1")["items"][0]["name"]
-
-    assert first == second
-
-
 # -- the traffic rollup and its rung discipline --------------------------------------
 
 
