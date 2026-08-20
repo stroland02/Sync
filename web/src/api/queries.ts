@@ -358,8 +358,16 @@ export function useRepositoryGraph(repoId: string) {
   })
 }
 
-/** What traffic this repository has shown, what shape it had, and how often it failed. */
-export function useRepositoryObserved(repoId: string, params: ObservedTelemetryParams = {}) {
+/**
+ * What traffic this repository has shown, what shape it had, and how often it failed.
+ * Polls only where a caller passes an interval — the Telemetry page does, while mounted,
+ * because live traffic is the one answer here that moves on its own.
+ */
+export function useRepositoryObserved(
+  repoId: string,
+  params: ObservedTelemetryParams = {},
+  options: { refetchIntervalMs?: number } = {},
+) {
   return useQuery({
     queryKey: [
       "repositories",
@@ -370,6 +378,7 @@ export function useRepositoryObserved(repoId: string, params: ObservedTelemetryP
       params.errorWindowsOffset ?? 0,
     ],
     queryFn: ({ signal }) => fetchRepositoryObserved(repoId, params, signal),
+    refetchInterval: options.refetchIntervalMs ?? false,
   })
 }
 
