@@ -18,6 +18,7 @@ inventing an all-clear it never earned. `declined` and `failed` are not evidence
 decline means the adapter would not answer and a failure means it could not.
 """
 
+import os
 from datetime import datetime, timezone
 
 import pytest
@@ -26,7 +27,12 @@ from sync.core import CallSite, Finding, VendorChange
 from sync.graph.store import GraphStore
 from sync.signals.intake_attempt import IntakeAttempt
 
-DSN = "postgresql://sync:sync@localhost:5433/sync"
+# Read from the environment, never hardcoded. `conftest.pytest_configure` gives a run with
+# `SYNC_DSN` unset its own per-pid database precisely so a suite cannot truncate a database
+# somebody is looking at -- and this file hardcoded the development DSN, so every run of it
+# emptied the console the owner was testing against. The seed vanished twice before the cause
+# was found, which is what a hardcoded DSN buys: a defect that looks like the data never landed.
+DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
 
 @pytest.fixture()
