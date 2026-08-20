@@ -42,7 +42,8 @@
 
 import { useParams } from "react-router"
 
-import { useDetectors, useWorkspaceFindings } from "@/api/queries"
+import { useChangeUnits, useDetectors, useWorkspaceFindings } from "@/api/queries"
+import { ChangeUnitGroups } from "@/features/findings/change-unit-groups"
 import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
 import { PageTabs, findingsTabs } from "@/components/page-tabs"
@@ -169,6 +170,13 @@ function FindingsBody({
   // the counts hold beyond it appended rather than dropped — a row whose kind the tabs omit is
   // unreachable by exactly the reader triaging it. A kind at zero keeps its tab: the counts are
   // computed without the severity narrowing, so zero is a measured answer, not an absence.
+  // M15 Task 7: the change leads, because one vendor change breaking eleven call sites is one
+  // decision rather than eleven, and a flat list is the console asserting otherwise by its shape.
+  // The parameter spells only the departure from the default, so an unswitched screen's URL is
+  // the URL it had before the toggle existed.
+  const [view, setView] = useFilterParam("findings_view", ["findings_offset"])
+  const grouped = view !== "flat"
+
   const kinds = [
     ...page.severity_order,
     ...Object.keys(page.severity_counts).filter((kind) => !page.severity_order.includes(kind)),
@@ -241,6 +249,14 @@ function FindingsBody({
           unit: `open ${page.severity_total === 1 ? "finding" : "findings"} in ${repoId}`,
         }}
       >
+        {/* The severity tab reaches both views, because the grouping narrows before it buckets.
+            A tab that stopped applying when the view changed would look active over numbers
+            true of something else. */}
+        <GroupingToggle grouped={grouped} onChange={setView} />
+        {grouped ? (
+          <GroupedFindings repoId={repoId} severity={severity} />
+        ) : (
+          <>
         <FindingsTable repoId={repoId} rows={page.items} />
         {/* Decision 60: with a filter on, `total` counts the narrowed set while `severity_total`
             counts the scope, and a bare range under a narrowed table reads as the whole set. */}
@@ -254,7 +270,58 @@ function FindingsBody({
           unfilteredTotal={severity !== null ? page.severity_total : undefined}
           onOffsetChange={onOffset}
         />
+          </>
+        )}
       </MetricPanel>
     </TriageTabs>
   )
+}
+
+/** Which of the two questions this screen answers, held in the URL so it can be handed over. */
+function GroupingToggle({
+  grouped,
+  onChange,
+}: {
+  grouped: boolean
+  onChange: (next: string | null) => void
+}) {
+  return (
+    <div className="flex items-center gap-field">
+      {[
+        { id: "units", label: "By change", on: grouped },
+        { id: "flat", label: "Every finding", on: !grouped },
+      ].map((choice) => (
+        <button
+          key={choice.id}
+          type="button"
+          aria-pressed={choice.on}
+          onClick={() => onChange(choice.id === "units" ? null : "flat")}
+          className={`rounded-control border px-field py-0.5 text-meta transition-colors ${
+            choice.on
+              ? "border-line bg-surface-subtle text-ink"
+              : "border-transparent text-ink-muted hover:text-ink"
+          }`}
+        >
+          {choice.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The grouped view and its own read, on its own key. */
+function GroupedFindings({ repoId, severity }: { repoId: string; severity: string | null }) {
+  const units = useChangeUnits({ repoId, severity })
+
+  if (units.isPending) return <LoadingState what={`the changes open in ${repoId}`} />
+  if (units.isError) {
+    return (
+      <ErrorState
+        error={units.error}
+        what={`the changes open in ${repoId}`}
+        onRetry={() => void units.refetch()}
+      />
+    )
+  }
+  return <ChangeUnitGroups repoId={repoId} units={units.data.items} unitTotal={units.data.total} />
 }

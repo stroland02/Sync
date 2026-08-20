@@ -63,6 +63,23 @@ def _stable_id(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
 
 
+def _value_set(values: Sequence, name: str) -> tuple:
+    """One multi-select filter's chosen values, de-duplicated and order-stable.
+
+    The string check is the only validation in this module that guards an internal caller, and
+    it is here because the failure it catches is silent. A string is a sequence of characters,
+    so `vendor_ids="stripe"` reaches Postgres as `= ANY(ARRAY['s','t','r','i','p','e'])`, which
+    matches nothing and returns an empty page -- indistinguishable on screen from an honest "no
+    call site matches this narrowing".
+
+    Order-stable rather than a `set` so a query plan and a cache key do not vary by iteration
+    order, which would make two identical narrowings look like two different reads.
+    """
+    if isinstance(values, str):
+        raise TypeError(f"{name} takes a sequence of values, not the string {values!r}")
+    return tuple(dict.fromkeys(values))
+
+
 # Entries in a CREATE TABLE body that declare a constraint rather than a column. Everything
 # else is a column, which is what makes this list the whole of the grammar this needs to know.
 _TABLE_CONSTRAINTS = frozenset(
@@ -139,6 +156,58 @@ def _common_directory(lo: str | None, hi: str | None) -> str:
         shared += 1
     cut = lo.rfind("/", 0, shared)
     return lo[: cut + 1] if cut >= 0 else ""
+
+
+# Whether this codebase's calls are known to be at risk, known to be clean, or unexamined.
+#
+# **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it --
+# severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
+# `safe` severity would be Sync inventing a vendor word for a judgement about the customer's
+# codebase. This is the honest form of the same question, and it is computed rather than stored.
+#
+# **`clean` is only honest because `intake_attempt` exists.** That table's own grain comment says
+# it is there to keep *never-asked* apart from *nothing-new*, which is exactly what is needed: a
+# vendor with no successful intake has never had its specification read, and calling its
+# operations clean would be an all-clear the graph never earned -- the shape of claim this
+# product exists to refuse, arriving as reassurance rather than as a score.
+#
+# `declined` and `failed` are not evidence: a decline is an adapter that would not answer and a
+# failure is one that could not. Counting any attempt would turn a week of 403s into an all-clear.
+#
+# Two CTEs rather than correlated subqueries per row, because the facet groups over the whole
+# filtered set: at twelve thousand call sites a per-row `EXISTS` is twelve thousand lookups.
+_BINDING_STATUS_CTES = """
+WITH at_risk AS (
+    SELECT DISTINCT call_site.repo_id, call_site.vendor_id, call_site.operation_id
+      FROM finding
+      JOIN call_site ON call_site.id = finding.call_site_id
+     WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+), examined AS (
+    SELECT DISTINCT vendor_id FROM intake_attempt WHERE outcome = 'success'
+)
+"""
+
+# The joins the CTEs above need, and the expression that reads them. `at_risk` is keyed by
+# operation rather than by vendor: a vendor with one broken call and forty working ones is the
+# ordinary case, and reporting all forty-one at risk makes the status useless exactly where it
+# matters most.
+_BINDING_STATUS_JOINS = """
+    LEFT JOIN at_risk ON at_risk.repo_id = call_site.repo_id
+                     AND at_risk.vendor_id = call_site.vendor_id
+                     AND at_risk.operation_id = call_site.operation_id
+    LEFT JOIN examined ON examined.vendor_id = call_site.vendor_id
+"""
+
+_BINDING_STATUS_EXPR = """
+    CASE WHEN at_risk.operation_id IS NOT NULL THEN 'at_risk'
+         WHEN examined.vendor_id IS NOT NULL THEN 'clean'
+         ELSE 'unchecked' END
+"""
+
+# The closed set, most-wanting-attention first. Declared so a console can render every member and
+# a caller can validate one, and ordered here rather than at a render site for the reason
+# `SEVERITY_ORDER` is: a rank kept somewhere else drifts the first time the vocabulary widens.
+BINDING_STATUSES = ("at_risk", "unchecked", "clean")
 
 
 def _open_findings_predicate(
@@ -1029,7 +1098,10 @@ class GraphStore:
         self,
         repo_id: str,
         *,
-        vendor_id: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        operation_ids: Sequence[str] = (),
+        loop_depths: Sequence[int] = (),
+        binding_statuses: Sequence[str] = (),
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -1046,47 +1118,96 @@ class GraphStore:
         vendor counts honour a path prefix and ignore the vendor selection, and nothing here
         sums them into a total the caller did not ask for.
 
+        **Each filter takes a set, and a set is a union.** A codebase with forty integrations is
+        not filterable one at a time, and the pair a reader usually wants -- two integrations,
+        or the depths above one -- has no single-value spelling. An empty set is absent rather
+        than "match nothing": deselecting the last option means stop narrowing, and a rail whose
+        final deselection emptied the table would strand a reader with no visible way back.
+
+        **There is no rung filter and the table holds no rung column.** A rung describes a
+        binding rather than a call site; offering a facet whose vocabulary has one member would
+        assert the others exist.
+
         Retracted rows are excluded, as everywhere: a site the last pass stopped finding is not
         a place this codebase calls the vendor, and `total` counts what the filters admit so
         the pager walks exactly the set on screen.
         """
         limit = max(limit, 1)
-        where = ["repo_id = %s", "retracted_at IS NULL"]
-        params: list[object] = [repo_id]
-        if vendor_id is not None:
-            where.append("vendor_id = %s")
-            params.append(vendor_id)
-        if path_prefix:
-            where.append("path LIKE %s")
-            params.append(f"{path_prefix}%")
+        vendor_ids = _value_set(vendor_ids, "vendor_ids")
+        operation_ids = _value_set(operation_ids, "operation_ids")
+        loop_depths = _value_set(loop_depths, "loop_depths")
+        binding_statuses = _value_set(binding_statuses, "binding_statuses")
+
+        def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
+            """The WHERE terms, optionally leaving one facet's own filter out.
+
+            One builder rather than two, because the facet queries and the page query differing
+            by anything but the named omission is the defect this rule exists to prevent -- and
+            a second hand-maintained copy of the terms is exactly how they would come to differ.
+            """
+            # Qualified, because the binding-status CTEs join two relations that carry the same
+            # column names -- an unqualified `repo_id` is ambiguous the moment they are in scope.
+            where = ["call_site.repo_id = %s", "call_site.retracted_at IS NULL"]
+            params: list[object] = [repo_id]
+            if vendor_ids and ignoring != "vendor_id":
+                where.append("call_site.vendor_id = ANY(%s)")
+                params.append(list(vendor_ids))
+            if operation_ids and ignoring != "operation_id":
+                where.append("call_site.operation_id = ANY(%s)")
+                params.append(list(operation_ids))
+            if loop_depths and ignoring != "loop_depth":
+                where.append("call_site.loop_depth = ANY(%s)")
+                params.append(list(loop_depths))
+            if path_prefix and ignoring != "path":
+                where.append("call_site.path LIKE %s")
+                params.append(f"{path_prefix}%")
+            if binding_statuses and ignoring != "binding_status":
+                where.append(f"({_BINDING_STATUS_EXPR}) = ANY(%s)")
+                params.append(list(binding_statuses))
+            return where, params
+
+        where, params = predicates()
         clause = " AND ".join(where)
 
         total = int(
             self._connect().execute(
-                f"SELECT count(*) AS n FROM call_site WHERE {clause}", params
+                f"""
+                {_BINDING_STATUS_CTES}
+                SELECT count(*) AS n FROM call_site {_BINDING_STATUS_JOINS} WHERE {clause}
+                """,
+                params,
             ).fetchone()["n"]
         )
         rows = self._connect().execute(
-            f"SELECT * FROM call_site WHERE {clause} ORDER BY path, line, col LIMIT %s OFFSET %s",
+            f"""
+            {_BINDING_STATUS_CTES}
+            SELECT call_site.*, ({_BINDING_STATUS_EXPR}) AS binding_status
+              FROM call_site {_BINDING_STATUS_JOINS}
+             WHERE {clause}
+             ORDER BY call_site.path, call_site.line, call_site.col LIMIT %s OFFSET %s
+            """,
             [*params, limit, offset],
         ).fetchall()
 
-        # The vendor facet, counted over everything the OTHER filters admit.
-        facet_where = ["repo_id = %s", "retracted_at IS NULL"]
-        facet_params: list[object] = [repo_id]
-        if path_prefix:
-            facet_where.append("path LIKE %s")
-            facet_params.append(f"{path_prefix}%")
-        vendor_rows = self._connect().execute(
-            f"""
-            SELECT vendor_id, count(*) AS n
-              FROM call_site
-             WHERE {" AND ".join(facet_where)}
-             GROUP BY vendor_id
-             ORDER BY vendor_id
-            """,
-            facet_params,
-        ).fetchall()
+        # Each facet, counted over everything the OTHER filters admit.
+        def facet(column: str) -> list:
+            facet_where, facet_params = predicates(ignoring=column)
+            # `binding_status` is derived rather than stored, so the facet groups by the
+            # expression. Every other facet groups by its own column and reads the same here.
+            grouped = _BINDING_STATUS_EXPR if column == "binding_status" else f"call_site.{column}"
+            return self._connect().execute(
+                f"""
+                {_BINDING_STATUS_CTES}
+                SELECT ({grouped}) AS key, count(*) AS n
+                  FROM call_site {_BINDING_STATUS_JOINS}
+                 WHERE {" AND ".join(facet_where)}
+                 GROUP BY ({grouped})
+                 ORDER BY ({grouped})
+                """,
+                facet_params,
+            ).fetchall()
+
+        vendor_rows = facet("vendor_id")
 
         def rendered(row) -> dict:
             # `indexed_at` arrives as a datetime and the transport is JSON, so it is rendered
@@ -1105,11 +1226,54 @@ class GraphStore:
             "items": [rendered(row) for row in rows],
             "total": total,
             "next_offset": consumed if consumed < total else None,
-            "by_vendor": {row["vendor_id"]: int(row["n"]) for row in vendor_rows},
+            "by_vendor": {row["key"]: int(row["n"]) for row in vendor_rows},
+            "by_operation": {row["key"]: int(row["n"]) for row in facet("operation_id")},
+            "by_loop_depth": {int(row["key"]): int(row["n"]) for row in facet("loop_depth")},
+            # Whether each call is known to be at risk, known to be clean, or unexamined. A status
+            # absent here was not counted at nought: the grouping returns groups that exist, and
+            # `unchecked: 0` would claim the question was asked of every call and answered.
+            "by_binding_status": {row["key"]: int(row["n"]) for row in facet("binding_status")},
             "unfiltered_total": sum(int(row["n"]) for row in vendor_rows),
-            "vendor_id": vendor_id,
+            "vendor_ids": list(vendor_ids),
+            "operation_ids": list(operation_ids),
+            "loop_depths": list(loop_depths),
+            "binding_statuses": list(binding_statuses),
             "path_prefix": path_prefix,
         }
+
+    def binding_status_rollup(self, repo_id: str) -> dict[str, int]:
+        """How much of one repository's API surface is at risk, clean, or unexamined.
+
+        **Counted over operations, not call sites**, and the difference is the whole reason this
+        exists beside `call_sites_page`'s facet. A reader asking *how much of my API surface is
+        safe* means operations: forty call sites to one operation is one thing to know about, and
+        counting sites would let a single heavily-called operation dominate a figure meant to
+        describe breadth.
+
+        **A status absent from the result was not counted at nought.** An empty dict is a
+        repository with no call sites -- never indexed, or indexed and found to call nothing -- and
+        three zeroes would say its operations had been examined and found clean. The console must
+        render a missing key as absence rather than filling it in.
+
+        Retracted sites are excluded, as everywhere: a site the last pass stopped finding is not a
+        place this codebase calls the vendor, so an operation it was the only evidence for is no
+        longer part of the surface.
+        """
+        rows = self._connect().execute(
+            f"""
+            {_BINDING_STATUS_CTES}
+            SELECT status, count(*) AS n FROM (
+                SELECT DISTINCT call_site.vendor_id, call_site.operation_id,
+                       ({_BINDING_STATUS_EXPR}) AS status
+                  FROM call_site {_BINDING_STATUS_JOINS}
+                 WHERE call_site.repo_id = %s AND call_site.retracted_at IS NULL
+            ) AS per_operation
+             GROUP BY status
+             ORDER BY status
+            """,
+            [repo_id],
+        ).fetchall()
+        return {row["status"]: int(row["n"]) for row in rows}
 
     def api_topology(self, repo_id: str) -> dict:
         """The shape of one repository's API surface, measured from the call sites themselves.
@@ -1414,8 +1578,8 @@ class GraphStore:
     def vendor_changes_page(
         self,
         *,
-        vendor_id: str | None = None,
-        severity: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        severities: Sequence[str] = (),
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
@@ -1433,14 +1597,21 @@ class GraphStore:
         say so on screen.
         """
         limit = max(limit, 1)
-        where: list[str] = []
-        params: list[object] = []
-        if vendor_id is not None:
-            where.append("vendor_id = %s")
-            params.append(vendor_id)
-        if severity is not None:
-            where.append("severity = %s")
-            params.append(severity)
+        vendor_ids = _value_set(vendor_ids, "vendor_ids")
+        severities = _value_set(severities, "severities")
+
+        def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
+            where: list[str] = []
+            params: list[object] = []
+            if vendor_ids and ignoring != "vendor_id":
+                where.append("vendor_id = ANY(%s)")
+                params.append(list(vendor_ids))
+            if severities and ignoring != "severity":
+                where.append("severity = ANY(%s)")
+                params.append(list(severities))
+            return where, params
+
+        where, params = predicates()
         clause = f"WHERE {' AND '.join(where)}" if where else ""
 
         total = int(
@@ -1460,14 +1631,7 @@ class GraphStore:
         ).fetchall()
 
         def facet(column: str, ignoring: str) -> dict[str, int]:
-            facet_where: list[str] = []
-            facet_params: list[object] = []
-            if vendor_id is not None and ignoring != "vendor_id":
-                facet_where.append("vendor_id = %s")
-                facet_params.append(vendor_id)
-            if severity is not None and ignoring != "severity":
-                facet_where.append("severity = %s")
-                facet_params.append(severity)
+            facet_where, facet_params = predicates(ignoring=ignoring)
             facet_clause = f"WHERE {' AND '.join(facet_where)}" if facet_where else ""
             found = self._connect().execute(
                 f"SELECT {column} AS key, count(*) AS n FROM vendor_change {facet_clause}"
@@ -1518,8 +1682,8 @@ class GraphStore:
             # returns groups that exist, and a render site must not fill a missing key with a zero.
             "by_vendor_severity": by_vendor_severity,
             "unfiltered_total": sum(by_vendor.values()),
-            "vendor_id": vendor_id,
-            "severity": severity,
+            "vendor_ids": list(vendor_ids),
+            "severities": list(severities),
         }
 
     def vendor_intake_rollup(self) -> dict[str, dict]:

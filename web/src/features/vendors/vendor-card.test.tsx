@@ -40,10 +40,13 @@ import {
 afterEach(cleanup)
 
 describe("the vendor's mark", () => {
-  it("shows the vendor's own mark beside the id, per decision 6", () => {
+  it("shows a mark beside the id, drawn rather than fetched", () => {
+    // M15 Task 5, owner ruling: the neutral generated mark. This asserted an `<img>` from
+    // logo.clearbit.com -- a third-party trademark, fetched from the operator's browser, telling
+    // that endpoint which integrations a customer watches. The mark is now drawn here.
     render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />)
 
-    expect(screen.getByTestId("vendor-mark-image")).toBeTruthy()
+    expect(screen.getByTestId("vendor-mark-monogram")).toBeTruthy()
   })
 
   /**
@@ -51,10 +54,13 @@ describe("the vendor's mark", () => {
    * protecting: the id is what Sync actually holds, and the mark is an aid to finding it.
    */
   it("keeps the id as the identity rather than letting the mark stand for it", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />)
+    const { container } = render(
+      <VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />,
+    )
 
     expect(screen.getByRole("heading", { name: "stripe" })).toBeTruthy()
-    expect(screen.getByTestId("vendor-mark-image").getAttribute("alt")).toBe("")
+    // Nothing is fetched for a vendor's logo, from anywhere.
+    expect(container.querySelector("img")).toBeNull()
   })
 })
 

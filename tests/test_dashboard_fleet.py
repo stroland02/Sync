@@ -14,6 +14,7 @@ import pytest
 
 from sync.core import CallSite, Finding, MigrationOutcome, VendorChange
 from sync.dashboard.fleet import (
+    IN_FLIGHT,
     abandonment_by_change_kind,
     change_units,
     corpus_summary,
@@ -726,3 +727,149 @@ def test_change_units_scoped_to_repo_id(store):
 def test_change_units_of_an_empty_graph_is_empty_not_an_error(store):
     result = change_units(store)
     assert result == {"items": [], "total": 0, "next_offset": None}
+
+
+def test_a_unit_carries_its_own_findings_and_they_reconcile(store):
+    """M15 Task 7's verification: a unit's finding count sums to the flat total.
+
+    Twenty-four findings are really thirteen change units, and a console listing them flat shows
+    a reader twenty-four problems where there are thirteen. Making the unit primary is only
+    honest if the two views describe the same set -- a grouped total that disagreed with the flat
+    one would be the console asserting two different sizes for one workspace, which is the exact
+    failure the absence-versus-zero discipline exists to prevent, arriving as arithmetic.
+
+    The nested rows cost no extra query: `change_units` already fetches each finding's call site
+    to group it, so the rows are in hand when the unit is built.
+    """
+    site_a = store.upsert_call_site(_site(path="src/a.ts", line=1))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", line=2))
+    site_c = store.upsert_call_site(_site(path="src/c.ts", line=3, operation_id="GetBalance"))
+    for site in (site_a, site_b, site_c):
+        store.insert_finding(_finding(site, claim=f"claim-{site}"))
+
+    result = change_units(store, repo_id="r1")
+
+    # Two operations, so two units; three findings across them.
+    assert result["total"] == 2
+    assert sum(unit["finding_count"] for unit in result["items"]) == 3
+    assert sum(len(unit["findings"]) for unit in result["items"]) == 3
+
+
+def test_a_nested_finding_carries_what_the_flat_table_shows(store):
+    """The nested row is the same object the flat table renders, name included.
+
+    A second, thinner shape here would mean the grouped view and the flat view describe one
+    finding two ways -- and the one that got a field added later would be the only one that had it.
+    """
+    site = store.upsert_call_site(_site(path="src/a.ts", line=7))
+    store.insert_finding(_finding(site))
+
+    row = change_units(store, repo_id="r1")["items"][0]["findings"][0]
+
+    assert row["file"] == "src/a.ts"
+    assert row["line"] == 7
+    assert row["severity"] == "breaking"
+    assert row["binding_source"] == "static"
+    assert row["name"].startswith("stripe-postcharges-")
+
+
+def test_a_unit_counts_its_findings_rather_than_its_call_sites(store):
+    """Two findings on one call site is two findings and one call site.
+
+    `graph-grain.md` is explicit that one row is one claim, and a unit that reported its call-site
+    count as its finding count would under-report exactly where a single call is broken in more
+    than one way -- which is the case a reviewer most needs to see.
+    """
+    site = store.upsert_call_site(_site(path="src/a.ts"))
+    store.insert_finding(_finding(site, claim="request-parameter-removed"))
+    store.insert_finding(_finding(site, claim="response-field-type-changed"))
+
+    unit = change_units(store, repo_id="r1")["items"][0]
+
+    assert unit["finding_count"] == 2
+    assert unit["call_site_count"] == 1
+
+
+def test_narrowing_to_a_severity_narrows_the_units_and_still_reconciles(store):
+    """The severity tabs must reach the grouped view, or they would silently stop applying.
+
+    A tab pressed over a grouped table that ignored it is the worst shape a filter can take: the
+    control looks active, the numbers are true of *something*, and nothing on screen is visibly
+    broken. So severity narrows the findings before they are grouped -- a unit then reports the
+    findings of that severity it holds, and the sum still equals the flat total for that tab.
+
+    A unit with no finding at the chosen severity is absent rather than present at nought: the
+    grouping returns groups that exist, which is the same rule `by_vendor_severity` follows.
+    """
+    site_a = store.upsert_call_site(_site(path="src/a.ts"))
+    site_b = store.upsert_call_site(_site(path="src/b.ts", operation_id="GetBalance"))
+    store.insert_finding(_finding(site_a, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(site_a, claim="c2", severity="warning"))
+    store.insert_finding(_finding(site_b, claim="c3", severity="warning"))
+
+    breaking = change_units(store, repo_id="r1", severity="breaking")
+
+    assert breaking["total"] == 1
+    assert sum(unit["finding_count"] for unit in breaking["items"]) == 1
+    assert breaking["items"][0]["operation_id"] == "PostCharges"
+
+
+def test_an_unnarrowed_grouping_still_holds_every_finding(store):
+    site = store.upsert_call_site(_site(path="src/a.ts"))
+    store.insert_finding(_finding(site, claim="c1", severity="breaking"))
+    store.insert_finding(_finding(site, claim="c2", severity="warning"))
+
+    assert sum(u["finding_count"] for u in change_units(store, repo_id="r1")["items"]) == 2
+
+
+def test_a_parked_run_reports_parked_rather_than_reading_as_in_flight(checkpointer_tables):
+    """M15 Task 8: *a run needing review is indistinguishable from one in flight.*
+
+    The vocabulary already held the state -- `make_park` writes `outcome: "parked"` with
+    `parked_reason: "awaiting_review"`, and `Outcome` has carried it all along. What it never
+    reached was `_FINISHED`, and every display site asks `outcome in _FINISHED else None`, so a
+    run waiting on a human came back as `None` and the console renders `None` as *in flight*.
+
+    That is the worst shape this distinction can take: the run is not running, nobody is coming
+    back to it on their own, and the one screen that would say so reports it as busy.
+    """
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "parked", "parked_reason": "awaiting_review"},
+    )
+
+    page = runs(DSN)
+
+    assert page["items"][0]["outcome"] == "parked"
+
+
+def test_parked_is_a_disposition_without_being_an_ending():
+    """Why `parked` was not simply added to `_FINISHED`.
+
+    A parked run has stopped and has something to report, which is what every display site is
+    actually asking. It has *not* finished: nothing was opened, abandoned or reported, and a
+    tuple named `_FINISHED` holding a state that did not finish is a name that misleads the next
+    reader into counting it as an ending.
+    """
+    from sync.dashboard.queries import DISPOSITIONS, _FINISHED
+
+    assert "parked" in DISPOSITIONS
+    assert "parked" not in _FINISHED
+    assert set(_FINISHED).issubset(set(DISPOSITIONS))
+
+
+def test_a_parked_run_is_not_counted_among_the_runs_in_flight(checkpointer_tables):
+    """The filter moves with the classification, or the rail lies in the other direction.
+
+    `IN_FLIGHT` selects runs with no disposition yet. A parked run has one, so pressing *in
+    flight* must not return it -- otherwise the count beside the option promises runs that are
+    live and delivers runs that are waiting.
+    """
+    _insert_checkpoint(
+        f"{FINDING_ID}:abc123def456:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "parked", "parked_reason": "awaiting_review"},
+    )
+
+    assert runs(DSN, outcome=IN_FLIGHT)["items"] == []

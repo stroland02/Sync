@@ -44,6 +44,10 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 function describeOutcome(outcome: RunDisposition | null, isRehearsal = false): string {
   if (outcome === null) return "in flight"
   if (outcome === "reported" && isRehearsal) return "halted before the remote"
+  // M15 Task 8. `parked` is a run that stopped and is waiting on a person, and the bare word
+  // reads as a parking place rather than as a state that wants something from the reader. It is
+  // not "in flight": nobody is coming back to it on their own.
+  if (outcome === "parked") return "waiting on a review"
   return outcome
 }
 
@@ -77,7 +81,7 @@ const OUTCOME_OPTIONS = [
  */
 function outcomeGroup(
   data: RunsPage,
-  selected: string | null,
+  selected: readonly string[],
   onSelect: (value: string | null) => void,
 ): FilterGroup {
   const toOption = (option: (typeof OUTCOME_OPTIONS)[number]) => ({
@@ -146,7 +150,18 @@ export function RunsCard() {
         <FilterRail
           label="Narrow the runs"
           countScope="Counted across every run this deployment holds, whichever option is pressed. The record count under the table describes the narrowed set."
-          groups={[outcomeGroup(query.data, outcome, setOutcome)]}
+          groups={[
+            outcomeGroup(
+              query.data,
+              // One value, rendered in the rail's set shape. Disposition stayed single-select
+              // when M15 Task 4 widened the others: the union would have to be expressible by
+              // `fleet.runs` and the checkpointer query beneath it, and this facet has five
+              // members a reader can walk. A rail that let two be pressed while only one
+              // reached the query would look identical and be wrong.
+              outcome === null ? [] : [outcome],
+              setOutcome,
+            ),
+          ]}
         />
         <MetricPanel
           label="Runs"

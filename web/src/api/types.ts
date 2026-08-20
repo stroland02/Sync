@@ -31,6 +31,24 @@ export const BINDING_SOURCES = [
 export type BindingSource = (typeof BINDING_SOURCES)[number]
 
 /**
+ * Whether a call this codebase makes is known to be at risk, known to be clean, or unexamined.
+ *
+ * **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it —
+ * severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
+ * `safe` severity would be Sync putting a judgement about this codebase in a column that
+ * otherwise holds only the vendor's own words. This is the honest form of the same question,
+ * computed by `sync.graph.store` rather than stored.
+ *
+ * **`unchecked` is the member that earns the other two.** It means no successful intake attempt
+ * for the vendor — the graph has never read its specification — and without it, `clean` would be
+ * an all-clear the console never earned. Most-wanting-attention first, matching
+ * `BINDING_STATUSES` in the store, which is what `tests/test_api_routes.py` holds the two to.
+ */
+export const BINDING_STATUSES = ["at_risk", "unchecked", "clean"] as const
+
+export type BindingStatus = (typeof BINDING_STATUSES)[number]
+
+/**
  * On every payload the API returns.
  *
  * `binding_source` is null when the answer rests on no single binding — either the payload
@@ -178,6 +196,14 @@ export interface IndexRunSummary {
  * and it is the one to weigh the row by. The envelope's field describes the page.
  */
 export interface RiskRow {
+  /**
+   * The finding's display name — `stripe-postcharges-4b1c9e`.
+   *
+   * Derived in the payload by `sync.core.naming.finding_name`, never here: this table, the CLI
+   * and a pull-request body must call one finding by one name, and three derivations is where
+   * they would start to differ. `finding_id` stays the addressable thing.
+   */
+  name: string
   file: string
   line: number
   symbol: string | null
@@ -502,7 +528,7 @@ export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]
  * by `tests/test_api_routes.py::test_the_consoles_run_disposition_matches_the_finished_outcomes`,
  * since nothing else keeps the two languages agreeing.
  */
-export type RunDisposition = "opened" | "abandoned" | "reported"
+export type RunDisposition = "opened" | "abandoned" | "reported" | "parked"
 
 /**
  * One run the checkpointer holds: the newest checkpoint on one thread.
@@ -613,6 +639,17 @@ export interface ChangeUnitRow {
   repository_count: number
   call_site_count: number
   binding_rung: string
+  /**
+   * How many findings this unit holds — stated by the payload, never counted from `findings`.
+   *
+   * Under a severity narrowing this is the count *at that severity*, because the narrowing is
+   * applied before the grouping. That is what makes the grouped totals reconcile with the flat
+   * ones on every tab: filtering units afterwards would leave each one counting findings the
+   * reader is not being shown.
+   */
+  finding_count: number
+  /** The constituent findings, in the same shape the flat table renders. */
+  findings: RiskRow[]
   finding_ids: string[]
   repo_ids: string[]
   standing: RunDisposition | "in_progress" | null
@@ -768,11 +805,47 @@ export interface BindingSurfaceResponse {
  * vendor's call sites — staleness, not a promise the index is current: a repository re-scanned
  * weeks ago reports the same value every day after, until another re-index moves it.
  */
+/**
+ * One API product this repository calls, under the vendor that sells it.
+ *
+ * A vendor is the provider Sync watches; a service is one of the APIs it sells — `Payments` under
+ * `stripe`. The graph carried only the provider until 2026-08-19, which is why the console's
+ * Services and Vendors screens listed the same identifier under two headings.
+ */
+export interface ServiceCoverageRow {
+  vendor_id: string
+  /**
+   * `null` where nothing has mapped this vendor's operations onto a product yet.
+   *
+   * **Not grouped, and never a call site outside every service.** Only a vendor adapter can supply
+   * the mapping and none does today, so this null is work not done — a screen rendering it as a
+   * service named nothing, or dropping the row, would report a vendor as having no products when
+   * what it has is no adapter.
+   */
+  service_id: string | null
+  call_sites: number
+  /** Distinct operations in this group, so a reader can see how much of the vendor it covers. */
+  operations: number
+  last_indexed: string
+}
+
 export interface IndexCoverageResponse {
   repo_id: string
   by_vendor: Tally
   last_indexed: Record<string, string>
   total_call_sites: number
+  /** The product question beside the provider question, computed over the same rows. */
+  by_service: ServiceCoverageRow[]
+  /**
+   * How much of this codebase's API surface is at risk, clean, or unexamined — counted over
+   * **operations**, not call sites, so one heavily-called operation cannot dominate a figure
+   * meant to describe breadth.
+   *
+   * A status absent here was not counted at nought, and an empty object is a repository with no
+   * call sites at all. Only ApiSurfacePanel fills a missing member with a zero, and only after
+   * establishing that a surface exists — see its own note for why that is honest there.
+   */
+  by_binding_status: Tally
 }
 
 /**

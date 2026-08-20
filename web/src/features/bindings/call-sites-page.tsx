@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
+import { BindingStatusTag } from "@/components/tag"
 import { InfoHint } from "@/components/info-hint"
 import { RelativeTime } from "@/components/relative-time"
 import { Absent } from "@/components/status"
@@ -56,8 +57,9 @@ import {
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { vendorName } from "@/features/vendors/vendor-name"
 import { useFacetParam } from "@/lib/use-facet-param"
-import { useFilterParam } from "@/lib/use-filter-param"
+import { useFilterListParam } from "@/lib/use-filter-list-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 const LIMIT = 50
@@ -79,6 +81,7 @@ const CALL_SITE_COLUMNS: readonly ColumnSpec[] = [
   { id: "vendor", label: "Vendor" },
   { id: "operation", label: "Operation" },
   { id: "loops", label: "Loops" },
+  { id: "status", label: "Status" },
   { id: "args", label: "Arguments sent", defaultVisible: false },
   { id: "reads", label: "Response fields read", defaultVisible: false },
   { id: "sdk", label: "SDK version", defaultVisible: false },
@@ -97,6 +100,7 @@ interface CallSiteRow {
   args_keys: string[]
   response_fields_read: string[]
   loop_depth: number
+  binding_status: string
   sdk_version: string
   indexed_at: string | null
   snippet?: string | null
@@ -109,19 +113,39 @@ interface CallSitesPage {
   total: number
   next_offset: number | null
   by_vendor: Record<string, number>
+  by_operation: Record<string, number>
+  // Keyed by depth. JSON object keys are strings, so the numeric depth arrives spelled as one.
+  by_loop_depth: Record<string, number>
+  by_binding_status: Record<string, number>
   unfiltered_total: number
-  vendor_id: string | null
+  vendor_ids: string[]
+  operation_ids: string[]
+  loop_depths: number[]
+  binding_statuses: string[]
   path_prefix: string | null
   source_served: boolean
 }
 
 async function fetchCallSites(
   repoId: string,
-  params: { vendorId: string | null; pathPrefix: string | null; offset: number },
+  params: {
+    vendorIds: readonly string[]
+    operationIds: readonly string[]
+    loopDepths: readonly string[]
+    bindingStatuses: readonly string[]
+    pathPrefix: string | null
+    offset: number
+  },
   signal?: AbortSignal,
 ): Promise<CallSitesPage> {
   const query = new URLSearchParams({ limit: String(LIMIT), offset: String(params.offset) })
-  if (params.vendorId !== null) query.set("vendor_id", params.vendorId)
+  // Appended once per value: `?vendor_id=a&vendor_id=b` is the union `_values_param` reads on
+  // the other side. Not comma-joined -- a separator that can occur inside a vendor or operation
+  // identifier is a parser that is wrong on somebody's repository and wrong silently.
+  for (const vendorId of params.vendorIds) query.append("vendor_id", vendorId)
+  for (const operationId of params.operationIds) query.append("operation_id", operationId)
+  for (const depth of params.loopDepths) query.append("loop_depth", depth)
+  for (const status of params.bindingStatuses) query.append("binding_status", status)
   if (params.pathPrefix) query.set("path_prefix", params.pathPrefix)
   const path = `/api/repositories/${encodeURIComponent(repoId)}/call-sites?${query.toString()}`
   let response: Response
@@ -139,30 +163,70 @@ async function fetchCallSites(
   }
 }
 
-/** The vendor facet, counted over every call site the other filters admit. */
-function vendorGroup(
-  data: CallSitesPage,
-  selected: string | null,
+/**
+ * One facet, counted over every call site the *other* filters admit.
+ *
+ * Returns `null` for a facet with no values rather than an empty fieldset: a legend over nothing
+ * reads as a facet that failed to load, and this one simply has nothing to divide.
+ *
+ * **There is no rung facet, and that is a fact about the table.** `call_site` carries no rung
+ * column -- a rung describes a binding, and the binding surface is where one is shown. A facet
+ * whose vocabulary held the single value every row has would assert the other rungs exist here.
+ */
+function facetGroup(
+  id: string,
+  legend: string,
+  counts: Record<string, number>,
+  unfilteredLabel: string,
+  unfilteredTotal: number,
+  selected: readonly string[],
   onSelect: (value: string | null) => void,
+  label: (key: string) => string = (key) => key,
 ): FilterGroup | null {
-  const vendors = Object.keys(data.by_vendor).sort()
-  if (vendors.length === 0) return null
-  const [first, ...rest] = vendors.map((vendor) => ({
-    value: vendor,
-    label: vendor,
-    count: { kind: "counted" as const, value: data.by_vendor[vendor] ?? 0 },
+  const keys = Object.keys(counts).sort()
+  if (keys.length === 0) return null
+  const [first, ...rest] = keys.map((key) => ({
+    value: key,
+    label: label(key),
+    count: { kind: "counted" as const, value: counts[key] ?? 0 },
   }))
   return {
-    id: "vendor",
-    legend: "Integration",
+    id,
+    legend,
     selected,
     onSelect,
     unfiltered: {
-      label: "Every integration",
-      count: { kind: "counted", value: data.unfiltered_total },
+      label: unfilteredLabel,
+      count: { kind: "counted", value: unfilteredTotal },
     },
     options: [first, ...rest],
   }
+}
+
+/**
+ * A loop depth, in the words `schema.sql` uses for it.
+ *
+ * The bare integer is the wrong label on a rail: `2` beside a count says nothing, and the whole
+ * value of this facet is that a reader hunting a call inside a loop can find one. It stays
+ * static evidence either way -- a loop that never runs still counts.
+ */
+/**
+ * A binding status, in the rail's own words.
+ *
+ * The rail's options are what a reader presses to ask a question, so they read as questions
+ * answered rather than as the payload's keys. `not checked` rather than `unchecked` because the
+ * negation is the whole point of the option and a prefix is easy to skim past.
+ */
+function describeStatus(status: string): string {
+  if (status === "at_risk") return "at risk"
+  if (status === "unchecked") return "not checked"
+  return status
+}
+
+function describeDepth(depth: string): string {
+  if (depth === "0") return "0 - once per unit of work"
+  if (depth === "1") return "1 - inside a loop"
+  return `${depth} - nested ${depth} deep`
 }
 
 export function CallSitesPage() {
@@ -174,7 +238,23 @@ export function CallSitesPage() {
   // one handler give the second a `prev` that predates the first, and the offset reset discarded
   // the facet it was meant to accompany. The rail looked pressed and nothing was refetched, which
   // is the owner's report of 2026-08-19. One write does both.
-  const [vendorId, setSelectedVendor] = useFilterParam("call_sites_vendor", ["call_sites_offset"])
+  // Sets rather than single values (M15 Task 4). Operation and loop depth are new here: the
+  // payload counted neither, so a reader could not ask "which call sites reach this operation"
+  // without going through the binding surface one operation at a time.
+  const [vendorIds, toggleVendor, clearVendors] = useFilterListParam("call_sites_vendor", [
+    "call_sites_offset",
+  ])
+  const [operationIds, toggleOperation, clearOperations] = useFilterListParam(
+    "call_sites_operation",
+    ["call_sites_offset"],
+  )
+  const [bindingStatuses, toggleStatus, clearStatuses] = useFilterListParam(
+    "call_sites_status",
+    ["call_sites_offset"],
+  )
+  const [loopDepths, toggleDepth, clearDepths] = useFilterListParam("call_sites_loops", [
+    "call_sites_offset",
+  ])
   const [pathPrefix] = useFacetParam("call_sites_path")
   // The open row lives in the URL -- Nango's convention -- and is written as a history push, so
   // Back closes the panel rather than leaving the screen. `useFacetParam` did not push, which
@@ -182,9 +262,13 @@ export function CallSitesPage() {
   const [openSite, setOpenSite] = useSelectionParam("call_sites_open")
   const columns = useColumnVisibility("call-sites", CALL_SITE_COLUMNS)
   const query = useQuery({
-    queryKey: ["call-sites", repoId ?? "", vendorId, pathPrefix, offset],
+    queryKey: ["call-sites", repoId ?? "", vendorIds, operationIds, loopDepths, bindingStatuses, pathPrefix, offset],
     queryFn: ({ signal }) =>
-      fetchCallSites(repoId ?? "", { vendorId, pathPrefix, offset }, signal),
+      fetchCallSites(
+        repoId ?? "",
+        { vendorIds, operationIds, loopDepths, bindingStatuses, pathPrefix, offset },
+        signal,
+      ),
     enabled: repoId !== undefined,
   })
 
@@ -201,9 +285,19 @@ export function CallSitesPage() {
   if (repoId === undefined) return <UnknownRoute />
 
   // A new narrowing starts at the first page: an offset kept from the previous selection can
-  // sit past the narrowed set's end, which renders an empty page over a non-empty answer.
-  // One write: the setter clears the offset itself.
-  const setVendor = setSelectedVendor
+  // sit past the narrowed set's end, which renders an empty page over a non-empty answer. Both
+  // the toggle and the clear do it in the one write that changes the filter.
+  //
+  // The rail sends `null` for its unfiltered option and a value for a press.
+  function narrow(toggle: (value: string) => void, clear: () => void) {
+    return (value: string | null) => (value === null ? clear() : toggle(value))
+  }
+
+  const narrowed =
+    vendorIds.length > 0 ||
+    operationIds.length > 0 ||
+    loopDepths.length > 0 ||
+    bindingStatuses.length > 0
 
   return (
     <section className="flex min-w-0 flex-col gap-8">
@@ -226,14 +320,53 @@ export function CallSitesPage() {
       {query.isSuccess && (
         <div className="grid gap-section lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-stretch">
           {(() => {
-            const group = vendorGroup(query.data, vendorId, setVendor)
-            return group === null ? (
+            const groups = [
+              facetGroup(
+                "status",
+                "Binding status",
+                query.data.by_binding_status,
+                "Every status",
+                query.data.unfiltered_total,
+                bindingStatuses,
+                narrow(toggleStatus, clearStatuses),
+                describeStatus,
+              ),
+              facetGroup(
+                "vendor",
+                "Integration",
+                query.data.by_vendor,
+                "Every integration",
+                query.data.unfiltered_total,
+                vendorIds,
+                narrow(toggleVendor, clearVendors),
+              ),
+              facetGroup(
+                "operation",
+                "Operation",
+                query.data.by_operation,
+                "Every operation",
+                query.data.unfiltered_total,
+                operationIds,
+                narrow(toggleOperation, clearOperations),
+              ),
+              facetGroup(
+                "loops",
+                "Loop depth",
+                query.data.by_loop_depth,
+                "Every depth",
+                query.data.unfiltered_total,
+                loopDepths,
+                narrow(toggleDepth, clearDepths),
+                describeDepth,
+              ),
+            ].filter((group) => group !== null)
+            return groups.length === 0 ? (
               <div />
             ) : (
               <FilterRail
                 label="Narrow the call sites"
-                countScope="Counted across every call site the index holds for this codebase. The record count under the table describes the narrowed set."
-                groups={[group]}
+                countScope="Each count is over every call site the OTHER facets admit, so pressing an option here does not change the numbers beside its own siblings. The record count under the table describes the narrowed set."
+                groups={groups as [FilterGroup, ...FilterGroup[]]}
               />
             )
           })()}
@@ -266,10 +399,9 @@ export function CallSitesPage() {
               }
               metric={{
                 value: query.data.total.toLocaleString(),
-                unit:
-                  vendorId === null
-                    ? `call site${query.data.total === 1 ? "" : "s"} in ${repoId}`
-                    : `call site${query.data.total === 1 ? "" : "s"} calling ${vendorId}`,
+                unit: narrowed
+                  ? `call site${query.data.total === 1 ? "" : "s"} matching this narrowing`
+                  : `call site${query.data.total === 1 ? "" : "s"} in ${repoId}`,
               }}
             >
               {/* The reader chooses which of the fifteen recorded fields to see. Above the table
@@ -289,6 +421,7 @@ export function CallSitesPage() {
                     {columns.isVisible("vendor") && <TableHead>Integration</TableHead>}
                     {columns.isVisible("operation") && <TableHead>Operation</TableHead>}
                     {columns.isVisible("loops") && <TableHead>Loops</TableHead>}
+                    {columns.isVisible("status") && <TableHead>Status</TableHead>}
                     {columns.isVisible("args") && <TableHead>Arguments sent</TableHead>}
                     {columns.isVisible("reads") && <TableHead>Response fields read</TableHead>}
                     {columns.isVisible("sdk") && <TableHead>SDK version</TableHead>}
@@ -298,12 +431,12 @@ export function CallSitesPage() {
                 <TableBody>
                   {query.data.items.length === 0 && (
                     <TableEmptyRow colSpan={columns.visible.size}>
-                      {vendorId !== null && query.data.unfiltered_total > 0 ? (
+                      {narrowed && query.data.unfiltered_total > 0 ? (
                         <>
                           <span className="text-ink">No call site matches this narrowing.</span>{" "}
                           The index holds {query.data.unfiltered_total.toLocaleString()} call
-                          sites here and none of them calls {vendorId} — clear the rail&rsquo;s
-                          selection to see them.
+                          sites here and none of them matches every facet pressed — clear the
+                          rail&rsquo;s selections to see them.
                         </>
                       ) : (
                         <>
@@ -333,7 +466,7 @@ export function CallSitesPage() {
                         <TableCell className="font-mono">{site.symbol}</TableCell>
                       )}
                       {columns.isVisible("vendor") && (
-                        <TableCell className="font-mono text-meta">{site.vendor_id}</TableCell>
+                        <TableCell className="text-meta">{vendorName(site.vendor_id)}</TableCell>
                       )}
                       {columns.isVisible("operation") && (
                       <TableCell className="font-mono text-meta">
@@ -347,6 +480,11 @@ export function CallSitesPage() {
                           {site.operation_id}
                         </Link>
                       </TableCell>
+                      )}
+                      {columns.isVisible("status") && (
+                        <TableCell>
+                          <BindingStatusTag status={site.binding_status} />
+                        </TableCell>
                       )}
                       {columns.isVisible("loops") && (
                         <TableCell className="font-mono text-meta tabular-nums">
@@ -398,7 +536,7 @@ export function CallSitesPage() {
                 total={query.data.total}
                 nextOffset={query.data.next_offset}
                 busy={query.isFetching}
-                unfilteredTotal={vendorId !== null ? query.data.unfiltered_total : undefined}
+                unfilteredTotal={narrowed ? query.data.unfiltered_total : undefined}
                 onOffsetChange={setOffset}
               />
               <p className="max-w-prose text-meta text-muted-foreground">

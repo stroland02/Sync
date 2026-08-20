@@ -39,6 +39,17 @@ Stop and ask only for:
 
 Everything else is a ruling, not a question.
 
+**And the three are asked as multiple choice** (owner instruction, 2026-08-19): options, trade-offs,
+a recommendation first. The point is that the owner can rule in one read without loading the
+context you already have -- which is the whole reason the question was worth their time. Ask, then
+keep working on everything the answer does not block.
+
+**Silence resolves to your own recommendation.** No answer means proceed on the option you marked,
+recorded as a reversible ruling in the ledger and surfaced in the next report -- never a stall. The
+exception is the pair that cannot be undone by a later commit: an irreversible action outside the
+repository, and a credential or a spend. Silence is not consent for those two, and they are the only
+things that genuinely wait.
+
 ## Work that arrives already built
 
 The plan → subagent TDD → two-stage review loop assumes the work does not exist yet. Some arrives

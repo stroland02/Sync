@@ -203,6 +203,37 @@ def _offset_param(request: Request, name: str = "offset") -> int:
     return max(_int_param(request, name, 0), 0)
 
 
+def _values_param(request: Request, name: str) -> list[str]:
+    """Every value given for one repeated query parameter, empties dropped.
+
+    A multi-select filter is spelled `?vendor_id=a&vendor_id=b` rather than as one
+    comma-joined value, because the values are vendor and operation identifiers and nothing
+    forbids a comma inside one -- a separator that can occur in the data is a parser that is
+    wrong on somebody's repository and wrong silently.
+
+    A single value is still `?vendor_id=a`, so a link a reader saved before this existed still
+    narrows to exactly what it did then.
+    """
+    return [value for value in request.query_params.getlist(name) if value]
+
+
+def _int_values_param(request: Request, name: str) -> list[int]:
+    """The same, for a numeric facet, with an unparseable value kept as unmatchable.
+
+    Dropping it would silently widen the set -- a hand-edited `?loop_depth=abc` would return
+    *more* rows than the URL asks for, which is the one direction a filter must never fail in.
+    `loop_depth` is `NOT NULL` and never negative, so -1 is a value the column cannot hold and
+    the honest empty page is what comes back.
+    """
+    depths: list[int] = []
+    for raw in _values_param(request, name):
+        try:
+            depths.append(int(raw))
+        except ValueError:
+            depths.append(-1)
+    return depths
+
+
 def _not_found(what: str, identifier: str) -> JSONResponse:
     return JSONResponse(
         {"error": f"{what} not found", "identifier": identifier}, status_code=404
@@ -627,8 +658,8 @@ def create_app(
             return JSONResponse({"error": "Changes reader not configured"}, status_code=501)
         return JSONResponse(
             integration_changes_reader(
-                vendor_id=request.query_params.get("vendor_id"),
-                severity=request.query_params.get("severity"),
+                vendor_ids=_values_param(request, "vendor_id"),
+                severities=_values_param(request, "severity"),
                 limit=_limit_param(request),
                 offset=_offset_param(request),
             )
@@ -647,7 +678,10 @@ def create_app(
             return JSONResponse({"error": "Call sites reader not configured"}, status_code=501)
         page = call_sites_reader(
             request.path_params["repo_id"],
-            vendor_id=request.query_params.get("vendor_id"),
+            vendor_ids=_values_param(request, "vendor_id"),
+            operation_ids=_values_param(request, "operation_id"),
+            loop_depths=_int_values_param(request, "loop_depth"),
+            binding_statuses=_values_param(request, "binding_status"),
             path_prefix=request.query_params.get("path_prefix"),
             limit=_limit_param(request),
             offset=_offset_param(request),
@@ -779,6 +813,10 @@ def create_app(
         return JSONResponse(
             change_units_reader(
                 repo_id=request.query_params.get("repo_id"),
+                # Passed through unvalidated, as every other filter here is: a severity outside
+                # the vocabulary matches nothing, and an empty page is the honest answer to a
+                # stale bookmark where a 400 turns yesterday's URL into an error screen.
+                severity=request.query_params.get("severity"),
                 limit=_limit_param(request),
                 offset=_offset_param(request),
             )
