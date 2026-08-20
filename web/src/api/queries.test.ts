@@ -28,7 +28,8 @@ function workflow(outcome: WorkflowOutcome | null): WorkflowState {
 
 function run(outcome: RunRow["outcome"]): RunRow {
   return {
-    thread_id: `${"f".repeat(32)}:abc123def456:0`,
+    finding_name: null,
+  thread_id: `${"f".repeat(32)}:abc123def456:0`,
     finding_id: "f".repeat(32),
     repo_id: "org/one",
     current_node: outcome === null ? "await_ci" : null,

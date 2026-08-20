@@ -16,6 +16,7 @@ const mockQueryState: { runs: unknown } = { runs: undefined }
 /** One finished run, with the repository it belongs to made explicit. */
 function scopedRun(repoId: string | null): RunRow {
   return {
+    finding_name: null,
     thread_id: "finding-scoped-1:prod-run-9:0",
     finding_id: "finding-scoped-1",
     repo_id: repoId,
@@ -71,6 +72,7 @@ function renderCard() {
 describe("RunsCard rehearsal discrimination", () => {
   it("labels rehearsal runs distinctly from live runs", () => {
     const liveRun: RunRow = {
+      finding_name: null,
       thread_id: "finding-live-1:prod-run-1:0",
       finding_id: "finding-live-1",
       repo_id: "org/one",
@@ -84,6 +86,7 @@ describe("RunsCard rehearsal discrimination", () => {
     }
 
     const rehearsalRun: RunRow = {
+      finding_name: null,
       thread_id: "finding-rehearse-1:rehearsal-2026-08-05:0",
       finding_id: "finding-rehearse-1",
       repo_id: "org/one",

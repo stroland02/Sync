@@ -42,6 +42,9 @@ export function Tag({
   children: ReactNode
   /** What this member means. Omitted only where the label is already the whole meaning. */
   title?: string
+  /** Accepted and ignored: the colour axis was reverted on the owner's ruling (2026-08-19
+   * night), and callers that pass a tone render monochrome rather than breaking. */
+  tone?: string
   className?: string
 }) {
   return (
@@ -114,4 +117,10 @@ export function CountTag({ count, unit }: { count: number; unit: string }) {
       {count.toLocaleString()} {unit}
     </Tag>
   )
+}
+
+
+/** A run outcome in the tag register — monochrome, the word carries the state. */
+export function OutcomeTag({ outcome }: { outcome: string }) {
+  return <Tag>{outcome}</Tag>
 }

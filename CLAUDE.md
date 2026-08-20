@@ -124,6 +124,17 @@ Narrowest tier that still catches the failure.
 
 **Prefer a pointer to a copy.** A fact written twice will disagree with itself.
 
+## The owner's console is a deployment
+
+Learned the hard way on the night of 2026-08-19, which was spent walking `main` backwards commit
+by commit to find a screen the owner had lost. Whatever tree serves `localhost:5173`, changing it
+— a checkout, a sync to main, a revert stack, a branch move — is **publication, not workspace
+management**: announce it before doing it, and never leave the console serving a mid-operation
+tree. A dev tree about to be synced or reverted gets a snapshot commit first (`16be5880` is why
+that night was recoverable at all). Mass reverts are staged in a private worktree and land only
+finished. After any wholesale tree move, **restart Vite and the API** — each serves the code it
+started with, and a fresh screen over a stale process reads as UI regression.
+
 ## Landing work
 
 **A worker branches from the integration branch, gates, pushes its own branch.** The coordinator
