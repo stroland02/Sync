@@ -1241,40 +1241,6 @@ class GraphStore:
             "path_prefix": path_prefix,
         }
 
-    def binding_status_rollup(self, repo_id: str) -> dict[str, int]:
-        """How much of one repository's API surface is at risk, clean, or unexamined.
-
-        **Counted over operations, not call sites**, and the difference is the whole reason this
-        exists beside `call_sites_page`'s facet. A reader asking *how much of my API surface is
-        safe* means operations: forty call sites to one operation is one thing to know about, and
-        counting sites would let a single heavily-called operation dominate a figure meant to
-        describe breadth.
-
-        **A status absent from the result was not counted at nought.** An empty dict is a
-        repository with no call sites -- never indexed, or indexed and found to call nothing -- and
-        three zeroes would say its operations had been examined and found clean. The console must
-        render a missing key as absence rather than filling it in.
-
-        Retracted sites are excluded, as everywhere: a site the last pass stopped finding is not a
-        place this codebase calls the vendor, so an operation it was the only evidence for is no
-        longer part of the surface.
-        """
-        rows = self._connect().execute(
-            f"""
-            {_BINDING_STATUS_CTES}
-            SELECT status, count(*) AS n FROM (
-                SELECT DISTINCT call_site.vendor_id, call_site.operation_id,
-                       ({_BINDING_STATUS_EXPR}) AS status
-                  FROM call_site {_BINDING_STATUS_JOINS}
-                 WHERE call_site.repo_id = %s AND call_site.retracted_at IS NULL
-            ) AS per_operation
-             GROUP BY status
-             ORDER BY status
-            """,
-            [repo_id],
-        ).fetchall()
-        return {row["status"]: int(row["n"]) for row in rows}
-
     def api_topology(self, repo_id: str) -> dict:
         """The shape of one repository's API surface, measured from the call sites themselves.
 
