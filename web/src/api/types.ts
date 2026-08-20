@@ -510,7 +510,7 @@ export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]
  * by `tests/test_api_routes.py::test_the_consoles_run_disposition_matches_the_finished_outcomes`,
  * since nothing else keeps the two languages agreeing.
  */
-export type RunDisposition = "opened" | "abandoned" | "reported" | "parked"
+export type RunDisposition = "opened" | "abandoned" | "reported"
 
 /**
  * One run the checkpointer holds: the newest checkpoint on one thread.
@@ -899,54 +899,6 @@ export interface ObservedTelemetryResponse {
   calls: ItemPage<ObservedCallRow>
   shapes: ItemPage<ObservedShapeRow>
   error_windows: ItemPage<ObservedErrorWindowRow>
-  /**
-   * Traffic per operation, pooled across every unit of work held — correlated rows only.
-   * `requests` counts spans that carried a status (the detector's own denominator rule);
-   * `unstatused` is reported beside it so a rate computed over a shrunken sample can be
-   * discounted. No rate arrives from the transport: a screen that divides shows both counts.
-   */
-  traffic: TrafficRollupRow[]
-  /** The same rollup for traffic nothing could attribute to an operation — never pooled in. */
-  unattributed: TrafficRollupRow[]
-  /**
-   * Requests and errors per hour, bucketed by each unit of work's `first_seen` — a span carries
-   * no timestamp of its own, so a long trace's spans land on the hour its first request did.
-   */
-  series: TrafficBucket[]
-  totals: TrafficTotals
-}
-
-export interface TrafficRollupRow {
-  vendor_id: string
-  operation_id: string
-  server_address: string
-  http_method: string
-  binding_rung: string
-  url_template: string
-  traces: number
-  requests: number
-  errors: number
-  unstatused: number
-  distinct_targets: number
-  max_resend: number
-  first_seen: string
-  last_seen: string
-}
-
-export interface TrafficBucket {
-  bucket: string
-  requests: number
-  errors: number
-}
-
-export interface TrafficTotals {
-  requests: number
-  errors: number
-  unstatused: number
-  unattributed_requests: number
-  operations_observed: number
-  /** How many distinct operations the static index binds — the coverage denominator. */
-  operations_indexed: number
 }
 
 /**

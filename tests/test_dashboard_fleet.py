@@ -14,7 +14,6 @@ import pytest
 
 from sync.core import CallSite, Finding, MigrationOutcome, VendorChange
 from sync.dashboard.fleet import (
-    IN_FLIGHT,
     abandonment_by_change_kind,
     change_units,
     corpus_summary,
@@ -820,56 +819,3 @@ def test_an_unnarrowed_grouping_still_holds_every_finding(store):
     store.insert_finding(_finding(site, claim="c2", severity="warning"))
 
     assert sum(u["finding_count"] for u in change_units(store, repo_id="r1")["items"]) == 2
-
-
-def test_a_parked_run_reports_parked_rather_than_reading_as_in_flight(checkpointer_tables):
-    """M15 Task 8: *a run needing review is indistinguishable from one in flight.*
-
-    The vocabulary already held the state -- `make_park` writes `outcome: "parked"` with
-    `parked_reason: "awaiting_review"`, and `Outcome` has carried it all along. What it never
-    reached was `_FINISHED`, and every display site asks `outcome in _FINISHED else None`, so a
-    run waiting on a human came back as `None` and the console renders `None` as *in flight*.
-
-    That is the worst shape this distinction can take: the run is not running, nobody is coming
-    back to it on their own, and the one screen that would say so reports it as busy.
-    """
-    _insert_checkpoint(
-        f"{FINDING_ID}:abc123def456:0",
-        "1f069000-0000-6000-8000-000000000001",
-        channel_values={"outcome": "parked", "parked_reason": "awaiting_review"},
-    )
-
-    page = runs(DSN)
-
-    assert page["items"][0]["outcome"] == "parked"
-
-
-def test_parked_is_a_disposition_without_being_an_ending():
-    """Why `parked` was not simply added to `_FINISHED`.
-
-    A parked run has stopped and has something to report, which is what every display site is
-    actually asking. It has *not* finished: nothing was opened, abandoned or reported, and a
-    tuple named `_FINISHED` holding a state that did not finish is a name that misleads the next
-    reader into counting it as an ending.
-    """
-    from sync.dashboard.queries import DISPOSITIONS, _FINISHED
-
-    assert "parked" in DISPOSITIONS
-    assert "parked" not in _FINISHED
-    assert set(_FINISHED).issubset(set(DISPOSITIONS))
-
-
-def test_a_parked_run_is_not_counted_among_the_runs_in_flight(checkpointer_tables):
-    """The filter moves with the classification, or the rail lies in the other direction.
-
-    `IN_FLIGHT` selects runs with no disposition yet. A parked run has one, so pressing *in
-    flight* must not return it -- otherwise the count beside the option promises runs that are
-    live and delivers runs that are waiting.
-    """
-    _insert_checkpoint(
-        f"{FINDING_ID}:abc123def456:0",
-        "1f069000-0000-6000-8000-000000000001",
-        channel_values={"outcome": "parked", "parked_reason": "awaiting_review"},
-    )
-
-    assert runs(DSN, outcome=IN_FLIGHT)["items"] == []

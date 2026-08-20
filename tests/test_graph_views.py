@@ -567,17 +567,6 @@ def test_observed_telemetry_of_a_repository_with_no_traffic_is_all_empty(store):
         "calls": _EMPTY_PAGE,
         "shapes": _EMPTY_PAGE,
         "error_windows": _EMPTY_PAGE,
-        "traffic": [],
-        "unattributed": [],
-        "series": [],
-        "totals": {
-            "requests": 0,
-            "errors": 0,
-            "unstatused": 0,
-            "unattributed_requests": 0,
-            "operations_observed": 0,
-            "operations_indexed": 0,
-        },
     }
 
 
@@ -2416,70 +2405,3 @@ def test_the_name_survives_re_deriving_the_finding(store):
     second = findings_page(store, repo_id="r1")["items"][0]["name"]
 
     assert first == second
-
-
-# -- the traffic rollup and its rung discipline --------------------------------------
-
-
-def test_observed_telemetry_rolls_traffic_up_per_operation_with_the_detectors_denominator(store):
-    # Two traces on one operation: three statused spans (one an error), one span with no
-    # status. The denominator rule is StatusRateDetector's: the unstatused span leaves the
-    # numerator and the denominator both, and is reported so a reader can discount the rate.
-    store.record_observed_call(_observed_call(trace_id="t1", spans={
-        "s1": {"target": "d1", "status": 200, "resend": 0},
-        "s2": {"target": "d2", "status": 500, "resend": 0},
-    }))
-    store.record_observed_call(_observed_call(trace_id="t2", spans={
-        "s1": {"target": "d1", "status": 200, "resend": 2},
-        "s2": {"target": "d1", "status": None, "resend": 0},
-    }))
-
-    result = observed_telemetry(store, "r1")
-
-    assert len(result["traffic"]) == 1
-    row = result["traffic"][0]
-    assert row["operation_id"] == "PostCharges"
-    assert row["traces"] == 2
-    assert row["requests"] == 3
-    assert row["errors"] == 1
-    assert row["unstatused"] == 1
-    assert row["distinct_targets"] == 2
-    assert row["max_resend"] == 2
-    assert result["totals"]["requests"] == 3
-    assert result["totals"]["errors"] == 1
-    assert result["totals"]["operations_observed"] == 1
-
-
-def test_observed_telemetry_keeps_unattributed_traffic_out_of_the_measured_rollup(store):
-    # A correlated call and an uncorrelated one. Pooling them would average a correlation gap
-    # into a measurement, which is the substitution the rung column exists to refuse.
-    store.record_observed_call(_observed_call(trace_id="t1"))
-    store.record_observed_call(_observed_call(
-        trace_id="t2", operation_id="", binding_rung="unresolved", url_template="",
-    ))
-
-    result = observed_telemetry(store, "r1")
-
-    assert [row["binding_rung"] for row in result["traffic"]] == ["observed"]
-    assert [row["binding_rung"] for row in result["unattributed"]] == ["unresolved"]
-    assert result["totals"]["unattributed_requests"] == 1
-    assert result["totals"]["requests"] == 1
-
-
-def test_observed_telemetry_buckets_the_series_by_the_hour_a_unit_of_work_began(store):
-    from datetime import datetime, timezone
-
-    early = datetime(2026, 8, 19, 9, 5, tzinfo=timezone.utc)
-    late = datetime(2026, 8, 19, 11, 40, tzinfo=timezone.utc)
-    store.record_observed_call(_observed_call(trace_id="t1", first_seen=early, last_seen=early))
-    store.record_observed_call(_observed_call(
-        trace_id="t2", first_seen=late, last_seen=late,
-        spans={"s1": {"target": "d1", "status": 503, "resend": 0}},
-    ))
-
-    result = observed_telemetry(store, "r1")
-
-    assert [row["bucket"][:13] for row in result["series"]] == [
-        "2026-08-19T09", "2026-08-19T11",
-    ]
-    assert [row["errors"] for row in result["series"]] == [0, 1]
