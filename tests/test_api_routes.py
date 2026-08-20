@@ -1136,10 +1136,8 @@ def test_change_units_route_returns_readers_payload_unaltered():
 def test_change_units_route_passes_query_params():
     calls: list[dict[str, Any]] = []
 
-    def reader(*, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0):
-        calls.append(
-            {"repo_id": repo_id, "severity": severity, "limit": limit, "offset": offset}
-        )
+    def reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
+        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
     app = _build_app(
@@ -1148,16 +1146,8 @@ def test_change_units_route_passes_query_params():
     )
     client = TestClient(app)
 
-    client.get("/api/change-units?repo_id=r1&severity=breaking&limit=25&offset=50")
-    assert calls == [
-        {"repo_id": "r1", "severity": "breaking", "limit": 25, "offset": 50}
-    ]
-
-    # Absent means unnarrowed, and the reader is told so explicitly rather than by omission:
-    # the severity tabs must be able to return to the whole set.
-    calls.clear()
-    client.get("/api/change-units?repo_id=r1")
-    assert calls[0]["severity"] is None
+    client.get("/api/change-units?repo_id=r1&limit=25&offset=50")
+    assert calls == [{"repo_id": "r1", "limit": 25, "offset": 50}]
 
 
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
