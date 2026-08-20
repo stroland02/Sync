@@ -29,6 +29,7 @@ import {
   fetchVendorFindings,
   fetchWorkspaceFindings,
   fetchPatch,
+  fetchRunActivity,
   fetchWorkflow,
   fetchRepositoryGraph,
 } from "@/api/client"
@@ -234,6 +235,24 @@ export function useWorkflow(findingId: string) {
       isRunTerminal(query.state.data) || query.state.data === undefined
         ? false
         : WORKFLOW_POLL_MS,
+  })
+}
+
+/**
+ * The agent-activity feed for one finding's run. `staleTime` is zero for the reason
+ * `useWorkflow`'s is; the caller owns the cadence through `refetchIntervalMs` because this
+ * hook cannot see the run's outcome and must not invent a liveness rule of its own.
+ */
+export function useRunActivity(
+  repoId: string,
+  findingId: string,
+  options: { refetchIntervalMs?: number | false } = {},
+) {
+  return useQuery({
+    queryKey: ["findings", findingId, "activity"],
+    queryFn: ({ signal }) => fetchRunActivity(repoId, findingId, signal),
+    staleTime: 0,
+    refetchInterval: options.refetchIntervalMs ?? false,
   })
 }
 

@@ -137,6 +137,15 @@ def app_factory() -> Starlette:
     def patch_reader(finding_id: str):
         return patch_for_finding(checkpointer_dsn, finding_id)
 
+    def activity_reader(finding_id: str):
+        """The patch run's own recording, instants spelled for JSON the way tickets are."""
+        return {
+            "events": [
+                {**row, "at": row["at"].isoformat() if hasattr(row["at"], "isoformat") else row["at"]}
+                for row in store.run_activity(finding_id)
+            ]
+        }
+
     def dismissal_reader(finding_id: str):
         """The current standing plus how many times it has flipped.
 
@@ -459,6 +468,7 @@ def app_factory() -> Starlette:
         tickets_reader=lambda repo_id, *, source=None: [
             _ticket_json(t) for t in store.tickets(repo_id, source=source)
         ],
+        activity_reader=activity_reader,
         # Off is the hosted posture; a local single-operator deployment serves its own source.
         serve_source=os.environ.get("SYNC_SERVE_SOURCE", "true").strip().lower()
         not in {"0", "false", "no", "off"},

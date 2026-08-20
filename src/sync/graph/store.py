@@ -2271,6 +2271,37 @@ class GraphStore:
             (outcome, detail, ticket_id),
         )
 
+    def record_run_activity(
+        self, finding_id: str, seq: int, *, kind: str, tool: str | None, summary: str,
+    ) -> None:
+        """One event of one patch run, converging on (finding_id, seq) when replayed.
+
+        The summary is stored verbatim but bounded: it may carry untrusted text (a command, a
+        path, the agent's prose) because it is evidence, and it is cut at 500 characters here
+        -- at the write, once -- so no writer has to remember the ceiling.
+        """
+        self._connect().execute(
+            """
+            INSERT INTO run_activity (finding_id, seq, kind, tool, summary)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (finding_id, seq) DO NOTHING
+            """,
+            (finding_id, seq, kind, tool, summary[:500]),
+        )
+
+    def run_activity(self, finding_id: str, limit: int = 500) -> list[dict]:
+        """One run's recorded events in the order the recorder saw them, oldest first."""
+        rows = self._connect().execute(
+            """
+            SELECT seq, at, kind, tool, summary FROM run_activity
+             WHERE finding_id = %s
+             ORDER BY seq
+             LIMIT %s
+            """,
+            (finding_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def observed_edges_for_repository(self, repo_id: str) -> list[dict]:
         """One row per (vendor, operation, rung) this repository's traffic actually named.
 

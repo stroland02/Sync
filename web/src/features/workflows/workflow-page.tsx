@@ -71,6 +71,7 @@ import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { ActivityTimeline } from "@/features/workflows/activity-timeline"
+import { AgentActivityPanel } from "@/features/workflows/agent-activity-panel"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { ReplyBox } from "@/features/workflows/reply-box"
 import { RunFactRail } from "@/features/workflows/run-fact-rail"
@@ -296,6 +297,8 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
                     }
                   />
                 </MetricPanel>
+
+                <AgentActivityPanel repoId={repoId} findingId={findingId} run={data} />
 
                 <ActivityTimeline state={data} />
 

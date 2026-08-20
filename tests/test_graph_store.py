@@ -1952,6 +1952,53 @@ def test_a_bare_string_where_a_list_belongs_is_refused(store):
         store.call_sites_page("r1", vendor_ids="stripe")
 
 
+def test_run_activity_round_trips_in_seq_order(store):
+    """The feed's whole contract: what was recorded comes back, ordered by the recorder's own
+    counter rather than by insertion accident, with the tool null on a note."""
+    store.record_run_activity("f-42", 2, kind="tool", tool="Edit", summary="input={'file_path': 'src/billing.ts'}")
+    store.record_run_activity("f-42", 1, kind="note", tool=None, summary="Reading the call site first.")
+    store.record_run_activity("f-42", 3, kind="refusal", tool="Bash", summary="command='curl ...'")
+    store.record_run_activity("f-other", 1, kind="note", tool=None, summary="another run's row")
+
+    events = store.run_activity("f-42")
+
+    assert [event["seq"] for event in events] == [1, 2, 3]
+    assert [event["kind"] for event in events] == ["note", "tool", "refusal"]
+    assert events[0]["tool"] is None
+    assert events[1]["tool"] == "Edit"
+    assert all(event["summary"] for event in events)
+
+
+def test_re_recording_an_activity_event_converges_rather_than_accumulates(store):
+    """The natural key is (finding_id, seq) and the write is DO NOTHING: a restarted run that
+    replays its recording leaves the feed as it was, instead of doubling every row."""
+    store.record_run_activity("f-42", 1, kind="tool", tool="Read", summary="first recording")
+    store.record_run_activity("f-42", 1, kind="tool", tool="Read", summary="replayed recording")
+
+    events = store.run_activity("f-42")
+
+    assert len(events) == 1
+    assert events[0]["summary"] == "first recording"
+
+
+def test_an_activity_summary_is_truncated_at_the_write(store):
+    """Rows stay small at the boundary where untrusted text enters, not at every reader."""
+    store.record_run_activity("f-42", 1, kind="note", tool=None, summary="x" * 2000)
+
+    events = store.run_activity("f-42")
+
+    assert len(events[0]["summary"]) == 500
+
+
+def test_run_activity_reads_are_bounded(store):
+    for seq in range(1, 8):
+        store.record_run_activity("f-42", seq, kind="note", tool=None, summary=f"step {seq}")
+
+    events = store.run_activity("f-42", limit=3)
+
+    assert [event["seq"] for event in events] == [1, 2, 3]
+
+
 def test_changes_take_a_union_of_severities(store):
     """The same widening on the changes feed, where the pair a reviewer wants is
     breaking-and-deprecation -- two of five, and not expressible one at a time."""

@@ -47,6 +47,11 @@ from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 WorkflowReader = Callable[[str], Optional[dict[str, Any]]]
 
+# One patch run's recorded events, oldest first, keyed by finding the way `WorkflowReader` is.
+# An empty list is an answer, never a 404: the table cannot distinguish a run that predates
+# activity capture from one that has not started, and the console states exactly that.
+ActivityReader = Callable[[str], dict[str, Any]]
+
 # The patch a run produced, keyed the same way its workflow is. A diff is Sync's own artifact
 # and is served; customer source is not, and stays blocked on the threat-model ruling.
 PatchReader = Callable[[str], Optional[dict[str, Any]]]
@@ -288,6 +293,7 @@ def create_app(
     call_site_source_reader: Callable[[str, int, str | None], dict[str, Any] | None] | None = None,
     ticket_writer: TicketWriter | None = None,
     tickets_reader: TicketsReader | None = None,
+    activity_reader: ActivityReader | None = None,
     # Owner re-ruling, 2026-08-19, scoping the threat-model rule above: bounded, index-captured
     # source windows ARE served -- on a deployment that has not switched them off. Hosted
     # deployments set SYNC_SERVE_SOURCE=false and the ruling's original argument (a partner can
@@ -627,6 +633,12 @@ def create_app(
             return _not_found("workflow", finding_id)
         return JSONResponse(payload)
 
+    async def finding_activity(request: Request) -> JSONResponse:
+        """What the patch agent read, edited, ran and said, as the run recorded it."""
+        if activity_reader is None:
+            return JSONResponse({"error": "Activity reader not configured"}, status_code=501)
+        return JSONResponse(activity_reader(request.path_params["finding_id"]))
+
     async def setup(request: Request) -> JSONResponse:
         """The full loop's prerequisites, probed now — each item its own state, no figure over
         them. Probing on request is the point: a cached verdict about a credential is stale the
@@ -952,6 +964,11 @@ def create_app(
         Route("/api/findings/{finding_id}/ticket", create_ticket, methods=["POST"]),
         Route("/api/repositories/{repo_id:path}/tickets", list_tickets, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
+        Route(
+            "/api/repositories/{repo_id:path}/findings/{finding_id}/activity",
+            finding_activity,
+            methods=["GET"],
+        ),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/setup", setup, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/facts", codebase_facts_route, methods=["GET"]),
