@@ -45,6 +45,7 @@ from collections import Counter
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES
 from sync.core.models import FINDING_RUNGS, SEVERITY_ORDER
+from sync.core.naming import finding_name
 from sync.graph.store import DEFAULT_FINDING_ORDER, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
 
@@ -259,6 +260,33 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
             vendor_id: last_indexed.isoformat() for vendor_id, (_, last_indexed) in coverage.items()
         },
         "total_call_sites": sum(count for count, _ in coverage.values()),
+        # The product question beside the provider question, on the same payload because the
+        # screen that asks one asks the other and two routes would be two round trips against one
+        # table. `service_id` is None where no tag maps the operation onto a product; the
+        # transport carries the None through rather than dropping the group, so the console can
+        # say how much of a vendor's surface is not grouped yet.
+        "by_service": [
+            {
+                "vendor_id": row["vendor_id"],
+                "service_id": row["service_id"],
+                "call_sites": row["sites"],
+                "operations": row["operations"],
+                "last_indexed": row["last_indexed"].isoformat(),
+            }
+            for row in store.service_coverage(repo_id)
+        ],
+        # The grain beneath the roll-up: one row per operation, carrying the product it belongs to
+        # so the console can list a product's operations without a second round trip.
+        "by_operation": [
+            {
+                "vendor_id": row["vendor_id"],
+                "service_id": row["service_id"],
+                "operation_id": row["operation_id"],
+                "call_sites": row["sites"],
+                "last_indexed": row["last_indexed"].isoformat(),
+            }
+            for row in store.operation_coverage(repo_id)
+        ],
     }
 
 
@@ -473,6 +501,12 @@ def findings_page(
                     "change_kind": row["change_kind"],
                     "severity": row["severity"],
                     "finding_id": row["finding_id"],
+                    # Derived here rather than in the console, so the name a reader reads on
+                    # screen is the name the CLI prints and a pull-request body carries. Three
+                    # copies of one derivation is where they would start to differ.
+                    "name": finding_name(
+                        row["vendor_id"], row["operation_id"], row["finding_id"]
+                    ),
                     "binding_source": row["binding_rung"],
                 }
                 for row in rows

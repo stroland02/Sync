@@ -166,7 +166,9 @@ def _fake_abandonment_reader() -> dict[str, Any]:
     return {"groups": []}
 
 
-def _fake_change_units_reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0) -> dict[str, Any]:
+def _fake_change_units_reader(
+    *, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0
+) -> dict[str, Any]:
     return {"items": [], "total": 0, "next_offset": None}
 
 
@@ -397,8 +399,6 @@ def _build_app(
     settings_reader=_fake_settings_reader,
     settings_writer=_fake_settings_writer,
     call_site_source_reader=None,
-    ticket_writer=None,
-    tickets_reader=None,
     serve_source: bool = True,
     api_password: str | None = None,
 ) -> Starlette:
@@ -444,8 +444,6 @@ def _build_app(
         settings_reader=settings_reader,
         settings_writer=settings_writer,
         call_site_source_reader=call_site_source_reader,
-        ticket_writer=ticket_writer,
-        tickets_reader=tickets_reader,
         serve_source=serve_source,
         api_password=api_password,
     )
@@ -1134,8 +1132,10 @@ def test_change_units_route_returns_readers_payload_unaltered():
 def test_change_units_route_passes_query_params():
     calls: list[dict[str, Any]] = []
 
-    def reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
-        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
+    def reader(*, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0):
+        calls.append(
+            {"repo_id": repo_id, "severity": severity, "limit": limit, "offset": offset}
+        )
         return {"items": [], "total": 0, "next_offset": None}
 
     app = _build_app(
@@ -1144,8 +1144,16 @@ def test_change_units_route_passes_query_params():
     )
     client = TestClient(app)
 
-    client.get("/api/change-units?repo_id=r1&limit=25&offset=50")
-    assert calls == [{"repo_id": "r1", "limit": 25, "offset": 50}]
+    client.get("/api/change-units?repo_id=r1&severity=breaking&limit=25&offset=50")
+    assert calls == [
+        {"repo_id": "r1", "severity": "breaking", "limit": 25, "offset": 50}
+    ]
+
+    # Absent means unnarrowed, and the reader is told so explicitly rather than by omission:
+    # the severity tabs must be able to return to the whole set.
+    calls.clear()
+    client.get("/api/change-units?repo_id=r1")
+    assert calls[0]["severity"] is None
 
 
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
@@ -1639,7 +1647,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         vendor_findings_reads.append({"vendor_id": vendor_id, **kwargs})
         return _fake_vendor_findings_reader(vendor_id, **kwargs)
 
-    def change_units_reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
+    def change_units_reader(*, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0):
         change_units_reads.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return _fake_change_units_reader(repo_id=repo_id, limit=limit, offset=offset)
 
@@ -1960,11 +1968,6 @@ _NOT_COLLECTIONS = {
     # one per tier that ran -- bounded by the calendar and by the tier ladder, not by how
     # many attempts exist.
     "/api/corpus/activity",
-    # Tickets: one row per remediation request against one repository's open findings -- bounded
-    # by how many findings an operator or the watch loop has asked about, a set the same order of
-    # magnitude as the open findings themselves. The Detectors page renders the whole lifecycle
-    # split, and a page cursor over it would truncate the funnel while looking complete.
-    "/api/repositories/{repo_id:path}/tickets",
     # A stream is not a page. It has no total to report and no offset to advance, and it ends when
     # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
     # mean here.
@@ -2084,7 +2087,7 @@ def test_every_collection_route_accepts_limit_and_offset():
     def vendor_findings_reader(vendor_id: str, *, limit: int, offset: int, **_) -> dict[str, Any]:
         return _paged(finding_items, limit, offset)
 
-    def change_units_reader(*, repo_id=None, limit: int, offset: int) -> dict[str, Any]:
+    def change_units_reader(*, repo_id=None, severity=None, limit: int, offset: int) -> dict[str, Any]:
         return _paged(change_unit_items, limit, offset)
 
     surface = GraphSurface(FakeGraph(findings=findings, sites=sites, changes=changes), feed_fetched_at=FETCHED)
@@ -2999,80 +3002,3 @@ def test_source_policy_withholds_snippets_and_says_which_nothing_it_is():
     assert page["source_served"] is False
     assert "snippet" not in page["items"][0]
     assert "snippet_start_line" not in page["items"][0]
-
-
-# -- tickets ------------------------------------------------------------------------
-#
-# The console's second write, owner-ruled 2026-08-19, and the one it actually calls: a ticket
-# is a remediation *request* row. The route records the ask and returns -- `sync tickets` is
-# the process that executes, so a dead runner reads as a ticket parked at `requested`, never
-# as an HTTP timeout pretending to be progress.
-
-
-def _ticket_client(writes: list, tickets: list | None = None) -> TestClient:
-    def writer(finding_id: str, repo_id: str) -> dict:
-        writes.append((finding_id, repo_id))
-        return {"id": 1, "finding_id": finding_id, "repo_id": repo_id, "source": "operator",
-                "status": "requested"}
-
-    surface = GraphSurface(
-        FakeGraph(findings=[_finding("f1", "s1", "c1")], sites=[_site("s1")], changes=[_change("c1")]),
-        feed_fetched_at=FETCHED,
-    )
-    app = _build_app(
-        surface=surface,
-        ticket_writer=writer,
-        tickets_reader=lambda repo_id, *, source=None: [
-            t for t in (tickets or []) if source is None or t["source"] == source
-        ],
-    )
-    return TestClient(app)
-
-
-def test_posting_a_ticket_records_the_request_against_the_findings_own_repository():
-    writes: list = []
-    client = _ticket_client(writes)
-
-    response = client.post("/api/findings/f1/ticket")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "requested"
-    assert len(writes) == 1
-    assert writes[0][0] == "f1"
-
-
-def test_a_ticket_for_a_finding_nobody_holds_is_not_found():
-    writes: list = []
-    client = _ticket_client(writes)
-
-    response = client.post("/api/findings/f-unknown/ticket")
-
-    assert response.status_code == 404
-    assert writes == []
-
-
-def test_the_tickets_route_forwards_the_lane_filter():
-    rows = [
-        {"id": 1, "finding_id": "f1", "source": "operator", "status": "requested"},
-        {"id": 2, "finding_id": "f2", "source": "watch", "status": "done"},
-    ]
-    client = _ticket_client([], tickets=rows)
-
-    everything = client.get("/api/repositories/r1/tickets").json()
-    automatic = client.get("/api/repositories/r1/tickets?source=watch").json()
-
-    assert len(everything["tickets"]) == 2
-    assert [t["finding_id"] for t in automatic["tickets"]] == ["f2"]
-
-
-def test_the_consoles_binding_statuses_match_the_stores_in_order():
-    # `web/src/api/types.ts` restates `BINDING_STATUSES` because the console cannot import
-    # Python, and nothing in TypeScript knows the list is a restatement. Same shape and same
-    # reason as `RunDisposition` above -- and this one is ordered, so the assertion is on the
-    # list rather than the set: the order is the rail's option order, most-wanting-attention
-    # first, and a member inserted in the middle silently reorders a control a reader scans.
-    source = _web_source("src/api/types.ts")
-    match = re.search(r"export const BINDING_STATUSES = \[([^\]]+)\]", source)
-    assert match is not None, "web/src/api/types.ts no longer declares BINDING_STATUSES"
-    declared = re.findall(r'"([^"]+)"', match.group(1))
-    assert declared == list(BINDING_STATUSES)

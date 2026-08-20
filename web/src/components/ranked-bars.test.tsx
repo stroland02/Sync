@@ -56,4 +56,45 @@ describe("ranked bars", () => {
     expect(screen.getByText("0")).toBeTruthy()
     expect(screen.getByText("100")).toBeTruthy()
   })
+
+  it("colours by the identity `colourKey` names, not by the row", () => {
+    // The reason the prop exists: eight operations behind three integrations should read as three
+    // colours. Colouring by the row would give each bar its own hue and re-encode its length.
+    const operations = [
+      { key: "stripe · PostCharges", value: 96 },
+      { key: "stripe · GetCharge", value: 6 },
+      { key: "anthropic · CreateMessage", value: 3 },
+    ]
+
+    const { container } = render(
+      <RankedBars
+        label="Operations"
+        caption="Counted over every call site."
+        rows={operations}
+        unit="call sites"
+        colourKey={(key) => key.split(" · ")[0]}
+      />
+    )
+
+    const fills = [...container.querySelectorAll("[role=img] > div")].map(
+      (bar) => (bar as HTMLElement).style.backgroundColor
+    )
+    expect(fills).toHaveLength(3)
+    expect(fills[0]).toBe(fills[1])
+    expect(fills[0]).not.toBe(fills[2])
+  })
+
+  it("prints a row's second figure beside its count rather than under its bar", () => {
+    render(
+      <RankedBars
+        label="Operations"
+        caption="Counted over every call site."
+        rows={[{ key: "stripe · PostCharges", value: 96 }]}
+        unit="call sites"
+        detail={() => "92 files"}
+      />
+    )
+
+    expect(screen.getByText("92 files")).toBeTruthy()
+  })
 })

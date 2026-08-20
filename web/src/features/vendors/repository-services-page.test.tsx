@@ -1,18 +1,22 @@
-/**
- * The API services one repository calls — the list screen the owner asked for.
+﻿/**
+ * The API products one repository calls, and the duplication this screen stopped being.
  *
- * *"an api services page that list all the different services"*. Two answers reach it and they have
- * different grains: `/api/repositories/{repo_id}/coverage` names a service the index bound a call
- * site to, and `/api/overview?repo_id=` names a service with at least one open finding. Neither is a
- * superset of the other, both echo the scope they were computed for, and this screen's whole job is
- * to render the union without letting either grain be read as the other.
+ * Until 2026-08-19 this page rendered the union of two answers keyed by `vendor_id` â€” the same
+ * identifier the Vendors screen lists â€” so the owner's report was that the two screens showed the
+ * same data under two headings. A vendor is the provider Sync watches; a service is one of the APIs
+ * it sells, and `call_site.service_id` is the layer that makes them different lists.
+ *
+ * The tests that went with that change are named rather than silently dropped: seven asserted the
+ * union's per-answer columns, and the union is what was wrong. What replaced them asserts the new
+ * distinction, and one of them asserts the *absence* of the old one â€” a findings column returning
+ * here would restore the duplication with every other test still green.
  *
  * Scope is `.claude/rules/console-dev-loop.md`'s: classification, derivation and structural
  * invariants. Never class names, never snapshots.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render, screen, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -41,13 +45,9 @@ const failed = (error: unknown) => ({
   refetch: vi.fn(),
 })
 
-const { useOverview, useRepositoryCoverage } = vi.hoisted(() => ({
-  useOverview: vi.fn(),
-  useRepositoryCoverage: vi.fn(),
-}))
+const { useRepositoryCoverage } = vi.hoisted(() => ({ useRepositoryCoverage: vi.fn() }))
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
-  useOverview,
   useRepositoryCoverage,
 }))
 
@@ -64,179 +64,179 @@ function renderAt(repoId: string) {
   )
 }
 
-/** Both answers scoped to `org/one`: stripe is in both, twilio only indexed, openai only open. */
-function bothAnswered() {
-  useOverview.mockReturnValue(
+const INDEXED = "2026-08-19T09:00:00Z"
+
+/** One provider selling two products, one provider whose operations nothing has grouped. */
+function answered(repoId = "org/one") {
+  useRepositoryCoverage.mockReturnValue(
     settled({
-      repo_id: "org/one",
-      vendors: [
-        { vendor_id: "stripe", open_finding_count: 4 },
-        { vendor_id: "openai", open_finding_count: 0 },
+      repo_id: repoId,
+      by_vendor: { stripe: 14, twilio: 3 },
+      last_indexed: { stripe: INDEXED, twilio: INDEXED },
+      total_call_sites: 17,
+      by_service: [
+        { vendor_id: "stripe", service_id: "Payments", call_sites: 9, operations: 2, last_indexed: INDEXED },
+        { vendor_id: "stripe", service_id: "Billing", call_sites: 5, operations: 1, last_indexed: INDEXED },
+        { vendor_id: "twilio", service_id: null, call_sites: 3, operations: 2, last_indexed: INDEXED },
+      ],
+      by_operation: [
+        { vendor_id: "stripe", service_id: "Payments", operation_id: "PostCharges", call_sites: 6, last_indexed: INDEXED },
+        { vendor_id: "stripe", service_id: "Payments", operation_id: "GetCharge", call_sites: 3, last_indexed: INDEXED },
+        { vendor_id: "stripe", service_id: "Billing", operation_id: "PostSubscriptions", call_sites: 5, last_indexed: INDEXED },
+        { vendor_id: "twilio", service_id: null, operation_id: "CreateMessage", call_sites: 3, last_indexed: INDEXED },
       ],
     })
   )
-  useRepositoryCoverage.mockReturnValue(
-    settled({
-      repo_id: "org/one",
-      by_vendor: { stripe: 3, twilio: 1 },
-      last_indexed: { stripe: "2026-08-17T10:00:00Z", twilio: "2026-08-16T09:00:00Z" },
-      total_call_sites: 4,
-    })
-  )
 }
 
-function rowsOf(container: HTMLElement) {
-  return Array.from(container.querySelectorAll("tbody tr")) as HTMLElement[]
+/**
+ * The row a product sits in.
+ *
+ * The product name renders beside its vendor in one cell, so a bare text match hits the span and
+ * the cell containing it. Resolving to the enclosing `tr` is what makes the assertion about the
+ * row rather than about which element happened to hold the string.
+ */
+function rowFor(product: string): HTMLElement {
+  const row = screen
+    .getAllByText(new RegExp(product))
+    .map((element) => element.closest("tr"))
+    .find((candidate): candidate is HTMLTableRowElement => candidate !== null)
+  if (row === undefined) throw new Error(`no row renders the product ${product}`)
+  return row
 }
 
-function rowNamed(container: HTMLElement, service: string) {
-  const rows = rowsOf(container)
-  expect(rows.length).toBeGreaterThan(0)
-  const row = rows.find((candidate) => candidate.textContent?.includes(service))
-  expect(row).toBeDefined()
-  return row as HTMLElement
-}
-
-describe("the API services one repository calls", () => {
-  it("lists one row per service either scoped answer names, and neither answer alone", () => {
-    bothAnswered()
-
-    const { container } = renderAt("org/one")
-
-    // stripe from both, openai from the open-findings answer only, twilio from the index only.
-    const rows = rowsOf(container)
-    expect(rows.length).toBe(3)
-    expect(rows.map((row) => within(row).getAllByRole("cell")[0]?.textContent)).toEqual([
-      "openai",
-      "stripe",
-      "twilio",
-    ])
-  })
-
-  it("renders a confirmed zero as words and never as the absence marker", () => {
-    bothAnswered()
-
-    const { container } = renderAt("org/one")
-
-    // The overview named openai with a count of 0. That is an answer about openai, not a question.
-    const cells = within(rowNamed(container, "openai")).getAllByRole("cell")
-    expect(cells[1]?.textContent).toContain("No open findings")
-    expect(cells[1]?.textContent).not.toContain("—")
-  })
-
-  it("renders a service the open-findings answer never named as absence, not as zero", () => {
-    bothAnswered()
-
-    const { container } = renderAt("org/one")
-
-    // twilio has indexed call sites and no row in `vendors`. The vendor breakdown is a GROUP BY
-    // over open findings, so nothing computed a figure for twilio — printing 0 would invent one.
-    const cells = within(rowNamed(container, "twilio")).getAllByRole("cell")
-    expect(cells[1]?.textContent).toContain("—")
-    expect(cells[1]?.textContent).not.toContain("0")
-  })
-
-  it("renders a service the index never bound as absence in the call-site column", () => {
-    bothAnswered()
-
-    const { container } = renderAt("org/one")
-
-    // A vendor absent from `by_vendor` is a question this route cannot answer, not a zero.
-    const cells = within(rowNamed(container, "openai")).getAllByRole("cell")
-    expect(cells[2]?.textContent).toContain("—")
-    expect(cells[2]?.textContent).not.toContain("0")
-  })
-
-  it("carries each service's own call-site count and its own index time", () => {
-    bothAnswered()
-
-    const { container } = renderAt("org/one")
-
-    const cells = within(rowNamed(container, "stripe")).getAllByRole("cell")
-    expect(cells[2]?.textContent).toContain("3")
-    expect(cells[3]?.textContent).not.toContain("—")
-  })
-
-  it("opens each service in the vendor record, carrying this repository as the scope", () => {
-    bothAnswered()
-
+describe("the API products screen", () => {
+  it("lists one row per product rather than one per provider", () => {
+    answered()
     renderAt("org/one")
 
-    const link = screen.getByRole("link", { name: /stripe/i })
+    // Two products under one vendor is the whole point: a screen keyed by vendor would draw one
+    // stripe row here and be the Vendors screen again.
+    expect(rowFor("Payments")).toBeTruthy()
+    expect(rowFor("Billing")).toBeTruthy()
+    expect(screen.getAllByRole("link", { name: "stripe" }).length).toBe(2)
+  })
+
+  it("renders an ungrouped vendor as absence, never as a product named nothing", () => {
+    answered()
+    renderAt("org/one")
+
+    // Only a vendor adapter can map an operation onto a product and none does yet. A blank cell,
+    // a dash, or the vendor's own name standing in would each claim something different.
+    expect(screen.getByText(/not grouped into a product yet/i)).toBeTruthy()
+  })
+
+  it("counts the ungrouped operations rather than hiding them out of the totals", () => {
+    answered()
+    renderAt("org/one")
+
+    const tile = screen.getByText("Operations not grouped").closest("div")
+    expect(tile).not.toBeNull()
+    expect(within(tile as HTMLElement).getByText("2")).toBeTruthy()
+  })
+
+  it("does not answer the Vendors screen's question, which is what made the two alike", () => {
+    answered()
+    renderAt("org/one")
+
+    // The de-duplication itself. Open findings and adapter tier are facts about a provider and
+    // they live one screen away; a column for either here would restore the duplication with
+    // every other test in this file still passing.
+    // Non-vacuous: the table rendered, and it has the columns this screen does own.
+    expect(screen.getByRole("columnheader", { name: /service/i })).toBeTruthy()
+    expect(screen.queryByRole("columnheader", { name: /open findings/i })).toBeNull()
+    expect(screen.queryByRole("columnheader", { name: /adapter/i })).toBeNull()
+  })
+
+  it("carries each product's own call sites and index time", () => {
+    answered()
+    renderAt("org/one")
+
+    const row = rowFor("Payments")
+    expect(row).not.toBeNull()
+    expect(within(row).getByText("9")).toBeTruthy()
+  })
+
+  it("keeps a product's operations behind a disclosure rather than in the row", () => {
+    answered()
+    renderAt("org/one")
+
+    // Fifteen ungrouped operations rendered inline made one cell a paragraph, which is what the
+    // grouped shape on the findings screen already solved. Closed, the row states the count.
+    const row = rowFor("Payments")
+    expect(within(row).getByRole("button", { name: /2 operations/ })).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "PostCharges" })).toBeNull()
+  })
+
+  it("lists the operations behind a product once opened, each opening its binding surface", () => {
+    answered()
+    renderAt("org/one")
+
+    // The screen printed "operations not listed" for as long as no query returned them. It does
+    // now, so the caveat would be a stale statement of a limit that no longer holds.
+    const row = rowFor("Payments")
+    fireEvent.click(within(row).getByRole("button", { name: /2 operations/ }))
+
+    expect(screen.getByRole("link", { name: "PostCharges" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "GetCharge" })).toBeTruthy()
+    expect(document.body.textContent).not.toContain("operations not listed")
+  })
+
+  it("puts an operation under the product that owns it and under no other", () => {
+    answered()
+    renderAt("org/one")
+
+    // Keyed on (vendor, service): an operation id is unique only within its vendor, so a lookup
+    // on the service alone would merge two providers' rows.
+    const billing = rowFor("Billing")
+    fireEvent.click(within(billing).getByRole("button", { name: /1 operation/ }))
+
+    expect(screen.getByRole("link", { name: "PostSubscriptions" })).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "PostCharges" })).toBeNull()
+  })
+
+  it("opens each product's provider in the vendor record, carrying this repository as the scope", () => {
+    answered()
+    renderAt("org/one")
+
+    const row = rowFor("Payments")
+    const link = within(row).getByRole("link", { name: "stripe" })
     expect(link.getAttribute("href")).toBe("/repositories/org%2Fone/vendors/stripe")
   })
 
-  it("refuses to render any service under a repository the overview was not computed for", () => {
-    useOverview.mockReturnValue(
-      settled({ repo_id: null, vendors: [{ vendor_id: "stripe", open_finding_count: 4 }] })
-    )
-    useRepositoryCoverage.mockReturnValue(
-      settled({ repo_id: "org/one", by_vendor: { stripe: 3 }, last_indexed: {}, total_call_sites: 3 })
-    )
+  it("refuses the rows outright when coverage answered for another repository", () => {
+    answered("org/other")
+    renderAt("org/one")
 
-    const { container } = renderAt("org/one")
-
-    expect(rowsOf(container).length).toBe(0)
-    expect(container.textContent).toContain("computed for a different scope")
-  })
-
-  it("drops the index columns, and keeps the list, when coverage names another repository", () => {
-    useOverview.mockReturnValue(
-      settled({ repo_id: "org/one", vendors: [{ vendor_id: "stripe", open_finding_count: 4 }] })
-    )
-    useRepositoryCoverage.mockReturnValue(
-      settled({ repo_id: "org/two", by_vendor: { fake: 99 }, last_indexed: {}, total_call_sites: 99 })
-    )
-
-    const { container } = renderAt("org/one")
-
-    expect(rowsOf(container).length).toBe(1)
-    expect(container.textContent).not.toContain("fake")
-    expect(screen.queryByRole("columnheader", { name: /call sites/i })).toBeNull()
-    expect(container.textContent).toContain("index coverage that arrived names its scope")
+    // Another repository's call-site counts under this repository's name is a claim nothing
+    // computed. The page says so rather than rendering them with a caveat.
+    expect(screen.queryAllByText(/Payments/)).toHaveLength(0)
+    expect(screen.getByText(/answered about a different repository/i)).toBeTruthy()
   })
 
   it("names the transport defect rather than claiming the API does not hold the identifier", () => {
-    useOverview.mockReturnValue(
-      settled({ repo_id: "org/one", vendors: [{ vendor_id: "stripe", open_finding_count: 4 }] })
-    )
-    useRepositoryCoverage.mockReturnValue(
-      failed(
-        new NotFoundError(
-          "not found",
-          "/api/repositories/org%2Fone/coverage",
-          "/api/repositories/org%2Fone/coverage"
-        )
-      )
-    )
+    useRepositoryCoverage.mockReturnValue(failed(new NotFoundError("not found", "org/one", "/api/repositories/org%2Fone/coverage")))
+    renderAt("org/one")
 
-    const { container } = renderAt("org/one")
-
-    // The repository exists and the API lists it. "The API does not hold that identifier" is false
-    // here: the address never matched a route, because the converter cannot take a slash.
-    expect(container.textContent).not.toContain("does not hold that identifier")
-    expect(container.textContent).toContain("cannot match a repository identifier containing a slash")
-    expect(rowsOf(container).length).toBe(1)
-    expect(screen.queryByRole("columnheader", { name: /call sites/i })).toBeNull()
+    // B147: the route cannot match an identifier containing a slash, and every identifier has
+    // one. The generic 404 sentence would be false here â€” the repository exists.
+    expect(document.body.textContent).toMatch(/could not be asked about this repository/i)
   })
 
   it("says nothing is bound here rather than drawing an empty table", () => {
-    useOverview.mockReturnValue(settled({ repo_id: "org/one", vendors: [] }))
     useRepositoryCoverage.mockReturnValue(
-      settled({ repo_id: "org/one", by_vendor: {}, last_indexed: {}, total_call_sites: 0 })
+      settled({
+        repo_id: "org/one",
+        by_vendor: {},
+        last_indexed: {},
+        total_call_sites: 0,
+        by_service: [],
+        by_operation: [],
+      })
     )
+    renderAt("org/one")
 
-    const { container } = renderAt("org/one")
-
-    expect(rowsOf(container).length).toBe(0)
-    expect(container.textContent).toContain("This repository was never indexed, or it was indexed")
-  })
-
-  it("states on screen that it cannot show the operations each service exposes", () => {
-    bothAnswered()
-
-    const { container } = renderAt("org/one")
-
-    expect(container.textContent).toContain("operations")
+    expect(screen.getByText(/No API service is bound to org\/one/i)).toBeTruthy()
+    expect(screen.queryByRole("table")).toBeNull()
   })
 })

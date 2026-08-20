@@ -36,13 +36,11 @@ with no catalogue at all.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from sync.core import CallSite, Finding, Patch, RepoRef, VendorChange
+from sync.route.facts import routing_facts
 from sync.route.matrix import CODEMOD, NO_PATCH, RoutingFacts, Tier, route
-from sync.route.templates import argument_is_literal_at, language_for
-from sync.signals.oasdiff import changed_field
 
 # Strategies whose output is a pure function of their input, so feedback cannot change it.
 # Derived from `strategy` rather than a hand-kept registry, so a new codemod-style remediator
@@ -126,69 +124,6 @@ class RoutingDecision:
     tier: Tier
     row: str
     change_kind: str
-
-
-def routing_facts(
-    change: VendorChange, site: CallSite, repo: RepoRef | None = None
-) -> RoutingFacts:
-    """What this layer can establish about the change and the one call site it was given.
-
-    `RoutingFacts` defaults every field to "not established" precisely so a row needing a fact
-    declines when the fact is unknown, which is what stops an unpopulated graph routing work to
-    a codemod. Three of the four are established here; the fourth is the open one.
-
-    - `field_resolved` comes from the change's own text. A record naming no field is a real
-      answer -- `False`, not unknown -- which is what row 2 reads to keep a codemod away from
-      a field nobody can name.
-    - `value_already_passed` comes from `args_keys`, which is what this call site passes.
-    - `field_passed_as_literal` comes from the clone, when there is one. The index records
-      which keys a call site passes and never how each was written, so this reads the call
-      itself -- see `sync.route.templates.argument_is_literal_at`, which answers `None` for
-      anything it cannot establish. Reading the source is not a second index: it is the same
-      file the codemod is about to edit, parsed by the same scoping, so router and codemod
-      cannot disagree about which call they mean.
-    - `call_sites_reading_field` cannot be established here at all. It is a count across the
-      whole graph -- how many *indexed* sites read the field -- and `propose` is handed one
-      site with no reader for the rest. Row 3, the response-side mechanical row, therefore
-      still declines, and a response-property removal still costs an agent run.
-
-    `repo` is optional because `nodes.py` previews the route at `locate`, before a clone is
-    necessarily in hand. Without it the literal fact stays unknown, so that preview can only
-    ever name a tier at least as expensive as the one `propose` settles on -- a refinement,
-    never a contradiction.
-    """
-    field = changed_field(change)
-    return RoutingFacts(
-        field_resolved=field is not None,
-        value_already_passed=(field in set(site.args_keys)) if field is not None else None,
-        field_passed_as_literal=_passed_as_literal(field, site, repo),
-    )
-
-
-def _passed_as_literal(field: str | None, site: CallSite, repo: RepoRef | None) -> bool | None:
-    """The literal fact, or `None` wherever the source cannot settle it.
-
-    Every failure here is `None` rather than `False`. A missing clone, a path the index has
-    outlived, bytes that are not UTF-8, a suffix no grammar covers -- none of them is evidence
-    about how the argument was written, and absent evidence must never read as permission.
-    """
-    if field is None or repo is None:
-        return None
-
-    language = language_for(site.path)
-    if language is None:
-        return None
-
-    try:
-        source = (Path(repo.local_path) / site.path).read_bytes().decode("utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
-
-    # `CallSite.line` is 1-based off tree-sitter's `start_point` and ast-grep counts from
-    # zero, the same conversion `property_omit` makes before the edit.
-    return argument_is_literal_at(
-        source, field, language=language, line=site.line - 1, col=site.col,
-    )
 
 
 class TierFailed(RuntimeError):

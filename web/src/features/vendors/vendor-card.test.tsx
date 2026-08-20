@@ -32,7 +32,7 @@ import {
   CODED_SOURCE_NOTE,
   FRESHNESS_QUALIFICATION,
   NO_ADAPTER_ROW_NOTE,
-  NO_FINDING_COUNT_NOTE,
+  NO_CALL_SITE_COUNT_NOTE,
   VendorCard,
   adapterTierLabel,
 } from "@/features/vendors/vendor-card"
@@ -40,10 +40,13 @@ import {
 afterEach(cleanup)
 
 describe("the vendor's mark", () => {
-  it("shows the vendor's own mark beside the id, per decision 6", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />)
+  it("shows a mark beside the id, drawn rather than fetched", () => {
+    // M15 Task 5, owner ruling: the neutral generated mark. This asserted an `<img>` from
+    // logo.clearbit.com -- a third-party trademark, fetched from the operator's browser, telling
+    // that endpoint which integrations a customer watches. The mark is now drawn here.
+    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={2} />)
 
-    expect(screen.getByTestId("vendor-mark-image")).toBeTruthy()
+    expect(screen.getByTestId("vendor-mark-monogram")).toBeTruthy()
   })
 
   /**
@@ -51,10 +54,13 @@ describe("the vendor's mark", () => {
    * protecting: the id is what Sync actually holds, and the mark is an aid to finding it.
    */
   it("keeps the id as the identity rather than letting the mark stand for it", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={2} />)
+    const { container } = render(
+      <VendorCard vendorId="stripe" adapter={delivered} callSites={2} />,
+    )
 
     expect(screen.getByRole("heading", { name: "stripe" })).toBeTruthy()
-    expect(screen.getByTestId("vendor-mark-image").getAttribute("alt")).toBe("")
+    // Nothing is fetched for a vendor's logo, from anywhere.
+    expect(container.querySelector("img")).toBeNull()
   })
 })
 
@@ -91,7 +97,7 @@ const neverDelivered: AdapterRow = {
 describe("VendorCard", () => {
   it("identifies the vendor by its id, and draws no mark of its own", () => {
     const { container } = render(
-      <VendorCard vendorId="stripe" adapter={delivered} openFindingCount={3} />
+      <VendorCard vendorId="stripe" adapter={delivered} callSites={3} />
     )
 
     // Decision 6 reversed the refusal to show a mark, and kept the reason behind it: the id is the
@@ -111,7 +117,7 @@ describe("VendorCard", () => {
         <VendorCard
           vendorId="acme"
           adapter={{ ...delivered, vendor_id: "acme", kind }}
-          openFindingCount={0}
+          callSites={0}
         />
       )
       // The badge carries the word. Colour, if any ever arrives, is a second channel over this.
@@ -128,7 +134,7 @@ describe("VendorCard", () => {
 
   it("says nothing was received rather than printing zero, when an adapter has never delivered", () => {
     const { container } = render(
-      <VendorCard vendorId="acme" adapter={neverDelivered} openFindingCount={null} />
+      <VendorCard vendorId="acme" adapter={neverDelivered} callSites={null} />
     )
 
     expect(screen.getByText(NEVER_DELIVERED_NOTE)).toBeTruthy()
@@ -140,7 +146,7 @@ describe("VendorCard", () => {
       <VendorCard
         vendorId="stripe"
         adapter={{ ...delivered, changes: 0, operations: 0, last_change_at: null }}
-        openFindingCount={0}
+        callSites={0}
       />
     )
 
@@ -152,17 +158,17 @@ describe("VendorCard", () => {
     // `adapter_inventory` answers `source: null` for a coded adapter because there is no external
     // repository behind it. That is a fact about the adapter, not a gap in the record, and the
     // absence marker would claim the second.
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={3} />)
+    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={3} />)
     expect(screen.getByText(CODED_SOURCE_NOTE)).toBeTruthy()
 
     cleanup()
-    render(<VendorCard vendorId="acme" adapter={neverDelivered} openFindingCount={null} />)
+    render(<VendorCard vendorId="acme" adapter={neverDelivered} callSites={null} />)
     expect(screen.queryByText(CODED_SOURCE_NOTE)).toBeNull()
     expect(screen.getByText("acme/acme-node")).toBeTruthy()
   })
 
   it("names the newest recorded change as evidence age, never as a freshness measurement", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={3} />)
+    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={3} />)
 
     // Nothing in Sync records an intake attempt, only its result. A card labelling this timestamp
     // "last checked" would be asserting a poll nothing wrote down.
@@ -172,17 +178,17 @@ describe("VendorCard", () => {
   })
 
   it("renders an uncounted finding total as absence and a counted nought as a figure", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={null} />)
-    expect(screen.getByText(NO_FINDING_COUNT_NOTE)).toBeTruthy()
+    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={null} />)
+    expect(screen.getByText(NO_CALL_SITE_COUNT_NOTE)).toBeTruthy()
 
     cleanup()
-    render(<VendorCard vendorId="stripe" adapter={delivered} openFindingCount={0} />)
-    expect(screen.queryByText(NO_FINDING_COUNT_NOTE)).toBeNull()
+    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={0} />)
+    expect(screen.queryByText(NO_CALL_SITE_COUNT_NOTE)).toBeNull()
     expect(screen.getAllByText("0").length).toBeGreaterThan(0)
   })
 
   it("distinguishes a vendor with no adapter row from one whose adapter delivered nothing", () => {
-    render(<VendorCard vendorId="twilio" adapter={null} openFindingCount={2} />)
+    render(<VendorCard vendorId="twilio" adapter={null} callSites={2} />)
 
     expect(screen.getByText(NO_ADAPTER_ROW_NOTE)).toBeTruthy()
     expect(screen.queryByText(NEVER_DELIVERED_NOTE)).toBeNull()
@@ -192,7 +198,7 @@ describe("VendorCard", () => {
 
   it("asserts no confidence scalar, health figure, score or invented severity", () => {
     const { container } = render(
-      <VendorCard vendorId="stripe" adapter={delivered} openFindingCount={3} />
+      <VendorCard vendorId="stripe" adapter={delivered} callSites={3} />
     )
 
     const text = container.textContent ?? ""

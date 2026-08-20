@@ -40,21 +40,16 @@ export function ticketFunnel(tickets: readonly Ticket[]): {
 
   const nodes: FlowNode[] = [{ id: "tickets", label: `Tickets (${tickets.length})` }]
   const links: FlowLink[] = []
-  const stage = (
-    id: string,
-    label: string,
-    value: number,
-    tone?: "good" | "warning" | "serious" | "critical",
-  ) => {
+  const stage = (id: string, label: string, value: number) => {
     if (value === 0) return
-    nodes.push({ id, label: `${label} (${value})`, tone })
+    nodes.push({ id, label: `${label} (${value})` })
     links.push({ source: "tickets", target: id, value })
   }
   stage("initiated", "Initiated", counts.requested)
   stage("in-progress", "In progress", counts.picked_up)
-  stage("opened", "Opened a PR", counts.opened, "good")
-  stage("abandoned", "Abandoned", counts.abandoned, "serious")
-  stage("reported", "Reported", counts.reported, "warning")
+  stage("opened", "Opened a PR", counts.opened)
+  stage("abandoned", "Abandoned", counts.abandoned)
+  stage("reported", "Reported", counts.reported)
   stage("other", "Ended, outcome unrecognised", counts.other)
   return { nodes, links }
 }

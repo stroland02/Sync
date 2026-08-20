@@ -2,10 +2,8 @@
  * The reserved status treatment: an icon, a word, and the mark — never the mark alone.
  *
  * Good, warning, serious and critical are the only four colours this console spends on a
- * judgement. Owner re-ruling 2026-08-19: closed state vocabularies -- severity, a run's
- * disposition, an adapter gap -- wear this ramp through `components/tag.tsx`'s tone axis, each
- * with the tone's own glyph and word. The provenance rung alone stays monochrome: evidence
- * class is not a state, and `console-surface.md` holds that line.
+ * judgement. A run's disposition and the provenance rung are identity and evidence, not a
+ * verdict, and neither one reaches for this palette.
  */
 
 import type { ComponentType, ReactNode, SVGProps } from "react"

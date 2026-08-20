@@ -246,7 +246,7 @@ def test_a_verified_row_would_unblock_routing_accuracy_and_not_merge_rate():
 
 # --- part six: the row the table routed on ------------------------------------------
 #
-# `_decide_tier` computes the decision-table row at `locate` and stores it on `RunState`, the
+# `decide_tier` computes the decision-table row at `locate` and stores it on `RunState`, the
 # report node names it, and `TieredRemediator` asks the table a second time. Until this column
 # existed none of that reached the corpus, so every attempt recorded which tier ran and no
 # attempt recorded which rule said it should. Routing accuracy is defined over exactly that
@@ -261,7 +261,7 @@ def test_the_row_the_table_routed_on_reaches_the_corpus():
 
 
 def test_a_finding_the_table_had_no_jurisdiction_over_says_so_rather_than_going_null():
-    """`(None, None)` from `_decide_tier` means the table did not apply, which is a fact.
+    """`(None, None)` from `decide_tier` means the table did not apply, which is a fact.
 
     A null would make it indistinguishable from a row this column was never written for --
     the three attempts that predate the column, and any future write that loses it. One of

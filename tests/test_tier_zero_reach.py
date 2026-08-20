@@ -31,9 +31,9 @@ from sync.remediate.tiered import (
     RoutingDecision,
     TerminalTier,
     TieredRemediator,
-    routing_facts,
 )
-from sync.remediate import nodes
+from sync.route.disposition import decide_tier
+from sync.route.facts import routing_facts
 from sync.route.matrix import CODEMOD, route
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ts" / "two_payment_intents"
@@ -250,9 +250,9 @@ def test_a_codemod_route_with_no_willing_codemod_reaches_the_agent(repo: RepoRef
 
 
 def test_the_locate_node_records_the_row_the_cascade_will_actually_take(repo: RepoRef) -> None:
-    """`_decide_tier` and `TieredRemediator` must not disagree about which row fired.
+    """`decide_tier` and `TieredRemediator` must not disagree about which row fired.
 
-    `nodes._decide_tier` states the invariant in its own docstring -- both sides call
+    `sync.route.disposition` states the invariant in its own docstring -- both sides call
     `route()` over `routing_facts()`, so they cannot diverge. That held while
     `routing_facts` took two arguments. It now takes an optional `repo`, and the fact it
     establishes from the clone is exactly the one row 4 turns on, so a caller that omits
@@ -263,7 +263,7 @@ def test_the_locate_node_records_the_row_the_cascade_will_actually_take(repo: Re
     site = _site()
     change = _change("receipt_email")
 
-    _, row_at_locate = nodes._decide_tier(change, site, CATALOGUE, repo)
+    _, row_at_locate = decide_tier(change, site, CATALOGUE, repo)
     _, row_in_cascade = route(CATALOGUE[change.kind], routing_facts(change, site, repo))
 
     assert row_at_locate == row_in_cascade

@@ -16,6 +16,7 @@ instead, naming the commands that fill one.
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 
 import uvicorn
@@ -100,16 +101,6 @@ def require_schema(store: GraphStore, dsn: str) -> None:
         f"      --repo https://github.com/<owner>/<name>\n"
         f"Set SYNC_GRAPH_DSN if the graph lives somewhere other than the default."
     )
-
-
-def _ticket_json(ticket: dict) -> dict:
-    """A ticket row with its instants spelled for JSON, in one place for both routes."""
-    rendered = dict(ticket)
-    for key in ("requested_at", "picked_up_at", "done_at"):
-        value = rendered.get(key)
-        if hasattr(value, "isoformat"):
-            rendered[key] = value.isoformat()
-    return rendered
 
 
 def app_factory() -> Starlette:
@@ -198,26 +189,30 @@ def app_factory() -> Starlette:
 
     def integration_changes_reader(
         *,
-        vendor_id: str | None = None,
-        severity: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        severities: Sequence[str] = (),
         limit: int = 50,
         offset: int = 0,
     ):
         return store.vendor_changes_page(
-            vendor_id=vendor_id, severity=severity, limit=limit, offset=offset
+            vendor_ids=vendor_ids, severities=severities, limit=limit, offset=offset
         )
 
     def call_sites_reader(
         repo_id: str,
         *,
-        vendor_id: str | None = None,
+        vendor_ids: Sequence[str] = (),
+        operation_ids: Sequence[str] = (),
+        loop_depths: Sequence[int] = (),
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ):
         return store.call_sites_page(
             repo_id,
-            vendor_id=vendor_id,
+            vendor_ids=vendor_ids,
+            operation_ids=operation_ids,
+            loop_depths=loop_depths,
             path_prefix=path_prefix,
             limit=limit,
             offset=offset,
@@ -362,8 +357,16 @@ def app_factory() -> Starlette:
     def adapters_reader():
         return adapter_inventory(store)
 
-    def change_units_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
-        return fleet.change_units(store, checkpointer_dsn, repo_id=repo_id, limit=limit, offset=offset)
+    def change_units_reader(
+        *,
+        repo_id: str | None = None,
+        severity: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        return fleet.change_units(
+            store, checkpointer_dsn, repo_id=repo_id, severity=severity, limit=limit, offset=offset
+        )
 
     def context_reader(repo_id: str):
         return graph_views.repo_context(store, repo_id)
@@ -438,12 +441,6 @@ def app_factory() -> Starlette:
         topology_reader=topology_reader,
         catalogue_reader=catalogue_reader,
         call_site_source_reader=store.call_site_source,
-        ticket_writer=lambda finding_id, repo_id: _ticket_json(
-            store.create_ticket(finding_id, repo_id, source="operator")
-        ),
-        tickets_reader=lambda repo_id, *, source=None: [
-            _ticket_json(t) for t in store.tickets(repo_id, source=source)
-        ],
         # Off is the hosted posture; a local single-operator deployment serves its own source.
         serve_source=os.environ.get("SYNC_SERVE_SOURCE", "true").strip().lower()
         not in {"0", "false", "no", "off"},

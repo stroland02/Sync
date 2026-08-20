@@ -18,6 +18,9 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
+# `_repo_id` moved to `sync.index.codebase.remote_repo_id` on 2026-08-18, so `run` and
+# `sync index` derive one identity from one function. Imported from where it lives.
+from sync.index.codebase import remote_repo_id as _repo_id
 from sync.cli import (
     _checkout_branch,
     _declared_response_fields,
@@ -25,7 +28,6 @@ from sync.cli import (
     _parameter_deprecations,
     _scan,
     _clone,
-    _repo_id,
     _reset_clone,
     _select,
     _thread_to_invoke,

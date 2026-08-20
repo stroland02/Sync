@@ -178,6 +178,14 @@ export interface IndexRunSummary {
  * and it is the one to weigh the row by. The envelope's field describes the page.
  */
 export interface RiskRow {
+  /**
+   * The finding's display name — `stripe-postcharges-4b1c9e`.
+   *
+   * Derived in the payload by `sync.core.naming.finding_name`, never here: this table, the CLI
+   * and a pull-request body must call one finding by one name, and three derivations is where
+   * they would start to differ. `finding_id` stays the addressable thing.
+   */
+  name: string
   file: string
   line: number
   symbol: string | null
@@ -524,6 +532,19 @@ export interface RunRow {
   thread_id: string
   finding_id: string
   /**
+   * The finding as something a reviewer can say — `stripe-postcharges-4b1c9e`.
+   *
+   * Derived in the payload (`sync.core.naming.finding_name`), never in the console: the CLI and
+   * a pull-request body name the same finding, and a third derivation is where they diverge.
+   * The id above stays the addressable thing and every link is still built from it.
+   *
+   * `null` when the graph no longer holds the finding this thread names. The checkpointer
+   * outlives `finding`, which a scan truncates and rebuilds, so a run whose finding was patched
+   * or retracted has no call site to take a vendor and operation from — and a name invented for
+   * it would claim an integration nothing recorded.
+   */
+  finding_name: string | null
+  /**
    * What the heartbeat table knows about an in-flight run (B194): `alive` — the runner's
    * process ticked inside its window; `expired` — the sweep recorded that heartbeats stopped
    * with no clean exit, a stored transition rather than a per-read guess; `unmonitored` — no
@@ -613,6 +634,17 @@ export interface ChangeUnitRow {
   repository_count: number
   call_site_count: number
   binding_rung: string
+  /**
+   * How many findings this unit holds — stated by the payload, never counted from `findings`.
+   *
+   * Under a severity narrowing this is the count *at that severity*, because the narrowing is
+   * applied before the grouping. That is what makes the grouped totals reconcile with the flat
+   * ones on every tab: filtering units afterwards would leave each one counting findings the
+   * reader is not being shown.
+   */
+  finding_count: number
+  /** The constituent findings, in the same shape the flat table renders. */
+  findings: RiskRow[]
   finding_ids: string[]
   repo_ids: string[]
   standing: RunDisposition | "in_progress" | null
@@ -768,11 +800,54 @@ export interface BindingSurfaceResponse {
  * vendor's call sites — staleness, not a promise the index is current: a repository re-scanned
  * weeks ago reports the same value every day after, until another re-index moves it.
  */
+/**
+ * One API product this repository calls, under the vendor that sells it.
+ *
+ * A vendor is the provider Sync watches; a service is one of the APIs it sells — `Payments` under
+ * `stripe`. The graph carried only the provider until 2026-08-19, which is why the console's
+ * Services and Vendors screens listed the same identifier under two headings.
+ */
+export interface ServiceCoverageRow {
+  vendor_id: string
+  /**
+   * `null` where nothing has mapped this vendor's operations onto a product yet.
+   *
+   * **Not grouped, and never a call site outside every service.** Only a vendor adapter can supply
+   * the mapping and none does today, so this null is work not done — a screen rendering it as a
+   * service named nothing, or dropping the row, would report a vendor as having no products when
+   * what it has is no adapter.
+   */
+  service_id: string | null
+  call_sites: number
+  /** Distinct operations in this group, so a reader can see how much of the vendor it covers. */
+  operations: number
+  last_indexed: string
+}
+
+/**
+ * One vendor operation this repository calls, carrying the product it belongs to.
+ *
+ * The grain beneath `ServiceCoverageRow`. Its own aggregate rather than something summed out of
+ * this list, so the two can never disagree in a way neither can reveal.
+ */
+export interface OperationCoverageRow {
+  vendor_id: string
+  /** `null` for the same reason `ServiceCoverageRow.service_id` is: nothing has grouped it yet. */
+  service_id: string | null
+  operation_id: string
+  call_sites: number
+  last_indexed: string
+}
+
 export interface IndexCoverageResponse {
   repo_id: string
   by_vendor: Tally
   last_indexed: Record<string, string>
   total_call_sites: number
+  /** The product question beside the provider question, computed over the same rows. */
+  by_service: ServiceCoverageRow[]
+  /** The operations behind those products, so a product can list its own without a second read. */
+  by_operation: OperationCoverageRow[]
 }
 
 /**
@@ -854,54 +929,6 @@ export interface ObservedTelemetryResponse {
   calls: ItemPage<ObservedCallRow>
   shapes: ItemPage<ObservedShapeRow>
   error_windows: ItemPage<ObservedErrorWindowRow>
-  /**
-   * Traffic per operation, pooled across every unit of work held — correlated rows only.
-   * `requests` counts spans that carried a status (the detector's own denominator rule);
-   * `unstatused` is reported beside it so a rate computed over a shrunken sample can be
-   * discounted. No rate arrives from the transport: a screen that divides shows both counts.
-   */
-  traffic: TrafficRollupRow[]
-  /** The same rollup for traffic nothing could attribute to an operation — never pooled in. */
-  unattributed: TrafficRollupRow[]
-  /**
-   * Requests and errors per hour, bucketed by each unit of work's `first_seen` — a span carries
-   * no timestamp of its own, so a long trace's spans land on the hour its first request did.
-   */
-  series: TrafficBucket[]
-  totals: TrafficTotals
-}
-
-export interface TrafficRollupRow {
-  vendor_id: string
-  operation_id: string
-  server_address: string
-  http_method: string
-  binding_rung: string
-  url_template: string
-  traces: number
-  requests: number
-  errors: number
-  unstatused: number
-  distinct_targets: number
-  max_resend: number
-  first_seen: string
-  last_seen: string
-}
-
-export interface TrafficBucket {
-  bucket: string
-  requests: number
-  errors: number
-}
-
-export interface TrafficTotals {
-  requests: number
-  errors: number
-  unstatused: number
-  unattributed_requests: number
-  operations_observed: number
-  /** How many distinct operations the static index binds — the coverage denominator. */
-  operations_indexed: number
 }
 
 /**
@@ -1201,30 +1228,4 @@ export interface FindingsOverTimeResponse {
   total: number
   /** How many of them are still open, reported beside the series rather than folded into it. */
   still_open: number
-}
-
-/**
- * One remediation request — the console's ticket lane (owner ruling 2026-08-19).
- *
- * `status` is the lifecycle the Solutions funnel draws: `requested` (initiated), `picked_up`
- * (in progress), `done` (complete, with `outcome` saying how — the run's own vocabulary).
- * `source` is which lane asked: `operator` from the Findings page, `watch` from the loop.
- */
-export interface Ticket {
-  id: number
-  finding_id: string
-  repo_id: string
-  source: string
-  status: string
-  requested_at: string
-  picked_up_at: string | null
-  done_at: string | null
-  thread_id: string | null
-  outcome: string | null
-  detail: string | null
-}
-
-export interface TicketsResponse {
-  repo_id: string
-  tickets: Ticket[]
 }

@@ -5,7 +5,7 @@
  * everything read under it.
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 
 import {
   DEFAULT_LIMIT,
@@ -32,7 +32,6 @@ import {
   fetchWorkflow,
   fetchRepositoryGraph,
 } from "@/api/client"
-import { createTicket, fetchTickets } from "@/features/tickets/api"
 import type {
   BindingSurfaceParams,
   ChangeUnitsParams,
@@ -291,8 +290,12 @@ export function useChangeUnits(params: ChangeUnitsParams = {}) {
   const limit = params.limit ?? DEFAULT_LIMIT
   const offset = params.offset ?? 0
   return useQuery({
-    queryKey: ["change-units", params.repoId ?? null, limit, offset],
-    queryFn: ({ signal }) => fetchChangeUnits({ repoId: params.repoId, limit, offset }, signal),
+    queryKey: ["change-units", params.repoId ?? null, params.severity ?? null, limit, offset],
+    queryFn: ({ signal }) =>
+      fetchChangeUnits(
+        { repoId: params.repoId, severity: params.severity, limit, offset },
+        signal,
+      ),
   })
 }
 
@@ -354,50 +357,8 @@ export function useRepositoryGraph(repoId: string) {
   })
 }
 
-/**
- * One repository's remediation tickets, newest first. Polls while mounted for the same reason
- * the Telemetry page does: a ticket's whole point is that its status moves while a reader
- * watches, and the stamp of when the console last asked is the honest form of "live".
- */
-export function useTickets(
-  repoId: string,
-  source: "operator" | "watch" | null = null,
-  options: { refetchIntervalMs?: number } = {},
-) {
-  return useQuery({
-    queryKey: ["repositories", repoId, "tickets", source ?? "all"],
-    queryFn: ({ signal }) => fetchTickets(repoId, source, signal),
-    refetchInterval: options.refetchIntervalMs ?? false,
-  })
-}
-
-/**
- * The console's one write into remediation. Invalidates every ticket read for the repository
- * on success, so the row the POST returned is also the row every open screen shows.
- */
-export function useCreateTicket(repoId: string) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (findingId: string) => createTicket(findingId),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["repositories", repoId, "tickets"] })
-    },
-  })
-}
-
-/**
- * What traffic this repository has shown, what shape it had, and how often it failed.
- *
- * `refetchIntervalMs` is the Telemetry page's poll (owner ruling 2026-08-19): the live-signals
- * screen re-asks while open and states when it last asked, rather than wearing a "live" badge
- * that claims a push this transport does not have. Off by default — every other caller reads
- * once per navigation.
- */
-export function useRepositoryObserved(
-  repoId: string,
-  params: ObservedTelemetryParams = {},
-  options: { refetchIntervalMs?: number } = {},
-) {
+/** What traffic this repository has shown, what shape it had, and how often it failed. */
+export function useRepositoryObserved(repoId: string, params: ObservedTelemetryParams = {}) {
   return useQuery({
     queryKey: [
       "repositories",
@@ -408,7 +369,6 @@ export function useRepositoryObserved(
       params.errorWindowsOffset ?? 0,
     ],
     queryFn: ({ signal }) => fetchRepositoryObserved(repoId, params, signal),
-    refetchInterval: options.refetchIntervalMs ?? false,
   })
 }
 

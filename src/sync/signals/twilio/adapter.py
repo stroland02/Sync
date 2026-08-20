@@ -203,6 +203,7 @@ class TwilioAdapter:
             operation_id=entry["operation_id"],
             http_method=entry["http_method"],
             path=entry["path"],
+            service_id=entry.get("service_id"),
         )
 
     def operation_for_request(self, http_method: str, path: str) -> OperationRef | None:

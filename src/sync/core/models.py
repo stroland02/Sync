@@ -107,6 +107,11 @@ class CallSite(BaseModel):
     col: int
     vendor_id: str
     operation_id: str
+    # The API product this operation belongs to -- `Charges` under `stripe` -- or None where
+    # nothing can say. A vendor is the provider; a service is one of the APIs it sells, and only
+    # that vendor's adapter can map an operation onto one. None is therefore *not grouped yet*,
+    # never a call site outside every service, and no reader may render the two alike.
+    service_id: str | None = None
     symbol: str
     args_keys: list[str] = Field(default_factory=list)
     response_fields_read: list[str] = Field(default_factory=list)
@@ -261,6 +266,12 @@ class OperationRef(BaseModel):
     operation_id: str
     http_method: str
     path: str
+    # The product this operation belongs to, in the vendor's own OpenAPI `tags` -- Stripe tags
+    # `PostCharges` as `Charges`. None where an adapter has no tag to read: a route derived from
+    # SDK source alone (`GeneratedSpecAdapter`) or answered by a vendor with no spec at all
+    # (`McpServerAdapter`, `DeprecationsAdapter`) legitimately cannot say, and this is that answer
+    # rather than a guess -- `call_site.service_id`'s own docstring carries what None means there.
+    service_id: str | None = None
 
 
 class MigrationOutcome(BaseModel):

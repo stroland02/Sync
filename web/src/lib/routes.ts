@@ -134,13 +134,19 @@ export interface RouteEntry {
    */
   reachedFrom: string | null
   /**
-   * `true` where the screen is a table first and the page's reading cap costs it columns.
+   * `true` where the page's reading cap costs the screen more than it returns.
    *
-   * The chassis caps content at 1400px so prose lines stay readable, which is right for a screen
-   * of panels and wrong for one whose subject is fifteen recorded fields per row. Declared here
-   * rather than achieved with negative margins in the page: a full-bleed hack fights the
-   * scrollbar and lands differently on every browser, where a flag the frame reads is one rule
-   * in one place. `M15` Task 1.
+   * The chassis caps content at 1400px so prose lines stay readable. That is right for a screen
+   * a reader reads and wrong for one they scan -- a table whose subject is fifteen recorded
+   * fields per row, and equally a grid of panels that reflows into a single column and leaves
+   * half the viewport empty. Declared here rather than achieved with negative margins in the
+   * page: a full-bleed hack fights the scrollbar and lands differently on every browser, where
+   * a flag the frame reads is one rule in one place. `M15` Task 1.
+   *
+   * **Widened to the panel screens on the owner's report, 2026-08-19**: Overview, Telemetry and
+   * Detectors were capped, and each is a dashboard of tiles rather than prose. What stays capped
+   * is the detail screens -- a finding, a binding surface, a pull request -- where the content
+   * genuinely is a column of text and a wider measure would make it harder to read, not easier.
    */
   wide?: boolean
   /**
@@ -156,6 +162,7 @@ export interface RouteEntry {
 export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/repositories/:repoId",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 1,
@@ -185,9 +192,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // The changes feed is Vendors' second tab, never its own rail entry: what a vendor
     // published belongs beside the vendors it describes.
     nav: false,
-    // "Vendor changes" with the one-word ruling of 2026-08-19: the rail says Vendors, so a
-    // screen of what those vendors published does not get a second noun.
-    label: "Vendor changes",
+    label: "Integration changes",
     level: "API Services",
     question: "What have the integrations this codebase uses published, newest first?",
     params: ["repoId"],
@@ -317,8 +322,8 @@ export const ROUTES: readonly RouteEntry[] = [
     wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 3,
-    stage: "Index",
+    navOrder: 4,
+    stage: "Signal",
     // "Services" by the owner's naming ruling, 2026-08-19, superseding "Connections" of
     // 2026-08-18: it sat beside "Integrations" as a near-synonym, and Settings already uses
     // "Connection" for the forge credential. The LEVEL keeps the specification's words --
@@ -326,7 +331,7 @@ export const ROUTES: readonly RouteEntry[] = [
     label: "Services",
     level: "API Services",
     question:
-      "Which services is this workspace connected to, and what does the index know about each?",
+      "Which of its vendors' APIs does this workspace actually call, and how much of each?",
     params: ["repoId"],
     element: RepositoryServicesPage,
   },
@@ -335,19 +340,21 @@ export const ROUTES: readonly RouteEntry[] = [
     wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 4,
+    navOrder: 3,
     // The Signal stage's page: what each vendor published, diffed against what this codebase
     // binds. "Vendors" by the owner's naming ruling, 2026-08-19, superseding "Integrations" of
     // 2026-08-18 — see the Services entry for the collision that ruling resolved.
     stage: "Signal",
     label: "Vendors",
     level: "API Services",
-    question: "Which integrations does this workspace use, and how much is open against each?",
+    question:
+      "Which vendors does this workspace call, what can Sync watch about each, and how many of their APIs does it use?",
     params: ["repoId"],
     element: RepositoryVendorsPage,
   },
   {
     path: "/repositories/:repoId/observed",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     // In the rail as of 2026-08-19: the Observe stage had no door at all — this page was
     // reachable only as a Logs tab, so one of the five things the product does was invisible.
@@ -366,6 +373,7 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/detectors",
+    wide: true,
     reachedFrom: "a workspace in the switcher",
     // In the rail as of 2026-08-19, out of the Findings tab strip: the Detect stage's own
     // attribution page, not a view of the findings list.

@@ -30,7 +30,7 @@ import { FetchedAt } from "@/components/fetched-at"
 import { MetricPanel } from "@/components/metric-panel"
 import { RelativeTime } from "@/components/relative-time"
 import { ErrorState, LoadingState } from "@/components/states"
-import { Formatted } from "@/components/status"
+import { Absent, Formatted } from "@/components/status"
 import { FooterBar } from "@/layouts/footer-bar"
 import {
   CardinalityStatement,
@@ -39,6 +39,79 @@ import {
 } from "@/features/fleet/cardinality"
 import { orAbsent } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
+
+/**
+ * How much of an abandon reason a table cell shows before it has to be asked for the rest.
+ *
+ * `abandon_reason` is whatever a subprocess wrote, and nothing bounds it: a `tsc` invocation that
+ * fails its baseline check puts the compiler's entire `--help` output in this column, which drew a
+ * single row about a thousand pixels tall and pushed every other run off the screen. A table cell
+ * cannot be allowed to size itself from untrusted output.
+ */
+const ABANDON_REASON_PREVIEW = 180
+
+/**
+ * An abandon reason, bounded, with the remainder one press away.
+ *
+ * **Clamped rather than truncated**, which is the distinction this console keeps everywhere it
+ * shows less than it holds: the summary says how many characters are behind it, so a reader is
+ * never left guessing whether they have the whole message. Nothing is dropped — `<details>` holds
+ * the exact text, in a box with its own scroll so expanding one row cannot do to the page what
+ * this component exists to prevent.
+ *
+ * The head of the string is the part worth showing: the reason begins with the error class and
+ * what failed (`RuntimeError: could not establish a typecheck baseline for ...`) and degenerates
+ * into tool output after that.
+ */
+export function AbandonReason({ reason }: { reason: string | null }) {
+  const cell = "mt-field font-mono text-meta text-muted-foreground"
+
+  if (reason === null || reason.trim() === "") {
+    return (
+      <div className={cell}>
+        <Formatted value={orAbsent(reason)} />
+      </div>
+    )
+  }
+  if (reason.length <= ABANDON_REASON_PREVIEW) {
+    return <div className={cell}>{reason}</div>
+  }
+  return (
+    <details className="mt-field">
+      <summary className={`${cell} mt-0 cursor-pointer`}>
+        {reason.slice(0, ABANDON_REASON_PREVIEW).trimEnd()}&hellip;{" "}
+        <span className="underline underline-offset-2">
+          show all {reason.length.toLocaleString()} characters
+        </span>
+      </summary>
+      <pre className="mt-field max-h-72 overflow-auto rounded-control border border-line p-row font-mono text-meta whitespace-pre-wrap text-muted-foreground">
+        {reason}
+      </pre>
+    </details>
+  )
+}
+
+/**
+ * Which finding a run is for: the sayable name, with the id under it.
+ *
+ * `finding_name` is `null` for a run whose finding the graph no longer holds — the checkpointer
+ * outlives `finding`, which every scan rebuilds. The id is then the only thing there is, and the
+ * absence is named rather than left as a gap where a name goes.
+ */
+function RunSubject({ run }: { run: RunRow }) {
+  return (
+    <span className="flex min-w-0 flex-col gap-field">
+      {run.finding_name === null ? (
+        <span className="text-body">
+          <Absent>no longer in the graph</Absent>
+        </span>
+      ) : (
+        <span className="text-body">{run.finding_name}</span>
+      )}
+      <span className="text-meta break-all text-ink-muted">{run.finding_id}</span>
+    </span>
+  )
+}
 
 /** "in flight" for a run with no disposition yet — never "running", which never arrives here. */
 function describeOutcome(outcome: RunDisposition | null, isRehearsal = false): string {
@@ -77,7 +150,7 @@ const OUTCOME_OPTIONS = [
  */
 function outcomeGroup(
   data: RunsPage,
-  selected: string | null,
+  selected: readonly string[],
   onSelect: (value: string | null) => void,
 ): FilterGroup {
   const toOption = (option: (typeof OUTCOME_OPTIONS)[number]) => ({
@@ -146,7 +219,18 @@ export function RunsCard() {
         <FilterRail
           label="Narrow the runs"
           countScope="Counted across every run this deployment holds, whichever option is pressed. The record count under the table describes the narrowed set."
-          groups={[outcomeGroup(query.data, outcome, setOutcome)]}
+          groups={[
+            outcomeGroup(
+              query.data,
+              // One value, rendered in the rail's set shape. Disposition stayed single-select
+              // when M15 Task 4 widened the others: the union would have to be expressible by
+              // `fleet.runs` and the checkpointer query beneath it, and this facet has five
+              // members a reader can walk. A rail that let two be pressed while only one
+              // reached the query would look identical and be wrong.
+              outcome === null ? [] : [outcome],
+              setOutcome,
+            ),
+          ]}
         />
         <MetricPanel
           label="Runs"
@@ -194,14 +278,18 @@ export function RunsCard() {
                             router serves. Without a repository there is no scoped address to
                             build, and guessing one would send a reader to another workspace's
                             finding — so the id is stated and not linked. */}
+                        {/* The name leads and the id sits under it, the same way the Solutions
+                            table names the same object — a reader moving between the two screens
+                            must not have to match a hex string against a word to know they are
+                            looking at one finding. */}
                         {run.repo_id === null ? (
-                          run.finding_id
+                          <RunSubject run={run} />
                         ) : (
                           <Link
                             to={`/repositories/${encodeURIComponent(run.repo_id)}/findings/${encodeURIComponent(run.finding_id)}/workflow`}
                             className="underline underline-offset-2"
                           >
-                            {run.finding_id}
+                            <RunSubject run={run} />
                           </Link>
                         )}
                       </TableCell>
@@ -214,9 +302,7 @@ export function RunsCard() {
                       <TableCell>
                         {describeOutcome(run.outcome, isRehearsal(run))}
                         {run.outcome === "abandoned" && (
-                          <div className="mt-field font-mono text-meta text-muted-foreground">
-                            <Formatted value={orAbsent(run.abandon_reason)} />
-                          </div>
+                          <AbandonReason reason={run.abandon_reason} />
                         )}
                         {/* Liveness as a recorded word, in-flight rows only (B194). A chip
                             from a closed vocabulary, legible without colour — `expired` is a

@@ -54,17 +54,6 @@ function renderCard(
     calls: { items, total: over.total ?? items.length, next_offset: null },
     shapes: { items: [], total: 0, next_offset: null },
     error_windows: { items: [], total: 0, next_offset: null },
-    traffic: [],
-    unattributed: [],
-    series: [],
-    totals: {
-      requests: 0,
-      errors: 0,
-      unstatused: 0,
-      unattributed_requests: 0,
-      operations_observed: 0,
-      operations_indexed: 0,
-    },
   }
   useRepositoryObserved.mockReturnValue({
     isPending: false,

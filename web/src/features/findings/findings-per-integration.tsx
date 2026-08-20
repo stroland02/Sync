@@ -1,6 +1,11 @@
 /**
  * Dashboard I3: open findings per integration, ranked.
  *
+ * **On the Findings screen, not on Vendors, from 2026-08-19.** It was built beside the vendor
+ * table, which put an Errors & Incidents answer on a screen whose subject is what Sync watches.
+ * A vendor change is a fact about the provider; a finding is a fact about this codebase, and the
+ * owner's ruling is that the second belongs only where the findings are.
+ *
  * **The table beneath answers "which integrations are here"; this answers "which one is costing
  * the most right now".** Those are different questions and the table cannot be read for the
  * second: it sorts by the reader's chosen column and pages, so the largest contributor is not
@@ -43,7 +48,7 @@ export function FindingsPerIntegration({ repoId }: { repoId: string }) {
     .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))
 
   const hint = (
-    <InfoHint label="About findings per vendor">
+    <InfoHint label="About findings per integration">
       Open findings grouped by the integration each is bound to. Counted over every open finding
       in this workspace rather than over a page of them, so the ranking describes the whole set.
       An integration missing from this chart has no open finding — it is absent from the grouping
@@ -54,7 +59,7 @@ export function FindingsPerIntegration({ repoId }: { repoId: string }) {
   if (rows.length === 0) {
     return (
       <MetricPanel
-        label="Open findings per vendor"
+        label="Open findings per integration"
         hint={hint}
         caption="No integration in this workspace has an open finding."
       >
@@ -68,9 +73,9 @@ export function FindingsPerIntegration({ repoId }: { repoId: string }) {
   }
 
   return (
-    <MetricPanel label="Open findings per vendor" hint={hint}>
+    <MetricPanel label="Open findings per integration" hint={hint}>
       <RankedBars
-        label="By vendor"
+        label="By integration"
         caption="Open findings in this workspace, grouped by integration. Each bar's width is its share of the largest, not of the total."
         rows={rows}
         unit="findings"

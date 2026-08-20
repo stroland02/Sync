@@ -22,7 +22,7 @@
 import type { ReactNode } from "react"
 
 import type { WorkflowOutcome } from "@/api/types"
-import { Absent, Status, type StatusTone } from "@/components/status"
+import { Absent } from "@/components/status"
 
 /**
  * What the page renders underneath this panel, in that page's own words.
@@ -53,30 +53,24 @@ export interface BelowThisPanel {
  */
 export type OutcomeFrame = "panel" | "entry"
 
-// Toned by the owner's re-ruling of 2026-08-19, superseding the neutral treatment this
-// shipped with: a disposition is a phase a reader triages by, and the ramp ranks it --
-// opened is the loop closing, abandoned graver than reported, in-flight and unknown neutral
-// because colouring a value the console has not caught up with is a confident wrong verdict.
-// The colour never travels alone: `Status` ships the glyph and the word with it.
+// A run's disposition — running, abandoned, opened, reported — is identity, not a verdict:
+// an abandoned run is not an error, it is data routing learns from. So this never reaches for
+// the reserved status colour; every outcome gets the same neutral treatment.
 function Panel({
   headline,
   frame,
-  tone,
   children,
 }: {
   headline: string
   frame: OutcomeFrame
-  tone?: StatusTone
   children: ReactNode
 }) {
-  const headlineBody =
-    tone === undefined ? headline : <Status tone={tone} label={headline} />
   return (
     <div className={frame === "panel" ? "max-w-prose rounded-surface border border-border p-section" : ""}>
       {frame === "panel" ? (
-        <h2 className="text-emphasis">{headlineBody}</h2>
+        <h2 className="text-emphasis">{headline}</h2>
       ) : (
-        <h3 className="text-emphasis">{headlineBody}</h3>
+        <h3 className="text-emphasis">{headline}</h3>
       )}
       {/* The measure is the prose measure in both frames. An entry sits in a content column that is
           wider than a sentence should run, and the panel was already holding this line. */}
@@ -110,7 +104,7 @@ export function RunOutcome({
 
   if (outcome === "abandoned") {
     return (
-      <Panel headline="Sync abandoned this run." tone="serious" frame={frame}>
+      <Panel headline="Sync abandoned this run." frame={frame}>
         <p>
           {below.abandoned} An abandoned run is kept rather than hidden: the reason is what
           teaches routing which change kinds are not mechanically safe.
@@ -131,7 +125,7 @@ export function RunOutcome({
 
   if (outcome === "opened") {
     return (
-      <Panel headline="This run opened a pull request." tone="good" frame={frame}>
+      <Panel headline="This run opened a pull request." frame={frame}>
         <p>
           Every node of the run ran to completion and the patch passed both <code>tsc</code>{" "}
           and the customer's own CI. {below.opened}
@@ -149,7 +143,6 @@ export function RunOutcome({
             ? "This run was a rehearsal and halted before the remote."
             : "This run reported rather than patched."
         }
-        tone={isRehearsal ? undefined : "warning"}
         frame={frame}
       >
         <p>

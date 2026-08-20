@@ -44,6 +44,11 @@ export function FindingsTable({
     <Table>
       <TableHeader>
         <TableRow>
+          {/* The name leads: M15 Task 6. A 32-character hex id is correct for a key and useless
+              in a sentence, and a reader who wants to raise one of these with a colleague has to
+              be able to say which. Derived in the payload so this table, the CLI and a pull-request
+              body cannot disagree about what a finding is called. */}
+          <TableHead>Finding</TableHead>
           <TableHead>Severity</TableHead>
           {/* Rung sits ahead of the call site so it stays on screen at 1280px without a sideways
               scroll: the call site is the widest cell in this table — a path from a customer
@@ -58,6 +63,15 @@ export function FindingsTable({
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.finding_id}>
+            <TableCell className="font-mono text-meta">
+              <Link
+                to={findingHref(repoId, row.finding_id)}
+                className="underline underline-offset-2"
+                aria-label={`Finding ${row.name}, ${row.file} line ${row.line}`}
+              >
+                {row.name}
+              </Link>
+            </TableCell>
             <TableCell>
               <SeverityTag severity={row.severity} />
             </TableCell>
@@ -68,7 +82,6 @@ export function FindingsTable({
               <Link
                 to={findingHref(repoId, row.finding_id)}
                 className="underline underline-offset-2"
-                aria-label={`Finding ${row.finding_id} at ${row.file} line ${row.line}`}
               >
                 {row.file}:{row.line}
               </Link>

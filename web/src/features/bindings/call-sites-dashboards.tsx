@@ -1,24 +1,25 @@
 /**
  * Dashboards C1, C2 and C3: the Call sites page's opening facts, its per-integration ranking,
- * and the loop-depth distribution.
+ * and where a vendor change would cost most.
  *
  * **This page had the richest unused aggregate in the console.** `/api/topology` computes call
- * sites, files, operations, integrations and a loop-depth histogram over exactly the rows this
- * table lists, and the page fetched none of it — the table has always shown the rows and never
- * their shape. The read is shared with the Integration map's page on one query key, so mounting
- * it here costs nothing where that page has been visited.
+ * sites, files, operations and integrations over exactly the rows this table lists, and the page
+ * fetched none of it — the table has always shown the rows and never their shape. The read is
+ * shared with the Integration map's page on one query key, so mounting it here costs nothing where
+ * that page has been visited.
  *
- * **Loop depth is the one figure here that is not a count of rows, and it is labelled as static
- * evidence.** A call inside a loop is a call the code *can* make many times; whether it does is
- * a runtime question this rung cannot answer, and a loop that never executes still counts. Depth
- * one is a page of results becoming one call each; depth two is quadratic. That is worth seeing
- * as a distribution rather than as a total, because one deeply nested call site matters more than
- * fifty shallow ones and a sum would hide it.
+ * ## Loop depth was drawn here and is not any more, owner ruling 2026-08-19
  *
- * **Depth zero is drawn.** It is the overwhelming majority on any real codebase, and dropping it
- * would make the looped ones look like the whole population — the chart would go from "3 of 812
- * sit in loops" to "3 sit in loops" with no denominator, which is the shape of figure this
- * console refuses.
+ * C3 was a loop-depth histogram and C1's fourth tile was the same fact as a figure. Against a real
+ * graph that is *162 not in a loop, 2 at depth one, 1 at depth two* — a chart whose only content
+ * beyond the tile above it is a two-versus-one split, drawn at 162:2:1. It is the bar-chart form of
+ * the defect `web/CLAUDE.md` records for the provenance donut: a form that cannot draw its own data.
+ *
+ * What replaced it is the concentration ranking, which is the question this page exists for: one
+ * operation reached from many files is one vendor change to review and many places to patch.
+ *
+ * **`busiest_operations` is `LIMIT 8` in SQL** (`graph/store.py`), so this is the eight busiest and
+ * not every operation, and the caption says so. A cap a reader cannot see reads as a complete set.
  */
 
 import { useQuery } from "@tanstack/react-query"
@@ -26,6 +27,7 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchTopology } from "@/features/repositories/api-topology-card"
 import { InfoHint } from "@/components/info-hint"
 import { KpiStrip } from "@/components/kpi-strip"
+import { LastIndexed } from "@/components/last-indexed"
 import { MetricPanel } from "@/components/metric-panel"
 import { RankedBars } from "@/components/ranked-bars"
 import { ErrorState, LoadingState } from "@/components/states"
@@ -48,16 +50,26 @@ export function CallSitesDashboards({ repoId }: { repoId: string }) {
     )
   }
 
-  const { totals, by_vendor, by_loop_depth } = query.data
+  const { totals, by_vendor, busiest_operations } = query.data
 
   const perVendor = by_vendor
     .map((row) => ({ key: row.vendor_id, value: row.call_sites }))
     .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))
 
-  const depths = Object.entries(by_loop_depth)
-    .map(([depth, count]) => ({ depth: Number(depth), count }))
-    .sort((a, b) => a.depth - b.depth)
-  const looped = depths.filter((d) => d.depth > 0).reduce((sum, d) => sum + d.count, 0)
+  // Already ordered by the route; the key carries the vendor because an operation id is only
+  // unique within one, and two integrations naming an operation alike would share a bar.
+  const busiest = busiest_operations.map((row) => ({
+    key: `${row.vendor_id} · ${row.operation_id}`,
+    value: row.call_sites,
+  }))
+  const filesPerOperation = new Map(
+    busiest_operations.map((row) => [`${row.vendor_id} · ${row.operation_id}`, row.files]),
+  )
+  // The colour dimension: three integrations behind eight operations, so the hue says where the
+  // concentration sits rather than repeating each bar's own length.
+  const vendorPerOperation = new Map(
+    busiest_operations.map((row) => [`${row.vendor_id} · ${row.operation_id}`, row.vendor_id]),
+  )
 
   return (
     <>
@@ -79,11 +91,11 @@ export function CallSitesDashboards({ repoId }: { repoId: string }) {
             note: `across ${totals.vendors.toLocaleString()} integration${totals.vendors === 1 ? "" : "s"}`,
           },
           {
-            label: "Inside a loop",
-            value: `${looped.toLocaleString()} of ${totals.call_sites.toLocaleString()}`,
-            // Static evidence, said in the tile rather than only in the chart below, because a
-            // tile is read on its own and this one is the easiest on the page to misread.
-            note: "what the code can repeat, not what ran",
+            label: "Last indexed",
+            // Staleness, never liveness, and never-indexed is not a date this tile invents: a
+            // repository with no finished pass says so rather than borrowing another's stamp.
+            value: <LastIndexed repoId={repoId} />,
+            note: "when this codebase's call sites were last read",
             figure: false,
           },
         ]}
@@ -116,33 +128,41 @@ export function CallSitesDashboards({ repoId }: { repoId: string }) {
         </MetricPanel>
 
         <MetricPanel
-          label="Loop depth"
+          label="Most-called operations"
           hint={
-            <InfoHint label="About loop depth">
-              How deeply each call site is nested inside loops, counted statically. A loop that
-              never runs still counts here — this says what the code <em>can</em> repeat, never
-              what it did. Depth one is a page of results becoming one call each; depth two is
-              quadratic. Depth zero is drawn rather than dropped, because without it the looped
-              call sites would appear to be the whole population.
+            <InfoHint label="About most-called operations">
+              Concentration is what makes a vendor change cheap or expensive: one operation reached
+              from many files is one change to review and many places to patch. Counted over every
+              indexed call site rather than the narrowed table, so the rail&rsquo;s selections do
+              not change these bars. The route returns the eight busiest and no more and five are
+              drawn, so an operation absent here is outside the top eight rather than uncalled.
+              Colour is the integration the operation belongs to, which is the one thing the bar
+              lengths do not carry.
             </InfoHint>
           }
-          caption="Indexed call sites by nesting depth. Static evidence: this is the shape of the code, not a record of execution."
+          caption="Where a vendor change would cost most. Static evidence: this is what the code calls, not what ran."
         >
-          {depths.length === 0 ? (
+          {busiest.length === 0 ? (
             <p className="max-w-prose text-body text-ink-muted">
-              No call site to measure. Nothing has been indexed in this workspace, so there is no
-              nesting to report.
+              No operation has a call site in this workspace. That is the absence of an index pass
+              rather than a codebase that calls nothing.
             </p>
           ) : (
             <RankedBars
-              label="By nesting depth"
-              caption="Each bar's width is its share of the most common depth. Depth zero is not inside a loop."
-              rows={depths.map((d) => ({
-                key: d.depth === 0 ? "not in a loop" : `depth ${d.depth}`,
-                value: d.count,
-              }))}
+              label="By call sites"
+              caption="The five busiest operations, not every operation. Each bar's width is its share of the busiest, not of the total."
+              rows={busiest}
               unit="call sites"
-              colourByKey={false}
+              // Five, not eight: the route returns eight and the remainder is summarised in a line
+              // rather than dropped, which reads in a quarter of the height eight rows took.
+              max={5}
+              scale="log"
+              colourKey={(key) => vendorPerOperation.get(key) ?? key}
+              detail={(key) => {
+                const files = filesPerOperation.get(key)
+                if (files === undefined) return ""
+                return `${files.toLocaleString()} file${files === 1 ? "" : "s"}`
+              }}
             />
           )}
         </MetricPanel>
