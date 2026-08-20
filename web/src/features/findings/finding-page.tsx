@@ -70,6 +70,7 @@ import {
 import { workspacePath } from "@/features/findings/workspace-path"
 import { orAbsent } from "@/lib/format"
 import { Button } from "@/components/ui/button"
+import { TicketAction } from "@/features/tickets/ticket-action"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -403,6 +404,11 @@ function FindingDetailPage({
               or moved into a tooltip. */}
           <div className="flex flex-col gap-field">
             <div className="flex flex-col gap-field">
+              {/* The manual lane's trigger (owner ruling 2026-08-19): the reader acts on a
+                  finding here, and the ticket's state replaces the button while one is open. */}
+              {repoId !== undefined && (
+                <TicketAction repoId={repoId} findingId={findingId} />
+              )}
               <Button asChild variant="outline" className="w-full justify-start">
                 <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow`}>
                   Open the solution workflow

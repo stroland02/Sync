@@ -1247,3 +1247,29 @@ export interface FindingsOverTimeResponse {
   /** How many of them are still open, reported beside the series rather than folded into it. */
   still_open: number
 }
+
+/**
+ * One remediation request — the console's ticket lane (owner ruling 2026-08-19).
+ *
+ * `status` is the lifecycle the Solutions funnel draws: `requested` (initiated), `picked_up`
+ * (in progress), `done` (complete, with `outcome` saying how — the run's own vocabulary).
+ * `source` is which lane asked: `operator` from the Findings page, `watch` from the loop.
+ */
+export interface Ticket {
+  id: number
+  finding_id: string
+  repo_id: string
+  source: string
+  status: string
+  requested_at: string
+  picked_up_at: string | null
+  done_at: string | null
+  thread_id: string | null
+  outcome: string | null
+  detail: string | null
+}
+
+export interface TicketsResponse {
+  repo_id: string
+  tickets: Ticket[]
+}

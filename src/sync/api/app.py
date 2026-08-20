@@ -63,6 +63,15 @@ DismissalTallyReader = Callable[[], dict[str, Any]]
 # second copy in the transport is the fact written twice that would disagree first.
 DismissalWriter = Callable[..., None]
 
+# The console's second write, owner-ruled 2026-08-19 and unlike the first one the console DOES
+# call it: a ticket is a remediation *request* row, and recording a request is not running one.
+# The route writes the row and returns; the runner that executes tickets is a separate process
+# (`sync tickets`), so no route here still triggers a run, clones a repository, or mutates what
+# the pipeline derived -- the read-only rule holds for the graph the pipeline writes, and the
+# ticket table is operator-facing state the same way `finding_dismissal` is.
+TicketWriter = Callable[[str, str], dict[str, Any]]
+TicketsReader = Callable[..., list[dict[str, Any]]]
+
 # The fleet roll-ups read the checkpointer and the graph store directly, outside `GraphSurface`
 # -- same reasoning as `WorkflowReader`: a run, a repair record and a repo_id roll-up are not
 # graph-surface questions, and folding them into the surface would ask one abstraction to speak
@@ -277,6 +286,8 @@ def create_app(
     # frozen `GraphSurface` read the finding route composes with, which explains the call from
     # its recorded shape and predates capture.
     call_site_source_reader: Callable[[str, int, str | None], dict[str, Any] | None] | None = None,
+    ticket_writer: TicketWriter | None = None,
+    tickets_reader: TicketsReader | None = None,
     # Owner re-ruling, 2026-08-19, scoping the threat-model rule above: bounded, index-captured
     # source windows ARE served -- on a deployment that has not switched them off. Hosted
     # deployments set SYNC_SERVE_SOURCE=false and the ruling's original argument (a partner can
@@ -425,6 +436,35 @@ def create_app(
                 },
             }
         )
+
+    async def create_ticket(request: Request) -> JSONResponse:
+        """The console's one lane into remediation: record that an operator asked.
+
+        Writes the request row and returns it -- nothing here clones, patches, or invokes the
+        remediation graph. `sync tickets` is the process that picks requests up, so the API
+        stays a non-executor and a dead runner shows up as a ticket that stays `requested`
+        rather than as an HTTP timeout pretending to be progress.
+        """
+        if ticket_writer is None:
+            return JSONResponse({"error": "Ticket writer not configured"}, status_code=501)
+        finding_id = request.path_params["finding_id"]
+        row = surface.finding_by_id(finding_id)
+        if row is None:
+            return _not_found("finding", finding_id)
+        repo_id = row.get("repo_id")
+        if repo_id is None:
+            return JSONResponse(
+                {"error": "finding names no repository, so a ticket has nowhere to run"},
+                status_code=409,
+            )
+        return JSONResponse(ticket_writer(finding_id, repo_id))
+
+    async def list_tickets(request: Request) -> JSONResponse:
+        if tickets_reader is None:
+            return JSONResponse({"error": "Tickets reader not configured"}, status_code=501)
+        repo_id = request.path_params["repo_id"]
+        tickets = tickets_reader(repo_id, source=request.query_params.get("source"))
+        return JSONResponse({"repo_id": repo_id, "tickets": tickets})
 
     async def vendor_changes(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
@@ -908,6 +948,8 @@ def create_app(
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
         Route("/api/findings/{finding_id}/dismissal", get_dismissal, methods=["GET"]),
         Route("/api/findings/{finding_id}/dismissal", set_dismissal, methods=["POST"]),
+        Route("/api/findings/{finding_id}/ticket", create_ticket, methods=["POST"]),
+        Route("/api/repositories/{repo_id:path}/tickets", list_tickets, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/setup", setup, methods=["GET"]),
