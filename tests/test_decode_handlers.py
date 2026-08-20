@@ -489,7 +489,7 @@ def _drive_property_omit(root: Path) -> None:
 
 def _drive_tiered_literal(root: Path) -> None:
     from sync.core import VendorChange
-    from sync.remediate.tiered import routing_facts
+    from sync.route.facts import routing_facts
 
     _undecodable_ts(root)
     facts = routing_facts(VendorChange(**PROPERTY_REMOVED), _ts_site(), _repo(root))
@@ -857,7 +857,7 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
         _drive_parameters,
     "sync/remediate/property_omit.py::PropertyOmitRemediator.propose::OSError+UnicodeDecodeError":
         _drive_property_omit,
-    "sync/remediate/tiered.py::_passed_as_literal::OSError+UnicodeDecodeError":
+    "sync/route/facts.py::_passed_as_literal::OSError+UnicodeDecodeError":
         _drive_tiered_literal,
     "sync/signals/feed/consumer.py::parse_feed::JSONDecodeError+UnicodeDecodeError": _drive_feed,
     "sync/signals/intake.py::_read_npm::JSONDecodeError+UnicodeDecodeError": _drive_intake_npm,

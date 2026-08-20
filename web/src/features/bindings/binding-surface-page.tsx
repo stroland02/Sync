@@ -80,6 +80,7 @@ import {
 import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { type Fact, FactList } from "@/components/fact-list"
 import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
+import { InfoHint } from "@/components/info-hint"
 import { RungBadge } from "@/components/provenance"
 import {
   CALL_SITE_COLUMNS,
@@ -147,7 +148,6 @@ function boundCallSites(data: BindingSurfaceResponse): number {
 function operationFacts(
   vendorId: string,
   operationId: string,
-  repoId: string,
   data: BindingSurfaceResponse | null,
   failed: boolean
 ): Fact[] {
@@ -159,10 +159,8 @@ function operationFacts(
   return [
     { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
     { label: "Operation", value: <span className="font-mono">{operationId}</span> },
-    {
-      label: "Repository scope",
-      value: <span className="font-mono">{repoId}</span>,
-    },
+    // No "Repository scope" row: the workspace is the only scope (`M14-W386`), so the frame's
+    // workspace control and the `Narrowed by` chip already spell it twice.
     { label: "Call sites bound", value: counted(data ? boundCallSites(data) : 0) },
     { label: "Repositories", value: counted(data ? data.repositories.length : 0) },
     { label: "Vendor changes", value: counted(data ? data.changes.total : 0) },
@@ -173,24 +171,35 @@ function operationFacts(
 }
 
 /**
- * What the counts beside the header are counted over, which is not what the table is counted over.
+ * The section's name, and beside it the one thing its counts do not say for themselves.
  *
- * The two disagree whenever a filter is on, and that is deliberate rather than a defect: an option
- * list narrowed by the filter it sets collapses to whatever is already selected. So the screen says
- * which number answers which question instead of leaving a reader to assume they agree.
+ * It sits in the grid's content column so the facts have something to sit beside: the rail was
+ * composed to flank a header (`M7-W164` above), the headers were removed later, and nothing moved
+ * the rail — which left 22rem of figures beside an empty half-screen.
+ *
+ * The paragraph this replaced stated three things already on screen closer to the control each
+ * described: the `Narrowed by` chip, the repository facet's `countScope` caption, and the footer
+ * bar's range. Its "across every repository" wording had already outlived the workspace becoming
+ * the only scope, which is what a fact written twice does.
  */
-function ScopeNote({ repoId }: { repoId: string }) {
+function CallSitesHeading() {
   return (
-    <p className="max-w-prose text-body text-ink-muted">
-      The call-site table below is scoped to <code className="font-mono">{repoId}</code>.{" "}
-      {/* This used to read "across every repository the index has seen", and that stopped being
-          true when the workspace became the only scope: the reader is narrowed by `repoId`, so the
-          counts are this workspace's. A sentence made false by a change elsewhere is the defect
-          `M14-W363` was about, and it is why the branch above could not simply be deleted. */}
-      The counts beside this are taken across every call site in this workspace, whatever is
-      selected below — they are the choices available, not the rows on screen. The range under the
-      table is the number that moves when a filter is set.
-    </p>
+    <div className="flex min-w-0 flex-col gap-field">
+      <div className="flex items-center gap-row">
+        <h2 className="text-section">Call sites</h2>
+        <InfoHint label="About the figures beside this heading">
+          The figures beside this heading are counted across every call site this workspace holds
+          on the operation, whatever is selected below — they are the choices available, not the
+          rows on screen. The two deliberately disagree once a filter is on: an option list
+          narrowed by the filter it sets would collapse to whatever is already selected. The
+          number that moves with a filter is the range under the table.
+        </InfoHint>
+      </div>
+      <p className="max-w-prose text-body text-ink-muted">
+        What in the codebase calls this operation, and how the system knows it does. The figures
+        beside this cover the whole workspace, not the rows below.
+      </p>
+    </div>
   )
 }
 
@@ -377,16 +386,13 @@ function BindingSurfaceDetail({
             facts={operationFacts(
               vendorId,
               operationId,
-              repoId,
               query.isSuccess ? query.data : null,
               query.isError
             )}
           />
         }
       >
-        <div className="flex min-w-0 flex-col gap-section">
-          <ScopeNote repoId={repoId} />
-        </div>
+        <CallSitesHeading />
       </DetailGrid>
 
       {query.isPending && <LoadingState what={`bindings for ${vendorId}/${operationId}`} />}
@@ -396,13 +402,9 @@ function BindingSurfaceDetail({
 
       {query.isSuccess && (
         <>
-          <section className="flex flex-col gap-section">
-            <div className="flex flex-col gap-field">
-              <h2 className="text-section">Call sites</h2>
-              <p className="max-w-prose text-body text-ink-muted">
-                What in the codebase calls this operation, and how the system knows it does.
-              </p>
-            </div>
+          {/* `aria-label` because this region's heading is in the grid above, beside the facts
+              it scopes, rather than inside the section. */}
+          <section aria-label="Call sites" className="flex flex-col gap-section">
             <ControlBar>
               <FacetChips
                 legend="Repository"

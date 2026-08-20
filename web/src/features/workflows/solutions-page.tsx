@@ -16,6 +16,7 @@ import { Link, useParams } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useRuns } from "@/api/queries"
+import type { RunRow } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -36,9 +37,38 @@ import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { PageTabs, solutionsTabs } from "@/components/page-tabs"
-import { useTickets } from "@/api/queries"
-import { TicketFunnel } from "@/features/tickets/ticket-funnel"
 import { useOffsetParam } from "@/lib/use-offset-param"
+
+/**
+ * Which finding a solution is for: the sayable name, with the id under it.
+ *
+ * The column led with a 32-character hex id, which is the one thing about a finding nobody can
+ * read, say or hold in their head — and this is the screen where a reviewer picks which of
+ * several solutions to open. `finding_name` (`CI-W528`) exists precisely for that sentence, and
+ * this table was still rendering the key instead.
+ *
+ * **The id stays on screen, in the smaller register.** It is what a URL, a `gh` command and a
+ * grep are built from, so removing it would trade one unreadable column for one uncopyable one.
+ * The name is the subject; the id is the reference.
+ *
+ * `null` is a run whose finding the graph no longer holds — a scan rebuilt `finding` and this
+ * one was patched or retracted. The id is then all there is, and it says so rather than leaving
+ * a blank where a name goes.
+ */
+function SolutionSubject({ run }: { run: RunRow }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-field">
+      {run.finding_name === null ? (
+        <span className="text-body">
+          <Absent>no longer in the graph</Absent>
+        </span>
+      ) : (
+        <span className="font-mono text-body text-ink">{run.finding_name}</span>
+      )}
+      <span className="font-mono text-meta break-all text-ink-muted">{run.finding_id}</span>
+    </div>
+  )
+}
 
 export function SolutionsPage() {
   const { repoId } = useParams<{ repoId: string }>()
@@ -51,7 +81,6 @@ export function SolutionsPage() {
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Solutions" }]} />
       <PageTabs label="Solutions" tabs={solutionsTabs(repoId)} />
-      <SolutionsFunnelRegion repoId={repoId} />
 
       {query.isPending && <LoadingState what="the opened pull requests" />}
       {query.isError && (
@@ -149,7 +178,9 @@ export function SolutionsPage() {
                   : null
                 return (
                   <TableRow key={run.thread_id}>
-                    <TableCell className="font-mono">{run.finding_id}</TableCell>
+                    <TableCell>
+                      <SolutionSubject run={run} />
+                    </TableCell>
                     <TableCell className="font-mono text-meta">
                       <RelativeTime iso={run.last_checkpoint_at} />
                     </TableCell>
@@ -194,14 +225,4 @@ export function SolutionsPage() {
       )}
     </section>
   )
-}
-
-/**
- * The funnel's own read, kept out of the page body so a tickets route that does not answer
- * costs the diagram and not the solutions table beneath, which reads a different route.
- */
-function SolutionsFunnelRegion({ repoId }: { repoId: string }) {
-  const query = useTickets(repoId, null, { refetchIntervalMs: 15_000 })
-  if (!query.isSuccess) return null
-  return <TicketFunnel tickets={query.data.tickets} />
 }

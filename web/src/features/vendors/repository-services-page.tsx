@@ -1,39 +1,37 @@
-/**
- * The API services one repository calls.
+﻿/**
+ * The API products one repository calls: `Payments` under `stripe`, not `stripe` again.
  *
- * The owner asked for *"an api services page that list all the different services"*. Two answers
- * carry part of that list and neither carries all of it: `/api/repositories/{repo_id}/coverage`
- * names a service the static index bound a call site to, and `/api/overview?repo_id=` names a
- * service with at least one open finding. A service can be in either without being in the other, so
- * this screen renders the union and keeps the two grains apart per column rather than merging them
- * into one figure — the merge is the defect, not the extra column.
+ * **A vendor is the provider; a service is one of the APIs it sells.** Until 2026-08-19 the graph
+ * carried only the provider, so this screen listed `vendor_id` and so did the Vendors screen --
+ * one question answered twice under two headings, which is the duplication the owner named. The
+ * layer is `call_site.service_id` now and this screen is the only one that renders it.
  *
- * **Both answers echo the scope they were computed for, and both are checked.** `/api/overview`
- * has been rendered fleet-wide under one repository's name here before (`codebases-panel.tsx`,
- * fixed in `M14-W265`), so the list is refused outright when the overview's scope does not match the
- * address, and the index columns alone are dropped when the coverage answer's does not.
+ * **Findings are not here, and their absence is the point.** What is open against a provider and
+ * whether Sync can watch it at all are the Vendors screen's questions; repeating them here is what
+ * made the two screens look alike. This one reads `/api/repositories/{repo}/coverage` alone -- one
+ * route, one grain, no second answer to disagree with it.
+ *
+ * **A row with no service is work not done rather than a call outside every service.** Only a
+ * vendor adapter can map an operation onto a product and none supplies that mapping yet, so most
+ * real rows group under NULL and the table says so in the absence vocabulary rather than inventing
+ * a product name or dropping the rows.
  *
  * **The coverage address does not route for a real repository identifier (B147).** Every identifier
  * is `host/owner/name`, the route declares the default path converter, and the console percent-
- * encodes the slashes — so the request 404s before any reader runs. The generic 404 explanation,
+ * encodes the slashes -- so the request 404s before any reader runs. The generic 404 explanation,
  * *"The API does not hold that identifier"*, is false in that case: the repository exists and
  * `/api/repositories` lists it. This screen intercepts that 404 and says what actually happened,
  * which it can do unambiguously because `sync.dashboard.graph_views.index_coverage` has no 404 of
- * its own — it returns a well-formed empty payload for a repository it holds nothing for.
- *
- * **What this screen does not show, and says so on screen.** The operations each service exposes are
- * not listed, because no route returns the operations one repository calls: `/api/change-units` and
- * `/api/vendors/{id}` are the only answers carrying an operation identifier, both are scoped to open
- * findings — a different question — and the first does not echo its own scope, so it could not be
- * checked against this address at all. That is stated as absent work rather than drawn as an empty
- * panel carrying the never-measured marker.
+ * its own -- it returns a well-formed empty payload for a repository it holds nothing for.
  */
 
+import { useState } from "react"
+import { ChevronRight } from "lucide-react"
 import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { useOverview, useRepositoryCoverage } from "@/api/queries"
-import type { Tally } from "@/api/types"
+import { useRepositoryCoverage } from "@/api/queries"
+import type { OperationCoverageRow, ServiceCoverageRow, Tally } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -44,21 +42,124 @@ import {
 } from "@/components/data-table"
 import { InfoHint } from "@/components/info-hint"
 import { KpiStrip } from "@/components/kpi-strip"
+import { LastIndexed } from "@/components/last-indexed"
 import { RankedBars } from "@/components/ranked-bars"
-import { IndexFreshness } from "@/features/vendors/index-freshness"
 import { Absent, Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
-import { Badge } from "@/vendor/supabase/ui/badge"
 import { formatTimestamp } from "@/lib/format"
 
 
-import { vendorHref } from "@/lib/hrefs"
+import { bindingSurfaceHref, vendorHref } from "@/lib/hrefs"
 /** What the index-coverage answer turned out to be, once its scope and its 404 are accounted for. */
 type CoverageState =
-  | { kind: "ready"; byVendor: Tally; lastIndexed: Record<string, string> }
+  | {
+      kind: "ready"
+      byVendor: Tally
+      lastIndexed: Record<string, string>
+      byService: readonly ServiceCoverageRow[]
+      byOperation: readonly OperationCoverageRow[]
+    }
   | { kind: "unrouted" }
   | { kind: "failed"; error: unknown }
   | { kind: "otherScope"; scope: string }
+
+/**
+ * One API product, with the operations behind it a press away.
+ *
+ * The shape `change-unit-groups.tsx` uses on the findings screen, and for the same reason: a
+ * product is a decision a reader scans, its operations are the detail they open. They were
+ * rendered as a wall of inline chips in the row itself, which made a vendor with fifteen
+ * ungrouped operations a paragraph inside a table cell.
+ */
+function ServiceRow({
+  repoId,
+  row,
+  operations,
+}: {
+  repoId: string
+  row: ServiceCoverageRow
+  operations: readonly OperationCoverageRow[]
+}) {
+  const [open, setOpen] = useState(false)
+  const noun = row.operations === 1 ? "operation" : "operations"
+
+  return (
+    <>
+      <TableRow>
+        <TableCell>
+          <button
+            type="button"
+            onClick={() => setOpen((was) => !was)}
+            aria-expanded={open}
+            className="flex items-center gap-field rounded-control px-field py-field text-meta text-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <ChevronRight
+              aria-hidden="true"
+              className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+            />
+            <span className="tabular-nums">
+              {row.operations.toLocaleString()} {noun}
+            </span>
+          </button>
+        </TableCell>
+        <TableCell className="font-mono text-meta">
+          <Link
+            to={vendorHref(repoId, row.vendor_id)}
+            className="text-ink underline underline-offset-2"
+          >
+            {row.vendor_id}
+          </Link>
+          {row.service_id === null ? (
+            // Not a service named nothing: no adapter has mapped these operations onto a product.
+            // The absence marker says which nothing it is.
+            <span className="ml-field">
+              <Absent>not grouped into a product yet</Absent>
+            </span>
+          ) : (
+            <span className="text-ink-muted"> / {row.service_id}</span>
+          )}
+        </TableCell>
+        <TableCell className="font-mono text-meta text-ink-muted">
+          <Formatted value={formatTimestamp(row.last_indexed)} />
+        </TableCell>
+        <TableCell className="text-right tabular-nums text-meta text-ink-muted">
+          {row.call_sites.toLocaleString()}
+        </TableCell>
+      </TableRow>
+      {open && (
+        <TableRow>
+          <TableCell colSpan={4} className="bg-surface-subtle p-section">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Operation</TableHead>
+                  <TableHead className="text-right">Call sites</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {operations.map((operation) => (
+                  <TableRow key={operation.operation_id}>
+                    <TableCell>
+                      <Link
+                        to={bindingSurfaceHref(repoId, operation.vendor_id, operation.operation_id)}
+                        className="font-mono text-meta text-ink underline underline-offset-2"
+                      >
+                        {operation.operation_id}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-meta text-ink-muted">
+                      {operation.call_sites.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  )
+}
 
 export interface RepositoryServicesPageProps {
   readonly question?: string
@@ -66,27 +167,14 @@ export interface RepositoryServicesPageProps {
 
 export function RepositoryServicesPage() {
   const { repoId } = useParams<{ repoId: string }>()
-  const overview = useOverview(repoId)
   const coverage = useRepositoryCoverage(repoId ?? "")
 
 
 
-  if (overview.isPending || coverage.isPending) {
+  if (coverage.isPending) {
     return (
       <section className="flex flex-col gap-8">
         <LoadingState what="the connections this repository has" />
-      </section>
-    )
-  }
-
-  if (overview.isError) {
-    return (
-      <section className="flex flex-col gap-8">
-        <ErrorState
-          error={overview.error}
-          what="the connections this repository has"
-          onRetry={() => void overview.refetch()}
-        />
       </section>
     )
   }
@@ -100,24 +188,28 @@ export function RepositoryServicesPage() {
           kind: "ready",
           byVendor: coverage.data.by_vendor,
           lastIndexed: coverage.data.last_indexed,
+          byService: coverage.data.by_service,
+          byOperation: coverage.data.by_operation,
         }
       : { kind: "otherScope", scope: coverage.data?.repo_id ?? "another repository" }
-
-  const indexed = coverageState.kind === "ready" ? coverageState.byVendor : {}
-  const lastIndexed = coverageState.kind === "ready" ? coverageState.lastIndexed : {}
 
   // The answer names the scope it was computed for. Rendering rows from a fleet-wide answer under
   // this repository's heading would be a false claim about this repository, so it is refused rather
   // than shown with a caveat.
-  const scopeMatches = overview.data?.repo_id === repoId
-  const openFindings = new Map(
-    (overview.data?.vendors ?? []).map((vendor) => [vendor.vendor_id, vendor.open_finding_count])
-  )
-  const services = scopeMatches
-    ? [...new Set([...openFindings.keys(), ...Object.keys(indexed)])].sort((a, b) =>
-        a.localeCompare(b)
-      )
-    : []
+  // The rows are API products, not providers. This page used to list `vendor_id` -- the same
+  // identifier the Vendors screen lists -- so the two screens answered one question twice under
+  // two headings, which is the duplication the owner named on 2026-08-19. A service is one of the
+  // APIs a vendor sells, and the graph carries it per call site now.
+  const byService = coverageState.kind === "ready" ? coverageState.byService : []
+  const grouped = byService.filter((row) => row.service_id !== null)
+  const ungrouped = byService.filter((row) => row.service_id === null)
+  const ungroupedOperations = ungrouped.reduce((sum, row) => sum + row.operations, 0)
+  // Which operations sit under each product. Keyed on the pair because an operation id is unique
+  // only within its vendor, and two providers naming one alike would merge their rows.
+  const operationsOf = (vendorId: string, serviceId: string | null) =>
+    (coverageState.kind === "ready" ? coverageState.byOperation : []).filter(
+      (row) => row.vendor_id === vendorId && row.service_id === serviceId,
+    )
 
   return (
     <section className="flex flex-col gap-8">
@@ -125,69 +217,82 @@ export function RepositoryServicesPage() {
       {/* The page's own facts, ahead of the table (owner ruling 2026-08-19). None restates the
           table's footer: the counts split the list by *which answer* names each service, which
           is the distinction the table draws per column and never totals. */}
-      {scopeMatches && (
+      {(
         <KpiStrip
           items={[
             {
-              label: "Services connected",
-              value: services.length.toLocaleString(),
-              note: "named by the index, an open finding, or both",
+              label: "Services called",
+              value: grouped.length.toLocaleString(),
+              note: "distinct API products this codebase reaches",
             },
             {
-              label: "With open findings",
-              value: services.filter((service) => (openFindings.get(service) ?? 0) > 0).length,
-              note: "a detector has something open against them",
+              // Freshness as one figure, replacing the per-vendor `IndexFreshness` card that sat
+              // above the table until 2026-08-19. That card listed one row per vendor to say what
+              // the whole page is scoped to anyway -- a panel's worth of height for a fact that is
+              // the same for every row on the screen. Staleness, never liveness.
+              label: "Last indexed",
+              value: <LastIndexed repoId={repoId ?? ""} />,
+              note: "when this codebase's call sites were last read",
+              figure: false,
             },
             {
-              label: "Bound by the index",
-              value: Object.keys(indexed).length,
-              note: "a call site in this codebase reaches them",
+              label: "Call sites in a service",
+              value: grouped.reduce((sum, row) => sum + row.call_sites, 0).toLocaleString(),
+              note: `of ${(coverage.data?.total_call_sites ?? 0).toLocaleString()} indexed here`,
             },
             {
-              label: "Never indexed here",
-              value: services.filter((service) => indexed[service] === undefined).length,
-              note: "named by a finding, with no current call site",
+              label: "Operations not grouped",
+              value: ungroupedOperations.toLocaleString(),
+              // Work not done, and it must not read as a service named nothing: only a vendor
+              // adapter can map an operation onto a product, and none supplies that mapping yet.
+              note: "no adapter maps them to a product yet",
             },
           ]}
         />
       )}
 
       <div className="flex flex-wrap items-center gap-row">
-        <h2 className="text-section">Services this workspace connects to</h2>
+        <h2 className="text-section">API products this workspace calls</h2>
         {/* A claim, not an argument, so it stays visible -- caught by
             `repository-services-page.test.tsx` when the sweep moved it into the hover. What a
             screen does not show is exactly the kind of absence a non-hovering reader must be able
-            to see; the *why* is in the ⓘ. */}
-        <span className="text-meta text-ink-muted">operations not listed</span>
+            to see; the *why* is in the â“˜. */}
+        <span className="text-meta text-ink-muted">findings are on Findings</span>
         <InfoHint label="About the services list">
-          A service is listed when the index bound a call site in this repository to it, or when an
-          open finding names it. Those are two answers to two different questions, and each column
-          reports only its own — a blank in one is not a zero in the other. A service absent
-          entirely is a question this view cannot answer: whether the indexer looked and found
-          nothing, or nothing declares which package to look for. And the operations each service
-          exposes are not listed at all, because no route computes the operations one repository
-          calls — that is work not done rather than a service with no operations.
+          A <em>vendor</em> is the provider Sync watches; a <em>service</em> is one of the APIs it
+          sells &mdash; <span className="font-mono">Payments</span> under{" "}
+          <span className="font-mono">stripe</span>. This screen answers what your code calls,
+          counted over indexed call sites. What is open against a provider, and whether Sync can
+          watch it at all, is the Vendors screen&rsquo;s question and is deliberately not repeated
+          here. An operation with no service is one no adapter has mapped onto a product yet
+          &mdash; that is work not done, never a call outside every service. Each row lists the
+          operations behind it, which this screen could not do until the index reported them.
         </InfoHint>
       </div>
 
       {/* Where the exposure is, as bars rather than as a column a reader sorts by eye. The
           chart draws the index's answer only -- open findings are the other question, and a
           bar mixing the two would be the merge this screen's docstring refuses. */}
-      {scopeMatches && coverageState.kind === "ready" && Object.keys(indexed).length > 0 && (
+      {coverageState.kind === "ready" && grouped.length > 0 && (
         <RankedBars
           label="Call sites per service"
-          caption="What the index bound in this codebase. A service with an open finding and no bar has no current call site here, which the table's own columns say per row."
-          rows={Object.entries(indexed)
-            .map(([service, count]) => ({ key: service, value: Number(count) }))
-            .sort((a, b) => b.value - a.value)}
+          caption="What the index bound in this codebase, per API product. Colour is the vendor that sells it, which is the one thing the bar lengths do not carry."
+          rows={grouped
+            .map((row) => ({
+              key: `${row.vendor_id} Â· ${row.service_id ?? ""}`,
+              value: row.call_sites,
+            }))
+            .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))}
           unit="call sites"
+          colourKey={(key) => key.split(" Â· ")[0]}
+          detail={(key) => {
+            const row = grouped.find(
+              (candidate) => `${candidate.vendor_id} Â· ${candidate.service_id ?? ""}` === key,
+            )
+            if (row === undefined) return ""
+            return `${row.operations} op${row.operations === 1 ? "" : "s"}`
+          }}
         />
-      )}
-
-      {/* Dashboard N3, beside the call-site ranking: what the index bound, and when it last
-          looked. Two questions about the same pass, and neither answers the other. */}
-      {scopeMatches && coverageState.kind === "ready" && Object.keys(lastIndexed).length > 0 && (
-        <IndexFreshness lastIndexed={lastIndexed} />
       )}
 
       {coverageState.kind === "unrouted" && (
@@ -223,17 +328,7 @@ export function RepositoryServicesPage() {
         />
       )}
 
-      {!scopeMatches ? (
-        <EmptyState
-          headline="This answer was computed for a different scope."
-          detail={
-            `The overview that arrived names its scope as ` +
-            `${overview.data?.repo_id ?? "the whole fleet"}, not ${repoId}. Its services are not ` +
-            `shown here, because a fleet-wide list under one repository's name is a claim about ` +
-            `that repository which nothing computed.`
-          }
-        />
-      ) : services.length === 0 ? (
+      {byService.length === 0 ? (
         <EmptyState
           headline={`No API service is bound to ${repoId}.`}
           detail="This repository was never indexed, or it was indexed and nothing bound to a vendor was found. Those are the same answer here: the index has no configuration table, so a repository it has never seen a call site from is indistinguishable from one nobody ever configured."
@@ -243,55 +338,23 @@ export function RepositoryServicesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Service</TableHead>
-              <TableHead>Open findings</TableHead>
-              {coverageState.kind === "ready" && (
-                <>
-                  <TableHead>Call sites</TableHead>
-                  <TableHead>Last indexed</TableHead>
-                </>
-              )}
+              <TableHead>Operations</TableHead>
+              <TableHead>Vendor / service</TableHead>
+              <TableHead>Last indexed</TableHead>
+              <TableHead className="text-right">Call sites</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {services.map((service) => {
-              const open = openFindings.get(service)
-              const sites = indexed[service]
-              return (
-                <TableRow key={service}>
-                  <TableCell>
-                    <Link
-                      to={vendorHref(repoId ?? "", service)}
-                      className="font-mono underline underline-offset-2"
-                    >
-                      {service}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    {/* A confirmed zero is an answer about this service and renders as words. A
-                        service the vendor breakdown never named has no figure at all — that
-                        breakdown counts open findings and emits no row where there are none — so it
-                        takes the absence marker. The two are different claims and this console
-                        exists to keep them apart. */}
-                    {open === undefined ? (
-                      <Absent />
-                    ) : (
-                      <Badge>{open === 0 ? "No open findings" : `${open} open findings`}</Badge>
-                    )}
-                  </TableCell>
-                  {coverageState.kind === "ready" && (
-                    <>
-                      <TableCell className="font-mono">
-                        {sites === undefined ? <Absent /> : sites}
-                      </TableCell>
-                      <TableCell className="font-mono text-meta">
-                        <Formatted value={formatTimestamp(lastIndexed[service])} />
-                      </TableCell>
-                    </>
-                  )}
-                </TableRow>
-              )
-            })}
+            {/* Grouped first, then whatever is not grouped -- the ungrouped rows are the honest
+                bottom of the list rather than a state hidden behind a filter. */}
+            {[...grouped, ...ungrouped].map((row) => (
+              <ServiceRow
+                key={`${row.vendor_id}:${row.service_id ?? ""}`}
+                repoId={repoId ?? ""}
+                row={row}
+                operations={operationsOf(row.vendor_id, row.service_id)}
+              />
+            ))}
           </TableBody>
         </Table>
       )}

@@ -192,9 +192,7 @@ export const ROUTES: readonly RouteEntry[] = [
     // The changes feed is Vendors' second tab, never its own rail entry: what a vendor
     // published belongs beside the vendors it describes.
     nav: false,
-    // "Vendor changes" with the one-word ruling of 2026-08-19: the rail says Vendors, so a
-    // screen of what those vendors published does not get a second noun.
-    label: "Vendor changes",
+    label: "Integration changes",
     level: "API Services",
     question: "What have the integrations this codebase uses published, newest first?",
     params: ["repoId"],
@@ -324,8 +322,8 @@ export const ROUTES: readonly RouteEntry[] = [
     wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 3,
-    stage: "Index",
+    navOrder: 4,
+    stage: "Signal",
     // "Services" by the owner's naming ruling, 2026-08-19, superseding "Connections" of
     // 2026-08-18: it sat beside "Integrations" as a near-synonym, and Settings already uses
     // "Connection" for the forge credential. The LEVEL keeps the specification's words --
@@ -333,7 +331,7 @@ export const ROUTES: readonly RouteEntry[] = [
     label: "Services",
     level: "API Services",
     question:
-      "Which services is this workspace connected to, and what does the index know about each?",
+      "Which of its vendors' APIs does this workspace actually call, and how much of each?",
     params: ["repoId"],
     element: RepositoryServicesPage,
   },
@@ -342,14 +340,15 @@ export const ROUTES: readonly RouteEntry[] = [
     wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
-    navOrder: 4,
+    navOrder: 3,
     // The Signal stage's page: what each vendor published, diffed against what this codebase
     // binds. "Vendors" by the owner's naming ruling, 2026-08-19, superseding "Integrations" of
     // 2026-08-18 — see the Services entry for the collision that ruling resolved.
     stage: "Signal",
     label: "Vendors",
     level: "API Services",
-    question: "Which integrations does this workspace use, and how much is open against each?",
+    question:
+      "Which vendors does this workspace call, what can Sync watch about each, and how many of their APIs does it use?",
     params: ["repoId"],
     element: RepositoryVendorsPage,
   },

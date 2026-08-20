@@ -842,6 +842,7 @@ class TypeScriptAdapter:
                     col=node.start_point[1],
                     vendor_id=self._vendor.vendor_id,
                     operation_id=operation.operation_id,
+                    service_id=operation.service_id,
                     symbol=symbol,
                     args_keys=args_keys,
                     response_fields_read=response_fields,

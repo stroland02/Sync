@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Findings grouped by the change that caused them.
  *
  * M15 Task 7. The claim is arithmetic: **twenty-four findings are thirteen change units**, and a
  * console listing them flat shows a reader twenty-four problems where there are thirteen. What is
- * under test is the pair of figures a reader compares — the unit count and the finding count —
+ * under test is the pair of figures a reader compares â€” the unit count and the finding count â€”
  * because a grouped view whose parts do not add to the whole is a worse answer than no grouping,
  * and it is the kind of wrong that reads as a rounding artefact.
  *
@@ -143,5 +143,24 @@ describe("the grouped view", () => {
     renderGroups([unit({ from_version: null, to_version: null })])
 
     expect(screen.getByText(/not recorded/)).toBeTruthy()
+  })
+
+  it("says the nested rows are a sample when the unit holds more than travelled", () => {
+    // The payload caps the array and states the count independently. Silence here would render
+    // a truncated list as the whole unit -- the count above disagreeing with the rows beneath
+    // it, which is the shape this console refuses.
+    renderGroups([unit({ finding_count: 137, findings: [finding(), finding({ finding_id: "f-2" })] })])
+    fireEvent.click(screen.getByRole("button", { name: /137 findings/ }))
+
+    expect(screen.getByText(/Showing 2 of 137 findings/)).toBeTruthy()
+  })
+
+  it("says nothing about a sample when every finding travelled", () => {
+    renderGroups([unit({ finding_count: 2, findings: [finding(), finding({ finding_id: "f-2" })] })])
+    fireEvent.click(screen.getByRole("button", { name: /2 findings/ }))
+
+    // Non-vacuous: the disclosure opened and the rows are there.
+    expect(screen.getAllByRole("row").length).toBeGreaterThan(1)
+    expect(screen.queryByText(/Showing/)).toBeNull()
   })
 })

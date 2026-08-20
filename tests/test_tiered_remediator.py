@@ -20,8 +20,8 @@ from sync.core.protocols import Remediator
 from sync.remediate.tiered import (
     NoPatchWarranted,
     TieredRemediator,
-    routing_facts,
 )
+from sync.route.facts import routing_facts
 
 FINDING = Finding(detector="d", claim="c", call_site_id="cs", severity="breaking",
                   rationale="r")

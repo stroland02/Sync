@@ -8,12 +8,10 @@
  * `observed_call`, `observed_shape` and `observed_error_window` for exactly that reason.
  *
  * **The honesty constraint here is sharper than on most panels.** An observed call proves a
- * call site was exercised. It does not prove the binding is correct, it does not prove the
- * call site still exists in the source, and an absence of observed calls proves nothing at
- * all: it may mean the code path is cold, that telemetry was never wired up for this
- * repository, or that this identifier does not name a repository the index has seen at all.
- * This route answers the same way in all three cases — empty lists — so every empty state
- * below says all three rather than picking one.
+ * call site was exercised. It does not prove the binding is correct, and it does not prove the
+ * call site still exists in the source. An absence is two different facts — nobody watched, or
+ * somebody watched and nothing came — and `telemetry_attached_at` is what separates them, so the
+ * empty states below name which one this is rather than listing what they cannot tell apart.
  *
  * No composite figure and no chart: `observed_error_window.error_count` has no denominator in
  * its own table, a shape drift is not an error, and an error window is not a verdict. `source`
@@ -25,10 +23,9 @@
  *
  * `docs/superpowers/briefs/2026-08-07-substrate-signals.md` is the mapping table this port was
  * gated on. Three panels, three totals, and each total is its own panel's grain — which is why each
- * takes the figure register here and the one panel Codebase builds out of the same payload takes
- * none. **A total of zero takes no figure at all.** Rendering `0` at the largest register on the
- * screen would draw an absence as a measured zero, and the empty state beneath says in words why
- * this payload cannot tell the difference.
+ * takes the figure register here. **A total of zero takes no figure at all.** Rendering `0` at the
+ * largest register on the screen would draw an absence as a measured zero; the empty state beneath
+ * says in words which of the two this one is.
  *
  * **No catalogue is derived from `source`.** The mechanisms it names would be the truest reading of
  * this role, and two facts refuse it: `observed_call` carries no `source` at all, so a catalogue
@@ -45,25 +42,54 @@ import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
 import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
 import { FooterBar } from "@/layouts/footer-bar"
+import { formatTimestamp } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /**
- * The three meanings this payload cannot tell apart, said in full every time.
+ * Telemetry attached and quiet: the panel-by-panel nothing, which is a measured nought.
  *
- * `EmptyState` rather than a bare paragraph, so a source with nothing to report sits in the same
- * vocabulary as every other kind of nothing in this console. The repository id loses its mono
- * setting in the move — `EmptyState` takes strings — which is the trade the Codebase level already
- * made for these same three states.
+ * `telemetry_attached_at` is what separates this from never-watched (`B157`). Once a source is
+ * attached the three panels genuinely differ — calls can arrive while no error window does — so
+ * each states its own absence. The never-attached case is one fact about the repository rather
+ * than three about the panels, and `NeverAttached` below is where it is said once.
  */
-function nothingRecorded(what: string, repoId: string) {
+function nothingArrived(what: string, repoId: string, attachedAt: string) {
   return {
-    headline: `No ${what} recorded for ${repoId}.`,
+    headline: `Telemetry is attached, and no ${what} arrived.`,
     detail:
-      "That could mean the relevant code path has never run since telemetry started, that " +
-      "telemetry was never wired up for this repository, or that this identifier does not name " +
-      "a repository the index has seen at all — this payload answers the same way in all three " +
-      "cases, so nothing here picks one.",
+      `Traffic has been watched for ${repoId} since ${formatTimestamp(attachedAt)}, and nothing ` +
+      "arrived in the window this answer covers. That is a measured nought: the call sites the " +
+      "index found were not exercised, rather than not looked at.",
   }
+}
+
+/**
+ * Nothing ever watched this repository, said once for the whole role.
+ *
+ * **This replaced three identical copies of itself.** Each of the three panels rendered the same
+ * paragraph whenever `telemetry_attached_at` was null — which is every deployment that has not
+ * attached a source, so the common case drew one fact three times, verbatim, and the role's card
+ * became a wall of repeated prose with no data in it. Nothing is lost by saying it once: the
+ * sentence names all three things that would have been recorded, so a reader still learns what
+ * telemetry holds from a screen that has none.
+ *
+ * It names the command, as every empty state here does since `CI-W514`. A reader told they have no
+ * telemetry and not how to attach any has been given a diagnosis and no next step, and this is the
+ * one empty state on the level whose remedy is a command rather than a wait.
+ */
+function NeverAttached() {
+  return (
+    <EmptyState
+      headline="Telemetry was never attached to this repository."
+      detail={
+        "Nothing has watched this repository's traffic, so there are no observed calls, response " +
+        "shapes or error windows to have recorded. This is the absence of a measurement rather " +
+        "than a measurement of nought — no call site here has been shown unexercised, only " +
+        "unwatched."
+      }
+      command="uv run sync ingest --repo-id <repo> --vendor <vendor> --payload <otlp.json>"
+    />
+  )
 }
 
 /** A total at the figure register, or nothing at all when the total is zero. */
@@ -89,7 +115,12 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
     return <ErrorState error={query.error} what={`observed telemetry for ${repoId}`} onRetry={() => void query.refetch()} />
   }
 
-  const { calls, shapes, error_windows } = query.data
+  const { calls, shapes, error_windows, telemetry_attached_at } = query.data
+
+  // Said once for the whole role rather than once per panel. Three panels each reporting that
+  // nobody ever watched is one fact about the repository written three times, and the three
+  // panels below have nothing to distinguish until a source exists to distinguish them.
+  if (telemetry_attached_at === null) return <NeverAttached />
 
   return (
     <div className="flex min-w-0 flex-col gap-section">
@@ -105,7 +136,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
         }
       >
         {calls.total === 0 ? (
-          <EmptyState {...nothingRecorded("observed calls", repoId)} />
+          <EmptyState {...nothingArrived("observed calls", repoId, telemetry_attached_at)} />
         ) : (
           <>
             <ObservedCallsTable calls={calls.items} />
@@ -134,7 +165,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
         }
       >
         {shapes.total === 0 ? (
-          <EmptyState {...nothingRecorded("response shapes", repoId)} />
+          <EmptyState {...nothingArrived("response shapes", repoId, telemetry_attached_at)} />
         ) : (
           <>
             <ObservedShapesTable shapes={shapes.items} />
@@ -166,7 +197,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
         }
       >
         {error_windows.total === 0 ? (
-          <EmptyState {...nothingRecorded("error windows", repoId)} />
+          <EmptyState {...nothingArrived("error windows", repoId, telemetry_attached_at)} />
         ) : (
           <>
             <ErrorWindowsTable windows={error_windows.items} />

@@ -253,9 +253,9 @@ export function IntegrationChangesPage() {
           )}
 
           <MetricPanel
-            label="Vendor changes"
+            label="Integration changes"
             hint={
-              <InfoHint label="About vendor changes">
+              <InfoHint label="About integration changes">
                 What each integration published between the versions Sync compared, newest
                 first. A change is a fact about the vendor — it becomes a fact about this
                 codebase only where a call site binds to the operation, which is what a finding

@@ -64,7 +64,7 @@ export function adapterTierLabel(kind: AdapterRow["kind"]): string {
 export const NO_ADAPTER_ROW_NOTE = "the adapter inventory carries no row for this vendor"
 
 /** No count was computed for this vendor in this scope. Not the same as a count of nought. */
-export const NO_FINDING_COUNT_NOTE = "no finding count was computed for this vendor in this scope"
+export const NO_CALL_SITE_COUNT_NOTE = "the index answered for no vendor in this scope"
 
 /** Why a coded adapter has no source, said as the fact it is rather than as an absence. */
 export const CODED_SOURCE_NOTE = "written in this repository"
@@ -113,29 +113,33 @@ export interface VendorCardProps {
   /** This vendor's row in `GET /api/adapters`, or `null` when the inventory carries none. */
   adapter: AdapterRow | null
   /**
-   * Open findings against this vendor in the scope the caller is rendering, from
-   * `OverviewResponse.vendors`, or `null` when that answer does not cover this vendor.
+   * Call sites this repository binds to the vendor, from `IndexCoverageResponse.by_vendor`, or
+   * `null` when the coverage answer does not cover it.
+   *
+   * **Open findings were here until 2026-08-19 and are now on the Findings screen alone**, on the
+   * owner's ruling: a finding is an Errors & Incidents fact about this codebase, and this card's
+   * subject is what Sync watches. What the index bound is the fact this screen owns.
    *
    * Nullable because the two payloads have different scopes: the adapter inventory is
-   * deployment-wide and the overview is one repository, so an adapter registered but not bound in
-   * the selected codebase legitimately has no count. `0` and `null` are different answers.
+   * deployment-wide and coverage is one repository, so an adapter registered but not bound in the
+   * selected codebase legitimately has no count. `0` and `null` are different answers.
    */
-  openFindingCount: number | null
+  callSites: number | null
 }
 
-export function VendorCard({ vendorId, adapter, openFindingCount }: VendorCardProps) {
+export function VendorCard({ vendorId, adapter, callSites }: VendorCardProps) {
   const facts: Fact[] = [
     ...(adapter === null ? [] : [{ label: "Served from", value: servedFrom(adapter) }]),
     ...(adapter === null ? [] : intakeFacts(adapter)),
     {
-      label: "Open findings",
+      label: "Call sites bound",
       value:
-        openFindingCount === null ? (
+        callSites === null ? (
           <Absent>
-            <span className="text-meta">{NO_FINDING_COUNT_NOTE}</span>
+            <span className="text-meta">{NO_CALL_SITE_COUNT_NOTE}</span>
           </Absent>
         ) : (
-          <span className="font-mono">{openFindingCount}</span>
+          <span className="font-mono">{callSites.toLocaleString()}</span>
         ),
     },
   ]

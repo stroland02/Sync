@@ -122,7 +122,7 @@ def _chain(path: str, paths: dict[str, Any], seen: frozenset[str] = frozenset())
     return None if ancestors is None else [*ancestors, mount]
 
 
-def build_symbol_map(spec: dict[str, Any], domain: str, version: str) -> dict[str, dict[str, str]]:
+def build_symbol_map(spec: dict[str, Any], domain: str, version: str) -> dict[str, dict[str, Any]]:
     """Map `twilio.<domain>.<version>.<mount chain>.<method>` onto operation metadata.
 
     `domain` and `version` are supplied by the caller rather than read from the document.
@@ -150,6 +150,10 @@ def build_symbol_map(spec: dict[str, Any], domain: str, version: str) -> dict[st
             operation_id = operation.get("operationId")
             if not operation_id:
                 continue
+            # The product this operation belongs to, in Twilio's own words -- the same reading
+            # `stripe/symbols.py` gives its document's `tags`.
+            tags = operation.get("tags")
+            service_id = tags[0] if isinstance(tags, list) and tags and isinstance(tags[0], str) else None
             leading = _LEADING_WORD.match(operation_id)
             method_name = _SDK_VERBS.get(leading.group(0)) if leading else None
             if method_name is None:
@@ -167,6 +171,7 @@ def build_symbol_map(spec: dict[str, Any], domain: str, version: str) -> dict[st
                 "operation_id": operation_id,
                 "http_method": http_method.lower(),
                 "path": path,
+                "service_id": service_id,
             }
 
     return mapping

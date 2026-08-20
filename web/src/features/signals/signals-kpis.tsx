@@ -1,25 +1,37 @@
 /**
- * The live-signals page's opening facts (owner ruling 2026-08-19: this page is the Observe
- * stage's instrument, so the strip leads with measured traffic rather than table row counts).
+ * Dashboard S1: the Logs → Signals page's opening facts.
  *
- * **Absence apart from zero is still the whole job.** `telemetry_attached_at` is null when
- * nothing has ever been attached — a different fact from an attached source that reported
- * nothing. Every tile reads `<Absent>` in the first case and a figure in the second.
+ * **Absence apart from zero is the whole job of this strip**, and the payload supports it
+ * exactly. `telemetry_attached_at` is null when nothing has ever been attached, which is a
+ * different fact from an attached source that reported nothing — the first means Sync was never
+ * in a position to see traffic, the second means it looked and saw none. Every tile here reads
+ * `<Absent>` in the first case and a figure in the second, and the two are never merged.
  *
- * **The error tile is a sentence, not a percentage.** A rate never travels without its
- * denominator, and requests with no status leave both sides of the division — the tile's note
- * says how many did.
+ * **These counts are page totals, not observation counts.** `calls`, `shapes` and
+ * `error_windows` each arrive as a page envelope whose `total` is the count of *rows* the graph
+ * holds — and an `observed_shape` row is a distinct
+ * `(vendor, operation, field path, json type, source)` tuple with its own `sample_count`, not one
+ * observation. So the shapes tile says *distinct shapes*, never *observations*, because those
+ * differ by orders of magnitude on any real traffic.
+ *
+ * **No error rate.** Error windows over calls observed would be a ratio across two tables with
+ * different grains and different retention, and a percentage built that way is the composite this
+ * console refuses. The counts sit beside each other.
  */
 
 import type { ObservedTelemetryResponse } from "@/api/types"
 import { KpiStrip } from "@/components/kpi-strip"
 import { RelativeTime } from "@/components/relative-time"
 import { Absent } from "@/components/status"
-import { rateSentence } from "@/features/telemetry/traffic"
 
 export function SignalsKpis({ observed }: { observed: ObservedTelemetryResponse }) {
   const attached = observed.telemetry_attached_at !== null
-  const totals = observed.totals
+
+  /** A figure when a source has been attached, and the reason for nothing when none has. */
+  function count(total: number) {
+    if (!attached) return <Absent>never attached</Absent>
+    return total.toLocaleString()
+  }
 
   return (
     <KpiStrip
@@ -37,40 +49,24 @@ export function SignalsKpis({ observed }: { observed: ObservedTelemetryResponse 
           figure: false,
         },
         {
-          label: "Requests observed",
-          value: attached ? (
-            totals.requests.toLocaleString()
-          ) : (
-            <Absent>never attached</Absent>
-          ),
-          note: attached
-            ? totals.unstatused > 0
-              ? `statused requests; ${totals.unstatused.toLocaleString()} more carried no status`
-              : "requests that carried a status"
-            : "no source has ever reported",
+          label: "Calls observed",
+          value: count(observed.calls.total),
+          note: attached ? "distinct calls recorded" : "no source has ever reported",
           figure: attached,
         },
         {
-          label: "Errored",
-          value: attached ? rateSentence(totals.errors, totals.requests) : (
-            <Absent>never attached</Absent>
-          ),
-          note: attached
-            ? "4xx and 5xx over statused requests, pooled across operations"
-            : "nothing was watching to fail",
-          figure: false,
+          label: "Shapes recorded",
+          value: count(observed.shapes.total),
+          // Rows, not observations: a shape row is a distinct field-path-and-type tuple carrying
+          // its own sample count, so these differ by orders of magnitude on real traffic.
+          note: attached ? "distinct field shapes, not observations" : "nothing to shape",
+          figure: attached,
         },
         {
-          label: "Operations covered",
-          value: attached ? (
-            `${totals.operations_observed.toLocaleString()} of ${totals.operations_indexed.toLocaleString()}`
-          ) : (
-            <Absent>never attached</Absent>
-          ),
-          note: attached
-            ? "indexed operations traffic has named — the rest are unwatched, not idle"
-            : "the index binds operations; nothing has watched them",
-          figure: false,
+          label: "Error windows",
+          value: count(observed.error_windows.total),
+          note: attached ? "intervals with errors recorded" : "nothing was watching to record one",
+          figure: attached,
         },
       ]}
     />

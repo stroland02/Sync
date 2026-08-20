@@ -8,22 +8,28 @@
  * was answering fleet-wide for exactly that reason. This is the fix: pick a repository here,
  * and drill down from it into the vendor rows below.
  *
- * Three view models, three questions, and none of them confirms another.
+ * ## The pipeline and its doors, owner ruling 2026-08-19
  *
- * `overview_summary` scoped to this repository answers "what is currently wrong here" — the
- * question the design document says a user actually arrives with. `index_coverage` answers
- * "how much of this codebase has Sync read" from `call_site` alone. `observed_telemetry`
- * answers "what traffic did Sync see" from three tables that carry no bearing on what the
- * static index found — a call site can exist with no traffic observed, and traffic can arrive
- * that correlates to no known call site. Three cards rather than one keeps those boundaries
- * visible instead of implying any of them confirms the others, and there is deliberately no
- * figure combining them: a scalar over "what is broken", "what we read" and "what we watched"
- * would collapse three different kinds of not-knowing onto one axis.
+ * This screen carried four tables — open findings, index coverage, change units, observed
+ * telemetry — and every one of them was a truncated copy of a screen an operator could open in
+ * full. Three were duplicates outright (Vendors and Findings carry the first, Services the second,
+ * Telemetry the fourth); Change units moved to Integration changes and Provenance to Detectors,
+ * because both were mounted nowhere else.
  *
- * Every figure on this screen and on every screen below it is scoped to `repoId`. The three
- * routes it reads take the repository — `/api/overview`, `/api/repositories/{repo}/coverage`
- * and `/api/repositories/{repo}/observed` — and each answer names the scope it was computed
- * in, so picking a different repository changes every number here rather than some of them.
+ * What replaced them says what this screen is for: `PipelineStrip` draws the five
+ * `WORKFLOW_STAGES` with one measured figure each, and `WorkflowGrid` lists every page a workspace
+ * can reach under the stage it answers, with the question `lib/routes.ts` already declares for it.
+ * The Overview is where a reader learns the shape of the loop and picks a door, not where every
+ * screen is previewed.
+ *
+ * **There is still no figure combining the stages, and there is not going to be.** A scalar over
+ * "what we read", "what we watched" and "what is broken" would collapse three different kinds of
+ * not-knowing onto one axis. The strip refuses scale for the same reason: its stages count call
+ * sites, integrations, calls and findings, and no width may assert a ratio between those.
+ *
+ * Every figure on this screen and on every screen below it is scoped to `repoId`, and each answer
+ * names the scope it was computed in — so picking a different repository changes every number here
+ * rather than some of them.
  *
  * ## Ported onto the chassis and the vendored substrate by M7-W173
  *
@@ -33,19 +39,8 @@
  * **The chassis arrives here in the same work item as the substrate, because this level never had
  * it.** Fleet took the chassis in M7-W163 and the substrate in M7-W172; Codebase had neither, and
  * rendered a bare 22px heading over three stacked full-width panels while the route's own question
- * sat unread in `lib/routes.ts`. So `PageHeader` now carries that question at the display step,
- * a `ControlBar` states the scope and holds one action, and the two panels the question is
- * actually about sit beside one another.
- *
- * **Neither of this level's outbound links moved into the control bar.** Fleet lifted its
- * detector-attribution link out of a card description and into the action slot; here the detectors
- * link and the Signals link each complete a sentence that argues for them, and a qualification with
- * its link taken out is a qualification shortened. The action slot takes the Signals screen as a
- * plain navigation instead — the one thing an operator does next that is not a row on this page.
- *
- * **No fact rail, and that is ruling 9 of the brief rather than an omission.** `IndexCoverageCard`
- * is mounted by the Signals level too, so hoisting its call-site figure into a Codebase-only rail
- * would either delete that figure from Signals or render it twice here.
+ * sat unread in `lib/routes.ts`. So `PageHeader` now carries that question at the display step and
+ * a `ControlBar` states the scope and holds one action.
  *
  * ## No runs panel and no repair record, until `B149` closes
  *
@@ -60,16 +55,11 @@
 import { Link, useParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
-import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { MapPreviews } from "@/features/index-graph/map-previews"
-import { OverviewKpis } from "@/features/repositories/overview-kpis"
-import { RungMixCard } from "@/features/repositories/rung-mix-card"
+import { PipelineStrip } from "@/features/repositories/pipeline-strip"
+import { WorkflowGrid } from "@/features/repositories/workflow-grid"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
-import { useRepositoryCoverage, useRepositoryGraph } from "@/api/queries"
-import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
-import { IndexCoverageCard } from "@/features/repositories/index-coverage-card"
-import { OpenFindingsCard } from "@/features/repositories/open-findings-card"
-import { ObservedTelemetryCard } from "@/features/telemetry/observed-telemetry-card"
+import { useRepositoryGraph } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ControlBar } from "@/layouts/control-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -106,29 +96,6 @@ function MapsRegion({ repoId }: { repoId: string }) {
   return <MapPreviews repoId={repoId} bindings={query.data.bindings} />
 }
 
-/**
- * The API surface panel and its own read, on its own key.
- *
- * Its own query rather than a prop threaded from above, the same shape every other region here
- * takes: coverage answers a different question over the same rows, and a failure to read it is no
- * reason to withhold the rest of the screen.
- */
-function ApiSurfaceRegion({ repoId }: { repoId: string }) {
-  const query = useRepositoryCoverage(repoId)
-
-  if (query.isPending) return <LoadingState what={`the API surface of ${repoId}`} />
-  if (query.isError) {
-    return (
-      <ErrorState
-        error={query.error}
-        what={`the API surface of ${repoId}`}
-        onRetry={() => void query.refetch()}
-      />
-    )
-  }
-  return <ApiSurfacePanel counts={query.data.by_binding_status ?? {}} />
-}
-
 export interface CodebasePageProps {
   readonly question?: string
 }
@@ -143,9 +110,10 @@ export function CodebasePage() {
           below Getting Started, the strip and both maps — which left everything above it
           unlabelled and unscoped on the one screen a workspace opens on. */}
       <PageHeaderRegion repoId={repoId} />
-      {/* The strip opens the body on every page (owner ruling), this one included -- it sat
-          below Getting Started, which made the Overview the one screen whose facts did not lead. */}
-      <OverviewKpis repoId={repoId} />
+      {/* The pipeline opens the body: five stages, one measured figure each, every stage a door.
+          It replaced the four-tile fact strip rather than sitting beneath it -- the strip's four
+          numbers were this shape's first four cells, and one instrument beats two. */}
+      <PipelineStrip repoId={repoId} />
       {/* Getting started follows: the workspace identity and the full loop's probed
           prerequisites, which are instructions rather than measurements. */}
       <GettingStartedCard repoId={repoId} />
@@ -154,22 +122,7 @@ export function CodebasePage() {
           other. Their analytics moved with them: topology to the integration map's page, the
           technical census to the file tree's, which is what keeps this screen scannable. */}
       <MapsRegion repoId={repoId} />
-      {/* The two halves of the route's own question, beside one another */}
-      <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
-        <OpenFindingsCard repoId={repoId} />
-        <IndexCoverageCard repoId={repoId} />
-      </div>
-      {/* Owner question, 2026-08-19: every other panel here counts problems, so a codebase where
-          nothing is wrong renders as a screen full of nothing -- indistinguishable from one nobody
-          has looked at. This is the panel that tells those two apart, and it sits beside the
-          findings count deliberately: the two are the same set of operations, split. */}
-      <ApiSurfaceRegion repoId={repoId} />
-      {/* Dashboard O2. The rung mix is the console's own argument drawn once rather than
-          asserted a column at a time, and the payload has carried the facet since dashboard 2
-          was specified without anything rendering it. */}
-      <RungMixCard repoId={repoId} />
-      <ChangeUnitsTable repoId={repoId} />
-      <ObservedTelemetryCard repoId={repoId} />
+      <WorkflowGrid repoId={repoId} />
     </section>
   )
 }
