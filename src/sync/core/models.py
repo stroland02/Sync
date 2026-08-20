@@ -118,15 +118,6 @@ class CallSite(BaseModel):
     # that difference is the whole reason the signal is worth recording. Static evidence only:
     # a loop that never runs still counts here, and a runtime count belongs in `observed_call`.
     loop_depth: int = 0
-    # A bounded window of source around the call, captured by the index pass that wrote the row
-    # -- the graph stores no path to the checkout, so serve-time reads are not available and
-    # capture is the only moment the file is in hand. None where the pass predates capture or
-    # could not re-read the file. Disclosure is the API's decision (SYNC_SERVE_SOURCE, owner
-    # ruling 2026-08-19); capture is unconditional.
-    snippet: str | None = None
-    # 1-based file line of the snippet's first line, so a renderer numbers lines and marks
-    # `line` without re-deriving the window.
-    snippet_start_line: int | None = None
     indexed_at: datetime = Field(default_factory=_now)
     # When a pass over the repository stopped finding this call at this position. None means the
     # revision last indexed has it. A call site is never deleted, because a finding addresses one

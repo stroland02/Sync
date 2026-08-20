@@ -39,7 +39,6 @@ import { useRef, type ReactNode } from "react"
 import { Link } from "react-router"
 
 import type { BindingChange, BindingSurfaceResponse } from "@/api/types"
-import { CodeSnippet, absentSnippetReason } from "@/components/code-snippet"
 import { FactList } from "@/components/fact-list"
 import { RungBadge } from "@/components/provenance"
 import { Formatted } from "@/components/status"
@@ -134,20 +133,6 @@ function OneBinding({
   return (
     <>
       <Node label="Call site">
-        {/* The captured window first, where the deployment serves one -- the same three-state
-            rule the call-sites drawer spells (owner re-ruling 2026-08-19). */}
-        {typeof site.snippet === "string" && site.snippet_start_line != null ? (
-          <CodeSnippet
-            code={site.snippet}
-            startLine={site.snippet_start_line}
-            markLine={site.line}
-            label={`Call site, ${site.path}:${site.line}`}
-          />
-        ) : (
-          <p className="max-w-prose text-meta text-ink-muted">
-            {absentSnippetReason(data.source_served)}
-          </p>
-        )}
         <FactList
           facts={[
             { label: "Repository", value: <span className="font-mono">{site.repo_id}</span> },

@@ -82,10 +82,6 @@ def _call_site_row(site) -> dict:
         "loop_depth": site.loop_depth,
         "binding_rung": _CALL_SITE_RUNG,
         "indexed_at": site.indexed_at.isoformat(),
-        # Index-captured window, or None on rows from passes that predate capture. Whether it
-        # reaches a client is the API's policy decision, applied at the route, not here.
-        "snippet": site.snippet,
-        "snippet_start_line": site.snippet_start_line,
     }
 
 

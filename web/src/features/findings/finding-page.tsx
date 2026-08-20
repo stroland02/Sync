@@ -55,7 +55,6 @@ import {
 } from "@/components/data-table"
 import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { type Fact, FactList } from "@/components/fact-list"
-import { CodeSnippet, absentSnippetReason } from "@/components/code-snippet"
 import { MetricPanel } from "@/components/metric-panel"
 import { ProvenanceStrip, RungBadge } from "@/components/provenance"
 import { Pending } from "@/features/findings/pending"
@@ -444,28 +443,6 @@ function FindingDetailPage({
 
         {query.isSuccess && (
           <>
-            {/* The call, in place — owner ruling 2026-08-19. The captured window and the
-                recorded shape side by side is the comparison a reviewer makes to judge the
-                finding: what the code does against what the contract asks. Absence names its
-                cause, policy or pre-capture, never a bare dash. */}
-            <MetricPanel
-              label="The call, in place"
-              caption="The window the index pass captured around this finding's call site, beside the surface the call actually uses."
-            >
-              {query.data.call_site_source !== null ? (
-                <CodeSnippet
-                  code={query.data.call_site_source.snippet}
-                  startLine={query.data.call_site_source.snippet_start_line}
-                  markLine={query.data.call_site_source.line}
-                  label={`Call site, ${query.data.finding.file ?? "unknown file"}:${query.data.finding.line ?? "?"}`}
-                />
-              ) : (
-                <p className="max-w-prose text-meta text-ink-muted">
-                  <Absent>{absentSnippetReason(query.data.source_served)}</Absent>
-                </p>
-              )}
-            </MetricPanel>
-
             <MetricPanel
               label="Known changes"
               caption="Vendor changes naming this call site, shallow. The full record is fetched by identifier."

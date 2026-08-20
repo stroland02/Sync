@@ -666,8 +666,8 @@ class GraphStore:
             """
             INSERT INTO call_site (id, repo_id, path, line, col, vendor_id, operation_id,
                                    symbol, args_keys, response_fields_read, sdk_version, content_hash,
-                                   loop_depth, snippet, snippet_start_line)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   loop_depth)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 line = EXCLUDED.line,
                 col = EXCLUDED.col,
@@ -677,8 +677,6 @@ class GraphStore:
                 sdk_version = EXCLUDED.sdk_version,
                 content_hash = EXCLUDED.content_hash,
                 loop_depth = EXCLUDED.loop_depth,
-                snippet = EXCLUDED.snippet,
-                snippet_start_line = EXCLUDED.snippet_start_line,
                 indexed_at = now(),
                 retracted_at = NULL
             """,
@@ -686,7 +684,6 @@ class GraphStore:
                 site_id, site.repo_id, site.path, site.line, site.col, site.vendor_id,
                 site.operation_id, site.symbol, site.args_keys, site.response_fields_read,
                 site.sdk_version, site.content_hash, site.loop_depth,
-                site.snippet, site.snippet_start_line,
             ),
         )
         # One event per call site, owner-selected: the finest grain, so the canvas can draw an
@@ -1241,27 +1238,6 @@ class GraphStore:
             "multi_vendor_files": [dict(row) for row in multi_vendor],
             "by_loop_depth": {str(row["loop_depth"]): int(row["n"]) for row in loops},
         }
-
-    def call_site_source(
-        self, path: str, line: int, repo_id: str | None = None
-    ) -> dict | None:
-        """The captured source window at one position, or None where no current row holds one.
-
-        Keyed the way a finding names its site -- path and line -- because the finding route is
-        the caller and that is what its row carries. A retracted row's window is not served: the
-        code no longer has this call at this position, and a snippet would show source the
-        finding is no longer about.
-        """
-        where = "path = %s AND line = %s AND retracted_at IS NULL AND snippet IS NOT NULL"
-        params: list[object] = [path, line]
-        if repo_id is not None:
-            where += " AND repo_id = %s"
-            params.append(repo_id)
-        row = self._connect().execute(
-            f"SELECT snippet, snippet_start_line, line FROM call_site WHERE {where} LIMIT 1",
-            params,
-        ).fetchone()
-        return dict(row) if row is not None else None
 
     def call_sites_for_repository_count(self, repo_id: str) -> int:
         """How many current call sites one repository holds, read without fetching their columns."""

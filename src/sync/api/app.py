@@ -273,15 +273,6 @@ def create_app(
     changes_over_time_reader: Callable[..., dict[str, Any]] | None = None,
     remediation_activity_reader: Callable[[], dict[str, Any]] | None = None,
     catalogue_reader: Callable[..., dict[str, Any]] | None = None,
-    # The captured snippet at one position (path, line, repo_id), or None. Separate from the
-    # frozen `GraphSurface` read the finding route composes with, which explains the call from
-    # its recorded shape and predates capture.
-    call_site_source_reader: Callable[[str, int, str | None], dict[str, Any] | None] | None = None,
-    # Owner re-ruling, 2026-08-19, scoping the threat-model rule above: bounded, index-captured
-    # source windows ARE served -- on a deployment that has not switched them off. Hosted
-    # deployments set SYNC_SERVE_SOURCE=false and the ruling's original argument (a partner can
-    # reach a hosted console) holds there unchanged. Whole files stay unserved everywhere.
-    serve_source: bool = True,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -293,20 +284,6 @@ def create_app(
     at start-up with a `TypeError` naming the missing argument, not serve a route that 500s the
     first time a customer opens it.
     """
-
-    def _with_source_policy(payload: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
-        """The payload, with snippets stripped where policy says so, and the policy stated.
-
-        `source_served` is always present so the console can tell policy from absence: a row
-        without a snippet on a serving deployment was indexed before capture existed, which is
-        a different nothing from a deployment that withholds them.
-        """
-        if not serve_source:
-            for row in rows:
-                row.pop("snippet", None)
-                row.pop("snippet_start_line", None)
-        payload["source_served"] = serve_source
-        return payload
     effective_findings_reader = findings_reader if findings_reader is not None else vendor_findings_reader
 
     async def overview(request: Request) -> JSONResponse:
@@ -403,18 +380,10 @@ def create_app(
             # The row named the site, so the surface should hold it; a `None` here is a
             # race between pages, and the honest answer is still "not found".
             return _not_found("finding", finding_id)
-        # The captured window around the call site, where policy serves it and a pass captured
-        # one. Fetched here rather than through `explain_call_site` because `GraphSurface` is
-        # frozen; `None` under `source_served: true` means no pass has captured this row yet.
-        source = None
-        if serve_source and call_site_source_reader is not None:
-            source = call_site_source_reader(row["file"], row["line"], row.get("repo_id"))
         # Forward finding-level fields: the finding's own rung, its severity, call site, and repository.
         return JSONResponse(
             {
                 **payload,
-                "source_served": serve_source,
-                "call_site_source": source,
                 "finding": {
                     "finding_id": finding_id,
                     "binding_source": row["binding_source"],
@@ -636,16 +605,17 @@ def create_app(
         """
         if call_sites_reader is None:
             return JSONResponse({"error": "Call sites reader not configured"}, status_code=501)
-        page = call_sites_reader(
-            request.path_params["repo_id"],
-            vendor_ids=_values_param(request, "vendor_id"),
-            operation_ids=_values_param(request, "operation_id"),
-            loop_depths=_int_values_param(request, "loop_depth"),
-            path_prefix=request.query_params.get("path_prefix"),
-            limit=_limit_param(request),
-            offset=_offset_param(request),
+        return JSONResponse(
+            call_sites_reader(
+                request.path_params["repo_id"],
+                vendor_ids=_values_param(request, "vendor_id"),
+                operation_ids=_values_param(request, "operation_id"),
+                loop_depths=_int_values_param(request, "loop_depth"),
+                path_prefix=request.query_params.get("path_prefix"),
+                limit=_limit_param(request),
+                offset=_offset_param(request),
+            )
         )
-        return JSONResponse(_with_source_policy(page, page.get("items", [])))
 
     async def codebase_facts_route(request: Request) -> JSONResponse:
         """One repository's technical census. `facts: null` is an answer -- indexed never, or
@@ -710,22 +680,19 @@ def create_app(
         repo_id = request.query_params.get("repo_id")
         path_prefix = request.query_params.get("path_prefix")
         binding_rung = request.query_params.get("binding_rung")
-        payload = binding_reader(
-            vendor_id,
-            operation_id,
-            repo_id=repo_id,
-            path_prefix=path_prefix,
-            binding_rung=binding_rung,
-            call_sites_limit=_limit_param(request, "call_sites_limit"),
-            call_sites_offset=_offset_param(request, "call_sites_offset"),
-            changes_limit=_limit_param(request, "changes_limit"),
-            changes_offset=_offset_param(request, "changes_offset"),
+        return JSONResponse(
+            binding_reader(
+                vendor_id,
+                operation_id,
+                repo_id=repo_id,
+                path_prefix=path_prefix,
+                binding_rung=binding_rung,
+                call_sites_limit=_limit_param(request, "call_sites_limit"),
+                call_sites_offset=_offset_param(request, "call_sites_offset"),
+                changes_limit=_limit_param(request, "changes_limit"),
+                changes_offset=_offset_param(request, "changes_offset"),
+            )
         )
-        # Only the paged shape carries rows that can hold a snippet; anything else has nothing
-        # to strip and still gets the policy statement.
-        sites = payload.get("call_sites")
-        rows = sites.get("items", []) if isinstance(sites, dict) else []
-        return JSONResponse(_with_source_policy(payload, rows))
 
     async def repository_coverage(request: Request) -> JSONResponse:
         repo_id = request.path_params["repo_id"]

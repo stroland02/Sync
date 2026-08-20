@@ -57,8 +57,6 @@ describe("FindingPage", () => {
       context_savings: 100,
       context_savings_bound_reached: false,
       binding_source: "static",
-      source_served: true,
-      call_site_source: null,
     }
 
     vi.spyOn(queries, "useFinding").mockReturnValue({

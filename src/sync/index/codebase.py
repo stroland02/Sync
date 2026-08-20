@@ -288,47 +288,6 @@ def _load_or_create_vendor_adapter(
     return None
 
 
-# Lines each side of the call in a captured snippet. Bounded so the graph holds a window a
-# drawer can render, never a file: the graph stores no path back to the checkout, so index
-# time is the only moment the source is in hand (the same fact that keeps the API from ever
-# reading a customer file at request time).
-SNIPPET_CONTEXT_LINES = 4
-
-
-def _attach_snippets(repo_path: Path, sites: list[CallSite]) -> list[CallSite]:
-    """Each site with a bounded source window attached, in the order given.
-
-    A file that cannot be re-read leaves its sites as they were rather than failing the pass:
-    the snippet is evidence for a reader, not part of the binding, and an index run must not
-    abandon a repository because one file went unreadable between the parse and this pass.
-    """
-    lines_by_path: dict[str, list[str] | None] = {}
-    out: list[CallSite] = []
-    for cs in sites:
-        if cs.path not in lines_by_path:
-            try:
-                lines_by_path[cs.path] = (
-                    (repo_path / cs.path).read_text(encoding="utf-8").splitlines()
-                )
-            except (OSError, UnicodeDecodeError, ValueError):
-                lines_by_path[cs.path] = None
-        lines = lines_by_path[cs.path]
-        if lines is None or cs.line < 1 or cs.line > len(lines):
-            out.append(cs)
-            continue
-        start = max(1, cs.line - SNIPPET_CONTEXT_LINES)
-        end = min(len(lines), cs.line + SNIPPET_CONTEXT_LINES)
-        out.append(
-            cs.model_copy(
-                update={
-                    "snippet": "\n".join(lines[start - 1 : end]),
-                    "snippet_start_line": start,
-                }
-            )
-        )
-    return out
-
-
 def index_codebase(
     target: RepoRef | Path | str,
     *,
@@ -405,8 +364,6 @@ def index_codebase(
         if ident not in seen_identities:
             seen_identities.add(ident)
             deduped_sites.append(cs)
-
-    deduped_sites = _attach_snippets(repo_path, deduped_sites)
 
     if store is not None and hasattr(store, "replace_call_sites"):
         store.replace_call_sites(repo.repo_id, deduped_sites)

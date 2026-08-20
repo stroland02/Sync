@@ -9,20 +9,23 @@
  *
  * The frame, the title and the close control belong to `DetailLayout`; this is the body.
  *
- * ## What is drawn
+ * ## What is drawn, and what deliberately is not
  *
- * The window the index pass captured around the call, when the deployment serves source
- * (`SYNC_SERVE_SOURCE`, owner re-ruling 2026-08-19 scoping the threat-model rule in
- * `api/app.py`: bounded captured windows are served; whole files never are). Beneath it, the
- * semantic description the graph holds under `graph-grain.md`'s shapes-not-values rule: the
- * symbol invoked, the argument **keys** sent, the response **fields** read, the nesting depth,
- * and the rung that established the binding — the surface a vendor change actually has to break.
+ * The owner asked to see the actual code here, explained. **Sync does not serve customer source**
+ * — `api/app.py` records it as a threat-model ruling: a diff is Sync's own artifact and is served,
+ * source is not. That is not a gap this drawer routes around.
  *
- * The path and line stay rendered as an address for the reader's own editor: the window is a
- * view, never the file.
+ * What the graph *does* hold is a semantic description of the call, recorded by the indexer and
+ * governed by `graph-grain.md`'s shapes-not-values rule: the symbol invoked, the argument **keys**
+ * sent, the response **fields** read, the nesting depth, and the rung that established the
+ * binding. That is what this drawer explains, and for the question a reader actually has — *what
+ * does this call do, and what would a vendor change break here* — it is a better answer than the
+ * source, because it is exactly the surface a change has to break.
+ *
+ * The path and line are rendered as an address, so the reader opens the file in their own editor
+ * where the source already is.
  */
 
-import { CodeSnippet, absentSnippetReason } from "@/components/code-snippet"
 import { InfoHint } from "@/components/info-hint"
 import { RungBadge } from "@/components/provenance"
 import { Absent } from "@/components/status"
@@ -39,8 +42,6 @@ export interface CallSiteRow {
   sdk_version: string | null
   loop_depth: number
   indexed_at: string | null
-  snippet?: string | null
-  snippet_start_line?: number | null
 }
 
 /** A set of recorded strings from the customer's own source, one chip each. */
@@ -91,38 +92,15 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-export function CallSiteDetail({
-  site,
-  sourceServed = false,
-}: {
-  site: CallSiteRow
-  /** The page payload's `source_served` — whether this deployment serves captured windows. */
-  sourceServed?: boolean
-}) {
+export function CallSiteDetail({ site }: { site: CallSiteRow }) {
   return (
     <div className="flex flex-col gap-section">
       <p className="max-w-prose text-meta text-ink-muted">
         What this call sends, what it reads back, and how the index knows it reaches{" "}
-        <span className="font-mono">{site.vendor_id}</span>. The recorded shape below is the
-        surface a vendor change actually has to break; the window above it is what the index
-        pass read at this position.
+        <span className="font-mono">{site.vendor_id}</span>. The source is not shown — Sync does
+        not serve source, so this is the call&rsquo;s recorded shape, which is the surface a vendor
+        change actually has to break.
       </p>
-
-      {/* Owner re-ruling 2026-08-19: bounded index-captured windows are shown where the
-          deployment serves them. Absence keeps its two causes apart — policy and pre-capture
-          rows are different nothings, and `absentSnippetReason` says which. */}
-      {typeof site.snippet === "string" && site.snippet_start_line != null ? (
-        <CodeSnippet
-          code={site.snippet}
-          startLine={site.snippet_start_line}
-          markLine={site.line}
-          label={`Call site, ${site.path}:${site.line}`}
-        />
-      ) : (
-        <p className="max-w-prose text-meta text-ink-muted">
-          <Absent>{absentSnippetReason(sourceServed)}</Absent>
-        </p>
-      )}
 
       <div className="grid gap-section sm:grid-cols-2">
         <Fact label="Integration" value={site.vendor_id} />
@@ -167,8 +145,8 @@ export function CallSiteDetail({
           {site.path}:{site.line}:{site.col}
         </code>
         <p className="max-w-prose text-meta text-ink-muted">
-          The address, for your own editor. The window above is a bounded capture from the index
-          pass, never the live file.
+          The address, for your own editor. Sync does not serve source: a diff it wrote is its own
+          artifact and is served, and a customer&rsquo;s file is not.
         </p>
       </div>
     </div>
