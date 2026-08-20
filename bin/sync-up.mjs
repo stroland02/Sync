@@ -303,8 +303,8 @@ export function sourceTreeDiagnosis(sourceTreePresent) {
  * What a zero-prerequisite install would do on this machine, without doing any of it.
  *
  * Decisions 97 and 98 decided both lifecycles and `CI-W445`/`CI-W446` built them; this is what
- * calls them. It is also the only honest thing that can be built before the download and the
- * process spawn exist: the decisions are real and testable now, the actions are not.
+ * calls them. It reports rather than acts, which is the whole difference between `--check` and
+ * `--no-admin`.
  *
  * **Every action is reported as something it WOULD do.** The verdict messages are written in
  * the voice of an install that is running -- *Fetching it*, *Reusing the environment* -- so
@@ -325,11 +325,18 @@ export function preflight({ docker, uv, environment, postgres }) {
     heading: "A zero-prerequisite install would:",
     actions: [uv.message, environment.message, postgres.message],
     // Stated every time rather than only when something is missing. A check that lists four
-    // confident lines and omits what is unbuilt reads as a readiness report.
+    // confident lines and omits what it has not done reads as a readiness report.
+    //
+    // This sentence said the download, the process start and the port bind were "not written
+    // yet". They were written below in this same file (`--no-admin` runs them), and the caveat
+    // outlived the gap it described -- so the first thing a newcomer read was that the install
+    // does not exist, which would stop them before they ran it. What is still true is narrower
+    // and worth keeping: this command reports, it does not install, and the path has not been
+    // proven on a machine that never had this repository.
     caveat:
-      "None of the above has been done: the download, the process start and the port bind are " +
-      "not written yet, and nothing here has been run on a machine that never had this " +
-      "repository. This says what the decisions are, not that the install works.",
+      "None of the above has been done here: --check reports, it does not install. Run " +
+      "`npm run no-admin` (or --no-admin) to do it. The steps exist; what is still unproven is " +
+      "a machine that has never had this repository, which is the run that would tell us.",
   }
 }
 
@@ -386,9 +393,15 @@ function runCheck() {
     docker,
     uv: uvVerdict({ foundVersion: uvProbe(), minimumVersion: MINIMUM_UV }),
     environment: environmentVerdict(environmentProbe(record)),
+    // Probed, not assumed. This passed `alive: false` unconditionally, so `--check` told every
+    // reader with a healthy server that their previous run "did not shut down cleanly" and a
+    // fresh Postgres was needed -- alarming, wrong, and the opposite of what `--no-admin` would
+    // actually do with the same record. `clusterServing` is `pg_ctl status`: it reads, starts
+    // nothing, and is the same probe the install path branches on, so the two cannot disagree
+    // about one machine.
     postgres: previousRunVerdict({
       record: record?.postgres ?? null,
-      alive: false,
+      alive: clusterServing(),
       wantedVersion: WANTED_POSTGRES,
     }),
   })
