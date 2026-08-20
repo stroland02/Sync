@@ -156,9 +156,12 @@ def test_the_corpus_teaches_the_agent_about_its_change_kind():
             ]
 
         def migration_outcome_abandon_reasons_by_kind(self):
+            # `n`, because that is the key the real aggregate returns -- the first live run
+            # after this reader landed abandoned on a KeyError because this fake agreed with
+            # the reader's wrong assumption instead of with the store.
             return [
                 {"change_kind": "response-property-removed", "tier": 2,
-                 "attempt_count": 2, "abandon_reason_code": "static_verify_exhausted"},
+                 "n": 2, "abandon_reason_code": "static_verify_exhausted"},
             ]
 
     from sync.core.models import VendorChange as VC

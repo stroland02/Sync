@@ -155,9 +155,9 @@ def corpus_lessons_reader(store) -> "Callable[[VendorChange], str]":
             row for row in store.migration_outcome_abandon_reasons_by_kind()
             if row["change_kind"] == change.kind
         ]
-        for row in sorted(reasons, key=lambda r: -r["attempt_count"])[:3]:
+        for row in sorted(reasons, key=lambda r: -r["n"])[:3]:
             lines.append(
-                f"- tier {row['tier']} abandoned {row['attempt_count']} time(s): "
+                f"- tier {row['tier']} abandoned {row['n']} time(s): "
                 f"{row['abandon_reason_code']}"
             )
         return "\n".join(lines)
