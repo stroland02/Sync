@@ -45,7 +45,6 @@ from collections import Counter
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES
 from sync.core.models import FINDING_RUNGS, SEVERITY_ORDER
-from sync.core.naming import finding_name
 from sync.graph.store import DEFAULT_FINDING_ORDER, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
 
@@ -474,12 +473,6 @@ def findings_page(
                     "change_kind": row["change_kind"],
                     "severity": row["severity"],
                     "finding_id": row["finding_id"],
-                    # Derived here rather than in the console, so the name a reader reads on
-                    # screen is the name the CLI prints and a pull-request body carries. Three
-                    # copies of one derivation is where they would start to differ.
-                    "name": finding_name(
-                        row["vendor_id"], row["operation_id"], row["finding_id"]
-                    ),
                     "binding_source": row["binding_rung"],
                 }
                 for row in rows
