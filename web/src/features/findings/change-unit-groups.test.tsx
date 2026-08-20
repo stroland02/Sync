@@ -10,6 +10,7 @@
  * Scope is `console-dev-loop.md`'s: derivation and structure. Never class names.
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
@@ -59,10 +60,15 @@ function unit(overrides: Partial<ChangeUnitRow> = {}): ChangeUnitRow {
 }
 
 function renderGroups(units: ChangeUnitRow[], total = units.length) {
+  // The grouped view reads the workspace's tickets for its Solution cells; the read never
+  // resolves here, which is itself a state the cells must render honestly.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <ChangeUnitGroups repoId="demo" units={units} unitTotal={total} />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ChangeUnitGroups repoId="demo" units={units} unitTotal={total} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

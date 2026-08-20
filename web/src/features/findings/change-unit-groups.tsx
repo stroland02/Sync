@@ -31,7 +31,8 @@
 import { useState } from "react"
 import { ChevronRight } from "lucide-react"
 
-import type { BindingSource, ChangeUnitRow } from "@/api/types"
+import { useTickets } from "@/api/queries"
+import type { BindingSource, ChangeUnitRow, Ticket } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -45,6 +46,7 @@ import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import { RungBadge } from "@/components/provenance"
 import { Absent } from "@/components/status"
 import { FindingsTable } from "@/features/findings/findings-table"
+import { POLL_MS } from "@/features/tickets/ticket-action"
 import { vendorName } from "@/features/vendors/vendor-name"
 
 /**
@@ -69,7 +71,15 @@ function Versions({ unit }: { unit: ChangeUnitRow }) {
   )
 }
 
-function UnitRow({ repoId, unit }: { repoId: string; unit: ChangeUnitRow }) {
+function UnitRow({
+  repoId,
+  unit,
+  tickets,
+}: {
+  repoId: string
+  unit: ChangeUnitRow
+  tickets: readonly Ticket[] | null
+}) {
   const [open, setOpen] = useState(false)
   const noun = unit.finding_count === 1 ? "finding" : "findings"
 
@@ -124,7 +134,7 @@ function UnitRow({ repoId, unit }: { repoId: string; unit: ChangeUnitRow }) {
           <TableCell colSpan={7} className="bg-surface-subtle p-section">
             {/* The same table the flat view renders, so one finding is one object however a
                 reader arrived at it. */}
-            <FindingsTable repoId={repoId} rows={unit.findings} />
+            <FindingsTable repoId={repoId} rows={unit.findings} tickets={tickets} />
             {/* The nested rows are a bounded sample, and a reader must not read them as the
                 whole unit. The payload caps them because `limit` bounds units and nothing
                 bounded these -- eight units carried ten thousand rows and 4.3 MB before it did
@@ -156,6 +166,10 @@ export function ChangeUnitGroups({
   unitTotal: number
 }) {
   const held = findingsHeld(units)
+  // One read for every expanded unit's Solution cells; the cells classify against it rather
+  // than each asking again.
+  const ticketsQuery = useTickets(repoId, null, { refetchIntervalMs: POLL_MS })
+  const tickets = ticketsQuery.isSuccess ? ticketsQuery.data.tickets : null
 
   return (
     <div className="flex min-w-0 flex-col gap-row">
@@ -185,7 +199,7 @@ export function ChangeUnitGroups({
             </TableEmptyRow>
           )}
           {units.map((unit) => (
-            <UnitRow key={unit.change_unit_id} repoId={repoId} unit={unit} />
+            <UnitRow key={unit.change_unit_id} repoId={repoId} unit={unit} tickets={tickets} />
           ))}
         </TableBody>
       </Table>
