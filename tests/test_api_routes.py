@@ -28,7 +28,7 @@ from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.core.models import UNATTRIBUTED, BindingRung
 from sync.dashboard.queries import DISPOSITIONS, _FINISHED
-from sync.graph.store import FINDING_ORDERS, GraphStore
+from sync.graph.store import BINDING_STATUSES, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
@@ -3079,3 +3079,16 @@ def test_the_tickets_route_forwards_the_lane_filter():
 
     assert len(everything["tickets"]) == 2
     assert [t["finding_id"] for t in automatic["tickets"]] == ["f2"]
+
+
+def test_the_consoles_binding_statuses_match_the_stores_in_order():
+    # `web/src/api/types.ts` restates `BINDING_STATUSES` because the console cannot import
+    # Python, and nothing in TypeScript knows the list is a restatement. Same shape and same
+    # reason as `RunDisposition` above -- and this one is ordered, so the assertion is on the
+    # list rather than the set: the order is the rail's option order, most-wanting-attention
+    # first, and a member inserted in the middle silently reorders a control a reader scans.
+    source = _web_source("src/api/types.ts")
+    match = re.search(r"export const BINDING_STATUSES = \[([^\]]+)\]", source)
+    assert match is not None, "web/src/api/types.ts no longer declares BINDING_STATUSES"
+    declared = re.findall(r'"([^"]+)"', match.group(1))
+    assert declared == list(BINDING_STATUSES)
