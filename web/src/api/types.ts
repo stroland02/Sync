@@ -836,6 +836,16 @@ export interface IndexCoverageResponse {
   total_call_sites: number
   /** The product question beside the provider question, computed over the same rows. */
   by_service: ServiceCoverageRow[]
+  /**
+   * How much of this codebase's API surface is at risk, clean, or unexamined — counted over
+   * **operations**, not call sites, so one heavily-called operation cannot dominate a figure
+   * meant to describe breadth.
+   *
+   * A status absent here was not counted at nought, and an empty object is a repository with no
+   * call sites at all. Only ApiSurfacePanel fills a missing member with a zero, and only after
+   * establishing that a surface exists — see its own note for why that is honest there.
+   */
+  by_binding_status: Tally
 }
 
 /**
