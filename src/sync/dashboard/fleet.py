@@ -24,7 +24,7 @@ from psycopg.rows import dict_row
 
 from sync.benchmark.axes import compute_axes
 from sync.core.naming import finding_name
-from sync.dashboard.queries import DISPOSITIONS, _FINISHED, _pending_node
+from sync.dashboard.queries import _FINISHED, _pending_node
 from sync.graph.store import GraphStore
 
 
@@ -33,7 +33,7 @@ def _run_row(thread_id: str, checkpoint: dict, repo_id: str | None = None) -> di
     versions = checkpoint.get("channel_versions") or {}
     seen = checkpoint.get("versions_seen") or {}
 
-    outcome = values.get("outcome") if values.get("outcome") in DISPOSITIONS else None
+    outcome = values.get("outcome") if values.get("outcome") in _FINISHED else None
     parts = thread_id.split(":")
     finding_id = parts[0]
     run_id = parts[1] if len(parts) > 1 else None
@@ -114,7 +114,7 @@ def runs(
         narrowed_params: list[Any] = []
     elif outcome == IN_FLIGHT:
         narrowed = "(outcome IS NULL OR outcome <> ALL(%s))"
-        narrowed_params = [list(DISPOSITIONS)]
+        narrowed_params = [list(_FINISHED)]
     else:
         narrowed = "outcome = %s"
         narrowed_params = [outcome]
@@ -159,7 +159,7 @@ def runs(
     _annotate_liveness(items, store)
     consumed = offset + len(items)
     by_disposition = _grouped(
-        [row["outcome"] if row["outcome"] in DISPOSITIONS else None for row in outcome_rows]
+        [row["outcome"] if row["outcome"] in _FINISHED else None for row in outcome_rows]
     )
     return {
         "items": items,
@@ -473,7 +473,7 @@ def change_units(
                         if cp_rows:
                             latest_cp = cp_rows[0]
                             val = (latest_cp.get("checkpoint") or {}).get("channel_values") or {}
-                            outcome = val.get("outcome") if val.get("outcome") in DISPOSITIONS else None
+                            outcome = val.get("outcome") if val.get("outcome") in _FINISHED else None
                             u["standing"] = outcome or "in_progress"
                             ts_val = latest_cp.get("ts")
                             u["last_checkpoint_at"] = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val) if ts_val else None
