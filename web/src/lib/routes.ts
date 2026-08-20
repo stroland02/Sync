@@ -134,19 +134,13 @@ export interface RouteEntry {
    */
   reachedFrom: string | null
   /**
-   * `true` where the page's reading cap costs the screen more than it returns.
+   * `true` where the screen is a table first and the page's reading cap costs it columns.
    *
-   * The chassis caps content at 1400px so prose lines stay readable. That is right for a screen
-   * a reader reads and wrong for one they scan -- a table whose subject is fifteen recorded
-   * fields per row, and equally a grid of panels that reflows into a single column and leaves
-   * half the viewport empty. Declared here rather than achieved with negative margins in the
-   * page: a full-bleed hack fights the scrollbar and lands differently on every browser, where
-   * a flag the frame reads is one rule in one place. `M15` Task 1.
-   *
-   * **Widened to the panel screens on the owner's report, 2026-08-19**: Overview, Telemetry and
-   * Detectors were capped, and each is a dashboard of tiles rather than prose. What stays capped
-   * is the detail screens -- a finding, a binding surface, a pull request -- where the content
-   * genuinely is a column of text and a wider measure would make it harder to read, not easier.
+   * The chassis caps content at 1400px so prose lines stay readable, which is right for a screen
+   * of panels and wrong for one whose subject is fifteen recorded fields per row. Declared here
+   * rather than achieved with negative margins in the page: a full-bleed hack fights the
+   * scrollbar and lands differently on every browser, where a flag the frame reads is one rule
+   * in one place. `M15` Task 1.
    */
   wide?: boolean
   /**
@@ -162,7 +156,6 @@ export interface RouteEntry {
 export const ROUTES: readonly RouteEntry[] = [
   {
     path: "/repositories/:repoId",
-    wide: true,
     reachedFrom: "a workspace in the switcher",
     nav: true,
     navOrder: 1,
@@ -355,7 +348,6 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/observed",
-    wide: true,
     reachedFrom: "a workspace in the switcher",
     // In the rail as of 2026-08-19: the Observe stage had no door at all — this page was
     // reachable only as a Logs tab, so one of the five things the product does was invisible.
@@ -374,7 +366,6 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/repositories/:repoId/detectors",
-    wide: true,
     reachedFrom: "a workspace in the switcher",
     // In the rail as of 2026-08-19, out of the Findings tab strip: the Detect stage's own
     // attribution page, not a view of the findings list.
