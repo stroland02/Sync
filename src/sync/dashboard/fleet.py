@@ -23,7 +23,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from sync.benchmark.axes import compute_axes
-from sync.core.naming import finding_name
 from sync.dashboard.queries import _FINISHED, _pending_node
 from sync.graph.store import GraphStore
 
@@ -317,7 +316,6 @@ def change_units(
     checkpointer_dsn: str | None = None,
     *,
     repo_id: str | None = None,
-    severity: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -369,16 +367,6 @@ def change_units(
     if repo_id is not None:
         raw_rows = [r for r in raw_rows if r["repo_id"] == repo_id]
 
-    # Narrowed before grouping, so a unit reports the findings of the chosen severity it holds
-    # and the sum still equals the flat total for that tab. Filtering the units afterwards would
-    # leave each one counting findings the reader is not being shown, which is a grouped table
-    # whose parts do not add to the figure above it.
-    #
-    # A unit with no finding at this severity is absent rather than present at nought -- the
-    # grouping returns groups that exist, the rule `by_vendor_severity` already follows.
-    if severity is not None:
-        raw_rows = [r for r in raw_rows if r["severity"] == severity]
-
     if not raw_rows:
         return {"items": [], "total": 0, "next_offset": None}
 
@@ -414,35 +402,7 @@ def change_units(
             "repository_count": len(repo_ids),
             "call_site_count": len(call_site_ids),
             "binding_rung": _weaker_rung_summary(rungs),
-            # The count is stated rather than left to be derived from the array beside it: a
-            # console that counted `findings` would report the page it holds, and these rows are
-            # not paginated. Findings rather than call sites -- one call broken in two ways is
-            # two findings and one site, and that is the case a reviewer most needs to see.
-            "finding_count": len(finding_ids),
             "finding_ids": finding_ids,
-            # The constituent findings, in the shape the flat table already renders. No extra
-            # query: the grouping above has already fetched each finding's call site. One shape
-            # rather than a thinner second one, because the copy that did not get a field added
-            # later would be the only one missing it.
-            "findings": [
-                {
-                    "name": finding_name(
-                        row["call_site_vendor_id"],
-                        row["call_site_operation_id"],
-                        row["finding_id"],
-                    ),
-                    "file": row["path"],
-                    "line": row["line"],
-                    "symbol": row["symbol"],
-                    "operation": row["call_site_operation_id"],
-                    "vendor": row["call_site_vendor_id"],
-                    "change_kind": row["change_kind"],
-                    "severity": row["severity"],
-                    "finding_id": row["finding_id"],
-                    "binding_source": row["binding_rung"],
-                }
-                for row in group_rows
-            ],
             "repo_ids": repo_ids,
             "standing": None,
             "last_checkpoint_at": None,

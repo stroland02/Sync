@@ -62,8 +62,6 @@ const pending = () => ({ isPending: true, isError: false, isSuccess: false, data
 function unit(overrides: Partial<ChangeUnitRow> = {}): ChangeUnitRow {
   return {
     change_unit_id: "cu-1",
-    finding_count: 1,
-    findings: [],
     vendor_id: "stripe",
     operation_id: "PostCharges",
     change_kind: "breaking",
