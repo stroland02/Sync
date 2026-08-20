@@ -296,27 +296,7 @@ function EvidenceDisclosure({
   const panelId = useId()
   const keyCount = Object.keys(node.evidence).length
 
-  // M15 Task 9: *a node without recorded evidence says which nothing that is.* This returned
-  // `null`, so a node that ran and recorded nothing was indistinguishable on screen from one the
-  // reader had simply not expanded -- two different facts rendered as the same absence, which is
-  // the one thing this console is built not to do.
-  //
-  // Which nothing it is comes from the standing, which `sync.dashboard.queries` already
-  // classifies: `ran` means the node executed and produced none of what this screen shows,
-  // and every other standing has its own sentence in `node-standing.ts`.
-  //
-  // The sentence deliberately does not name the fields it would have shown. That list is
-  // `_EVIDENCE_KEYS` in `sync.dashboard.queries`, and a second copy here is the fact written
-  // twice that would disagree with itself the first time a node's evidence changed.
-  if (keyCount === 0) {
-    return (
-      <p className="mt-section max-w-prose text-meta text-ink-muted">
-        {node.standing === "ran"
-          ? "This node ran and recorded none of the evidence this screen shows for it — a measured nothing, not a node nobody has opened."
-          : STANDING_SENTENCE[node.standing]}
-      </p>
-    )
-  }
+  if (keyCount === 0) return null
 
   return (
     <div className="mt-section">
@@ -383,10 +363,7 @@ function StepBody({
             <p className="mt-field font-sans text-meta text-foreground">{mechanics}</p>
           </details>
         )}
-        {node.standing === "due_again" && Object.keys(node.evidence).length > 0 && (
-          // Only where the disclosure is not already saying it: `due_again` with evidence is the
-          // case where the sentence has to sit outside, because what the node holds is the
-          // attempt that was rejected rather than the finished answer.
+        {node.standing === "due_again" && (
           <p className="mt-field max-w-prose text-body">{STANDING_SENTENCE.due_again}</p>
         )}
         {evidenceSince != null && <EvidenceAge since={evidenceSince} />}
