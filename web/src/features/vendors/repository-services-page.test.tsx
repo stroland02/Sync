@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The API products one repository calls, and the duplication this screen stopped being.
  *
  * Until 2026-08-19 this page rendered the union of two answers keyed by `vendor_id` â€” the same

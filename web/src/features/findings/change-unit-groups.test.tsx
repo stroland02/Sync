@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Findings grouped by the change that caused them.
  *
  * M15 Task 7. The claim is arithmetic: **twenty-four findings are thirteen change units**, and a

@@ -174,6 +174,12 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     that can never run Docker -- no admin rights closes every container runtime on Windows --
     has nothing to control for. The skip names the absent toolchain, and the count moved in
     the same change that added it.
+
+    The eighteenth is `tests/test_api_routes.py`'s route-consumption guard, which reads every
+    console source file and so needs the checkout to carry one -- the same absent-console
+    sentence its two siblings in that file already use. It arrived with the `CI-W547`-`CI-W549`
+    rebuild without this count moving, which is exactly the silent arrival this test exists to
+    make impossible; the count moves here, deliberately and late.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -181,7 +187,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 17, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 18, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 

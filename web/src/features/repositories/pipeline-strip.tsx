@@ -3,7 +3,7 @@
  * door into the page that answers it.
  *
  * The rail groups its rows by the same `WORKFLOW_STAGES`, and this is that story as a shape rather
- * than as a list — what Sync read, what the vendors published, what traffic arrived, what broke,
+ * than as a list Ã¢â‚¬â€ what Sync read, what the vendors published, what traffic arrived, what broke,
  * and what was done about it, in the order those happen.
  *
  * **Not a `KpiStrip`, and the five cells are why.** That component takes three or four because four
@@ -26,8 +26,8 @@ import { InfoHint } from "@/components/info-hint"
 import { RelativeTime } from "@/components/relative-time"
 import { Skeleton } from "@/components/skeleton"
 import { Absent } from "@/components/status"
-import { STAGE_DOES, pagesByStage } from "@/features/repositories/stage-pages"
-import { destinationHref, type RouteEntry, type WorkflowStage } from "@/lib/routes"
+import { STAGE_DOES, pagesByStage } from "@/lib/stage-pages"
+import { destinationHref, type RouteEntry, type WorkflowStage } from "@/lib/stage-pages"
 
 interface StageFigure {
   value: ReactNode
@@ -67,8 +67,8 @@ function StageCell({
   return (
     <Link
       to={href}
-      title={`${stage} ${STAGE_DOES[stage]} — open ${destination.label}`}
-      className="flex min-w-0 flex-1 flex-col rounded-control px-section py-row transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      title={`${stage} ${STAGE_DOES[stage]} Ã¢â‚¬â€ open ${destination.label}`}
+      className="flex min-w-0 flex-1 flex-col rounded-control px-section py-row transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
     >
       <FactTile
         label={stage}
@@ -174,7 +174,7 @@ export function PipelineStrip({ repoId }: { repoId: string }) {
 /**
  * The pipeline's own provenance: when the index last finished here.
  *
- * `null` is never-indexed rather than a pass that found nothing — a pass that completed and wrote
+ * `null` is never-indexed rather than a pass that found nothing Ã¢â‚¬â€ a pass that completed and wrote
  * no call site is a `completed` row with a count of zero, which the payload keeps apart.
  */
 function LastIndexPass({ query }: { query: ReturnType<typeof useOverview> }) {
@@ -197,7 +197,7 @@ function LastIndexPass({ query }: { query: ReturnType<typeof useOverview> }) {
   return (
     <span className="text-meta text-ink-muted">
       last index pass <RelativeTime iso={pass.finished_at} />
-      {pass.outcome !== null && pass.outcome !== "completed" ? ` — ${pass.outcome}` : ""}
+      {pass.outcome !== null && pass.outcome !== "completed" ? ` Ã¢â‚¬â€ ${pass.outcome}` : ""}
     </span>
   )
 }

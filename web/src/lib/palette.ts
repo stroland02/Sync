@@ -48,6 +48,13 @@ export const SERIES_SLOTS = [
 export const OTHER_INK = "#8b8b8b"
 
 /**
+ * The monogram's ink on a series-slot background. One dark value rather than per-slot inks,
+ * because every slot was chosen light enough to carry it -- `palette.test.ts` proves the pairing
+ * against all eight, which is why the value lives here with the other computed-with colours.
+ */
+export const MONOGRAM_INK = "#101211"
+
+/**
  * A stable colour per member of a closed vocabulary — vendors, change kinds, sources.
  *
  * The domain is sorted before assignment, so the same set of vendors takes the same colours on

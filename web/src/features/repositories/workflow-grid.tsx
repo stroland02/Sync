@@ -2,8 +2,8 @@
  * Every page this workspace has, grouped under the pipeline stage it answers, and the settings
  * that have to be in place before any stage runs at all.
  *
- * The Overview used to carry four tables that each belonged to another screen — open findings,
- * index coverage, change units, observed telemetry — and a reader who wanted any of them scrolled
+ * The Overview used to carry four tables that each belonged to another screen ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â open findings,
+ * index coverage, change units, observed telemetry ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â and a reader who wanted any of them scrolled
  * past a truncated copy to reach the real one. This is what replaced them: the doors, with the
  * question each page answers, taken from `lib/routes.ts` so a page cannot appear here under a
  * sentence that has drifted from the one the header and the palette render.
@@ -12,9 +12,9 @@
 import type { ReactNode } from "react"
 import { Link } from "react-router"
 
-import { STAGE_DOES, pagesByStage } from "@/features/repositories/stage-pages"
+import { STAGE_DOES, pagesByStage } from "@/lib/stage-pages"
 import { LOOP_PREREQUISITES, SETTING_GROUPS } from "@/features/settings/groups"
-import { destinationHref } from "@/lib/routes"
+import { destinationHref } from "@/lib/stage-pages"
 
 
 function GridCard({ title, does, children }: { title: string; does: string; children: ReactNode }) {
@@ -34,7 +34,7 @@ function DoorRow({ to, label, question }: { to: string; label: string; question:
     <li>
       <Link
         to={to}
-        className="flex flex-col gap-field rounded-control px-row py-row transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex flex-col gap-field rounded-control px-row py-row transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <span className="text-body text-ink">{label}</span>
         <span className="text-meta leading-snug text-ink-muted">{question}</span>
@@ -61,7 +61,7 @@ export function WorkflowGrid({ repoId }: { repoId: string }) {
           </GridCard>
         ))}
 
-        {/* Settings is not a stage — it configures the system the stages run in, which is why
+        {/* Settings is not a stage ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it configures the system the stages run in, which is why
             `lib/routes.ts` files it as a destination rather than a level. It sits in the grid
             anyway because a deployment with no model connected writes no patch, and the five
             stages above give a reader no way to find that out. */}
@@ -73,7 +73,7 @@ export function WorkflowGrid({ repoId }: { repoId: string }) {
             const group = SETTING_GROUPS.find((entry) => entry.id === id)
             if (group === undefined) return null
             return (
-              <DoorRow key={id} to={`/settings?group=${id}`} label={group.label} question={why} />
+              <DoorRow key={id} to="/settings" label={group.label} question={why} />
             )
           })}
         </GridCard>

@@ -1,10 +1,10 @@
 /**
- * Getting started, first on the Overview — the owner's direction 2026-08-18.
+ * Getting started, first on the Overview â€” the owner's direction 2026-08-18.
  *
  * The first thing a new operator meets is the setup information: which codebase this console
  * is working with, and the six prerequisites of the full loop with each one's probed state.
- * The checklist is `/api/setup`'s answer rendered compactly — the long form with the inline
- * editors stays in Settings → Setup, which the first button reaches — so this card is the
+ * The checklist is `/api/setup`'s answer rendered compactly â€” the long form with the inline
+ * editors stays in Settings â†’ Setup, which the first button reaches â€” so this card is the
  * doorway, never a second place to configure a thing.
  *
  * It stays when everything is ready rather than vanishing: a region that disappears once
@@ -49,7 +49,7 @@ export function GettingStartedCard({ repoId }: { repoId: string }) {
             <InfoHint label="About getting started">
               Sync is installed beside a codebase and indexes it into the graph; every figure on
               every screen is scoped to the workspace named here. The items on the right are the
-              full loop&rsquo;s prerequisites — index, detect, remediate, verify, pull request —
+              full loop&rsquo;s prerequisites â€” index, detect, remediate, verify, pull request â€”
               each probed when this page loads. Fixing any of them happens in Settings, never
               here, so there is one place for a setting and one answer to what it holds.
             </InfoHint>
@@ -60,13 +60,13 @@ export function GettingStartedCard({ repoId }: { repoId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-row">
           <Button asChild variant="outline" size="sm">
-            <Link to="/settings?group=setup">Setup checklist</Link>
+            <Link to="/settings">Setup checklist</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link to="/settings?group=github-connection">Connect to Git</Link>
+            <Link to="/settings">Connect to Git</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link to="/settings?group=pages">How these pages work</Link>
+            <Link to="/settings">How these pages work</Link>
           </Button>
         </div>
       </div>
@@ -96,7 +96,7 @@ export function GettingStartedCard({ repoId }: { repoId: string }) {
       )}
       {query.isSuccess && query.data.items.every((item) => item.state === "ready") && (
         <p className="max-w-prose text-meta text-ink-muted">
-          Everything the full loop needs is in place — indexed, staged, connected, and a merge
+          Everything the full loop needs is in place â€” indexed, staged, connected, and a merge
           policy in force.
         </p>
       )}

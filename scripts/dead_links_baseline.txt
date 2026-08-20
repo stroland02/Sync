@@ -104,12 +104,9 @@ src/sync/remediate/forward_proxy_server.py:running_proxy
 # indexing across TypeScript/TSX/JS and Python for customer repositories. Finished and tested
 # in `tests/test_codebase_index.py`.
 
-# Owner decision 45, added 2026-08-18. Dismissal was ruled explicitly NOT a rendering change,
-# so the schema, its closed vocabulary and the reads over it landed first and the write path
-# follows. These four are finished and tested against a real database and reached by nothing
-# yet. What retires them is the POST route on a finding plus the findings table filtering
-# dismissed rows out by default; delete these lines in the commit that wires it.
-src/sync/graph/store.py:GraphStore.dismissal_reason_counts
+# Owner decision 45's dismissal reads: `dismissal_reason_counts` left this list when the
+# restored dashboard layer started calling it -- deleted per this file's own rule, in the
+# commit that noticed the repair.
 
 # Decision 76's event bus, added 2026-08-18. Built ahead of the `GET /api/events` route that
 # will subscribe to it; delete this line in the commit that wires that route.
@@ -120,3 +117,19 @@ src/sync/graph/store.py:GraphStore.dismissal_reason_counts
 # when it says how long ago the index last ran and what it found. Delete this line in the
 # commit that puts that on screen.
 src/sync/graph/store.py:GraphStore.index_run_count
+
+# `GraphStore.ticket_for_finding` is the per-finding half of the ticket read: the list view
+# reads `tickets`, and the Findings page's row-level "already requested?" answer is what wires
+# this one. Finished and tested (`tests/test_remediation_tickets.py`); delete this line in the
+# commit that puts that answer on screen.
+src/sync/graph/store.py:GraphStore.ticket_for_finding
+
+# `drain` forgets the OTLP spool after an export so a second ingest does not grow it forever.
+# The ingest verb that consumes the spool end-to-end is what calls it; delete this line in the
+# commit that wires that consumption.
+src/sync/obs/otlp_emit.py:drain
+
+# `configured_model` is `require_provider().model` behind one name, exported from `sync.runner`
+# for harnesses that ask what a run would drive before spending. Reached today only from outside
+# `src/`; delete this line when a CLI or console surface reads it.
+src/sync/runner/claude_sdk.py:configured_model

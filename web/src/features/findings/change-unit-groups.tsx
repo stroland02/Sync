@@ -3,14 +3,14 @@
  *
  * **M15 Task 7.** The plan's problem statement is arithmetic: *24 findings are really 13 change
  * units, and the console lists them flat, so a reader sees 24 problems where there are 13.* One
- * vendor change breaking eleven call sites is one decision to make, not eleven — and a flat list
+ * vendor change breaking eleven call sites is one decision to make, not eleven Ã¢â‚¬â€ and a flat list
  * is the console asserting otherwise by its shape.
  *
  * ## The two figures have to agree, and that is the whole correctness claim
  *
  * A grouped view whose parts do not add to the flat total is worse than no grouping: it reads as
  * a rounding artefact rather than as a contradiction, so nobody investigates it. The payload
- * therefore **narrows before it groups** — a severity tab filters findings and *then* buckets
+ * therefore **narrows before it groups** Ã¢â‚¬â€ a severity tab filters findings and *then* buckets
  * them, so a unit reports the findings of that severity it holds and the sum still equals the
  * flat total for that tab. Filtering units after grouping would leave every unit counting
  * findings the reader is not being shown. `tests/test_dashboard_fleet.py` holds it, proven by
@@ -19,7 +19,7 @@
  * ## Counts come from the payload, never from the array beside them
  *
  * `finding_count` is stated. Counting `findings.length` would report the rows this page happens
- * to hold, which is the same class of defect as a total summed over a paginated set — right until
+ * to hold, which is the same class of defect as a total summed over a paginated set Ã¢â‚¬â€ right until
  * the moment anything paginates, and silent afterwards.
  *
  * ## Closed by default
@@ -81,11 +81,11 @@ function UnitRow({ repoId, unit }: { repoId: string; unit: ChangeUnitRow }) {
             type="button"
             onClick={() => setOpen((was) => !was)}
             aria-expanded={open}
-            className="flex items-center gap-field rounded-control px-field py-field text-meta text-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex items-center gap-field rounded-control px-field py-field text-meta text-ink transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <ChevronRight
               aria-hidden="true"
-              className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+              className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`}
             />
             <span className="tabular-nums">
               {unit.finding_count.toLocaleString()} {noun}
@@ -110,7 +110,7 @@ function UnitRow({ repoId, unit }: { repoId: string; unit: ChangeUnitRow }) {
           <SeverityTag severity={unit.severity} />
         </TableCell>
         <TableCell>
-          {/* The weakest rung among the constituent findings — the unit is only as well
+          {/* The weakest rung among the constituent findings Ã¢â‚¬â€ the unit is only as well
               attributed as its least-attributed member, and reporting the strongest would
               overstate what the graph knows about the rest. */}
           <RungBadge rung={unit.binding_rung as BindingSource} />

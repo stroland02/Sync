@@ -72,9 +72,9 @@ function readTokens(): ChartTokens {
     grid: read(TOKEN_PROPERTIES.grid),
     axis: read(TOKEN_PROPERTIES.axis),
     labelOnLight: read(TOKEN_PROPERTIES.labelOnLight),
-    goodInk: "#3ecf8e",
-    warningInk: "#ffb224",
-    seriousInk: "#f76b15",
+    goodInk: read(TOKEN_PROPERTIES.goodInk),
+    warningInk: read(TOKEN_PROPERTIES.warningInk),
+    seriousInk: read(TOKEN_PROPERTIES.seriousInk),
     series: SERIES_PROPERTIES.map(read),
   }
 }

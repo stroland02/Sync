@@ -2,7 +2,7 @@
  * The connected codebases, switchable from the environment badge.
  *
  * **Owner report, 2026-08-19: switching workspaces did not work.** The diagnosis is narrower and
- * worse than "stale data" — *there was no switcher at all*. `useChassisIdentity` reads the
+ * worse than "stale data" â€” *there was no switcher at all*. `useChassisIdentity` reads the
  * workspace from the route and falls back to the sole repository only when there is exactly one,
  * so the moment a second codebase was indexed the fallback stopped applying and the only way to
  * change workspace was to hand-edit the address bar. The badge beside it was a link into Settings.
@@ -11,7 +11,7 @@
  *
  * **The screen, not just the workspace.** A reader looking at Call sites for one codebase wants
  * Call sites for the other, not the Overview. So the current path is rebuilt with the new
- * workspace substituted, using the registry's own matcher rather than a string replace — a
+ * workspace substituted, using the registry's own matcher rather than a string replace â€” a
  * `repoId` containing a slash is percent-encoded in the address, and naive substitution on the
  * encoded form breaks on the first repository named `host/owner/name`, which is all of them.
  *
@@ -86,7 +86,7 @@ export function WorkspaceSwitcher({
         <button
           type="button"
           aria-label="Switch codebase"
-          className="flex min-w-0 items-center gap-row rounded-control px-field text-meta text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex min-w-0 items-center gap-row rounded-control px-field text-meta text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
         >
           {children}
           <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0" />

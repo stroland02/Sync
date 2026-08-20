@@ -2,7 +2,7 @@
  * Which columns a table shows, chosen by the reader and remembered.
  *
  * **M15 Task 1.** A wide screen makes room for columns; it does not decide which ones matter. The
- * call-sites payload carries fifteen recorded fields and no reader wants all fifteen at once —
+ * call-sites payload carries fifteen recorded fields and no reader wants all fifteen at once â€”
  * one is auditing provenance, another is hunting loops, and the useful set differs per question.
  *
  * ## What this is careful about
@@ -39,7 +39,7 @@ export interface ColumnSpec {
   readonly id: string
   readonly label: string
   /**
-   * `false` where the column is the screen's claim rather than a detail of it — a provenance
+   * `false` where the column is the screen's claim rather than a detail of it â€” a provenance
    * rung, a scope, an absence marker. Defaults to hideable.
    */
   readonly hideable?: boolean
@@ -134,7 +134,7 @@ export function ColumnVisibilityMenu({
         <button
           type="button"
           aria-label="Choose columns"
-          className="inline-flex shrink-0 items-center gap-field rounded-control border border-line px-field py-field text-meta text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="inline-flex shrink-0 items-center gap-field rounded-control border border-line px-field py-field text-meta text-ink-muted transition-colors hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <Columns3 aria-hidden="true" className="size-3.5" />
           Columns

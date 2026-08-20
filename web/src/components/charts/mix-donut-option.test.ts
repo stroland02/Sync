@@ -1,6 +1,6 @@
 /**
  * The donut's derivation rules. Scope is `.claude/rules/console-dev-loop.md`'s: classification,
- * derivation and structural invariants — never class names, never a snapshot.
+ * derivation and structural invariants â€” never class names, never a snapshot.
  *
  * Four properties, and each one is a claim the chart makes about the data rather than a styling
  * choice: the centre total is the sum of the arcs, colour is fixed by sorted key rather than by
@@ -14,16 +14,16 @@ import { buildMixDonutOption } from "@/components/charts/mix-donut-option"
 import type { ChartTokens } from "@/components/charts/echart"
 
 const TOKENS: ChartTokens = {
-  ink: "#fff",
-  inkSecondary: "#ccc",
-  inkMuted: "#999",
-  surface: "#111",
-  grid: "#222",
-  axis: "#333",
-  labelOnLight: "#000",
-  goodInk: "#3ecf8e",
-  warningInk: "#ffb224",
-  seriousInk: "#f76b15",
+  ink: "token:ink",
+  inkSecondary: "token:ink-secondary",
+  inkMuted: "token:ink-muted",
+  surface: "token:surface",
+  grid: "token:grid",
+  axis: "token:axis",
+  labelOnLight: "token:label-on-light",
+  goodInk: "token:good-ink",
+  warningInk: "token:warning-ink",
+  seriousInk: "token:serious-ink",
   series: ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"],
 }
 

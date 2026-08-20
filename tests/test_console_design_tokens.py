@@ -745,10 +745,20 @@ _COLOUR_FUNCTIONS = ("rgb", "rgba", "hsl", "hsla", "oklch", "oklab", "lab", "lch
 _COLOUR_FUNCTION_CALL = re.compile(r"\b(?:" + "|".join(_COLOUR_FUNCTIONS) + r")\(")
 
 
+# The one sanctioned home for a colour value outside index.css. `lib/palette.ts` computes with
+# its colours -- relative luminance, contrast ratios, Lab ramps -- and a CSS variable is a string
+# JavaScript cannot do arithmetic on. The exemption is paid for by
+# `test_palette_series_slots_match_the_stylesheet` below, which holds the one set of values both
+# files state (the eight series slots) equal, so the exemption cannot quietly become a fork.
+_COLOUR_LITERAL_EXEMPT = ("palette.ts", "palette.test.ts")
+
+
 def _colour_literal_violations(root: Path) -> list[str]:
     violations = []
     for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
         if path.name == "index.css":
+            continue
+        if path.parent.name == "lib" and path.name in _COLOUR_LITERAL_EXEMPT:
             continue
         text = _read_stripped(path)
         for pattern in (_HEX_LITERAL, _COLOUR_FUNCTION_CALL):
@@ -767,6 +777,28 @@ def test_no_colour_literal_outside_index_css():
         "the way components/charts/echart.tsx resolves every other chart colour through "
         "getComputedStyle rather than hardcoding one:\n" + "\n".join(violations)
     )
+
+
+def test_palette_series_slots_match_the_stylesheet():
+    """The price of `lib/palette.ts`'s exemption: the eight series slots it states are the
+    stylesheet's own, byte for byte, so the two files cannot drift into naming one colour twice.
+    """
+    _require_web_src()
+    palette = (_WEB_SRC / "lib" / "palette.ts").read_text(encoding="utf-8")
+    stylesheet = (_WEB_SRC / "index.css").read_text(encoding="utf-8")
+
+    block = re.search(r"SERIES_SLOTS = \[(.*?)\]", palette, re.DOTALL)
+    assert block, "SERIES_SLOTS not found in palette.ts"
+    stated = re.findall(r'"(#[0-9a-fA-F]{6})"', block.group(1))
+    assert len(stated) == 8
+
+    for index, value in enumerate(stated, start=1):
+        declared = re.search(rf"--color-series-{index}:\s*([^;]+);", stylesheet)
+        assert declared, f"--color-series-{index} not declared in index.css"
+        assert declared.group(1).strip().lower() == value.lower(), (
+            f"--color-series-{index} is {declared.group(1).strip()} in index.css but "
+            f"{value} in palette.ts; one of them moved without the other"
+        )
 
 
 def test_the_colour_literal_guard_rejects_a_hardcoded_hex(tmp_path: Path) -> None:

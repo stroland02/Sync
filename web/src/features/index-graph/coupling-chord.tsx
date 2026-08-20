@@ -1,5 +1,5 @@
 /**
- * Which integrations share a file, and how much — the coupling the topology card can only count.
+ * Which integrations share a file, and how much â€” the coupling the topology card can only count.
  *
  * `ApiTopologyCard` reports *files calling more than one integration* as a number and a list of
  * paths. That answers "is there coupling" and not "between which integrations", and the second is
@@ -12,12 +12,12 @@
  * a list that hides who pairs with whom.
  *
  * **The diagonal is dropped.** An integration "coupled with itself" is just its own file count,
- * which the topology card already reports — drawing it would make the largest integration a
+ * which the topology card already reports â€” drawing it would make the largest integration a
  * near-complete circle and squeeze every real pairing into the remainder.
  *
  * **Absent is not zero, and this is a case where the difference shows.** A ribbon that is not
  * drawn means no file calls both, which the index measured. An integration with no ribbons at all
- * is genuinely uncoupled — the honest and common case for a codebase that keeps its vendor calls
+ * is genuinely uncoupled â€” the honest and common case for a codebase that keeps its vendor calls
  * separate, and not a rendering failure.
  */
 
@@ -100,11 +100,11 @@ export function CouplingChord({ repoId }: { repoId: string }) {
     <InfoHint label="About integration coupling">
       Which integrations are called from the same file. A ribbon between two means at least one
       file reaches both, so a change to either lands in code that has to keep working for the
-      other — which is what makes a change expensive rather than merely present. Derived from the
+      other â€” which is what makes a change expensive rather than merely present. Derived from the
       files the index found calling more than one integration; where a file touches three or more,
       its weight is spread evenly across the pairs it could form, because the payload carries how
       many it touched and not which. No ribbon between two integrations means no file calls both,
-      which the index measured — not something it failed to look for.
+      which the index measured â€” not something it failed to look for.
     </InfoHint>
   )
 
@@ -127,9 +127,9 @@ export function CouplingChord({ repoId }: { repoId: string }) {
         caption="No file calls more than one integration."
       >
         <p className="max-w-prose text-body text-ink-muted">
-          Every file that calls out reaches exactly one integration. That is a measured zero — the
+          Every file that calls out reaches exactly one integration. That is a measured zero â€” the
           index read {vendors.length} integrations across this codebase and found no file shared
-          between them — and it is the cheap case: a change to one integration cannot land in code
+          between them â€” and it is the cheap case: a change to one integration cannot land in code
           that has to keep working for another.
         </p>
       </MetricPanel>
@@ -180,7 +180,7 @@ export function CouplingChord({ repoId }: { repoId: string }) {
                     }`}
                     textAnchor={flip ? "end" : "start"}
                     dy="0.35em"
-                    className="fill-ink font-mono text-[11px]"
+                    className="fill-ink font-mono text-[12px]"
                   >
                     {vendors[group.index]}
                   </text>

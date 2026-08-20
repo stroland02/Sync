@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The API products one repository calls: `Payments` under `stripe`, not `stripe` again.
  *
  * **A vendor is the provider; a service is one of the APIs it sells.** Until 2026-08-19 the graph
@@ -92,11 +92,11 @@ function ServiceRow({
             type="button"
             onClick={() => setOpen((was) => !was)}
             aria-expanded={open}
-            className="flex items-center gap-field rounded-control px-field py-field text-meta text-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex items-center gap-field rounded-control px-field py-field text-meta text-ink transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <ChevronRight
               aria-hidden="true"
-              className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+              className={`size-3.5 shrink-0 ${open ? "rotate-90" : ""}`}
             />
             <span className="tabular-nums">
               {row.operations.toLocaleString()} {noun}
@@ -262,7 +262,7 @@ export function RepositoryServicesPage() {
         {/* A claim, not an argument, so it stays visible -- caught by
             `repository-services-page.test.tsx` when the sweep moved it into the hover. What a
             screen does not show is exactly the kind of absence a non-hovering reader must be able
-            to see; the *why* is in the â“˜. */}
+            to see; the *why* is in the ÃƒÂ¢Ã¢â‚¬Å“Ã‹Å“. */}
         <span className="text-meta text-ink-muted">findings are on Findings</span>
         <InfoHint label="About the services list">
           A <em>vendor</em> is the provider Sync watches; a <em>service</em> is one of the APIs it
@@ -285,15 +285,15 @@ export function RepositoryServicesPage() {
           caption="What the index bound in this codebase, per API product. Colour is the vendor that sells it, which is the one thing the bar lengths do not carry."
           rows={grouped
             .map((row) => ({
-              key: `${row.vendor_id} Â· ${row.service_id ?? ""}`,
+              key: `${row.vendor_id} Ãƒâ€šÃ‚Â· ${row.service_id ?? ""}`,
               value: row.call_sites,
             }))
             .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))}
           unit="call sites"
-          colourKey={(key) => key.split(" Â· ")[0]}
+          colourKey={(key) => key.split(" Ãƒâ€šÃ‚Â· ")[0]}
           detail={(key) => {
             const row = grouped.find(
-              (candidate) => `${candidate.vendor_id} Â· ${candidate.service_id ?? ""}` === key,
+              (candidate) => `${candidate.vendor_id} Ãƒâ€šÃ‚Â· ${candidate.service_id ?? ""}` === key,
             )
             if (row === undefined) return ""
             return `${row.operations} op${row.operations === 1 ? "" : "s"}`

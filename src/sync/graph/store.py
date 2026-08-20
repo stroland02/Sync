@@ -718,8 +718,8 @@ class GraphStore:
             """
             INSERT INTO call_site (id, repo_id, path, line, col, vendor_id, operation_id,
                                    symbol, args_keys, response_fields_read, sdk_version, content_hash,
-                                   loop_depth, snippet, snippet_start_line)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   loop_depth, snippet, snippet_start_line, service_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 line = EXCLUDED.line,
                 col = EXCLUDED.col,
@@ -738,7 +738,7 @@ class GraphStore:
                 site_id, site.repo_id, site.path, site.line, site.col, site.vendor_id,
                 site.operation_id, site.symbol, site.args_keys, site.response_fields_read,
                 site.sdk_version, site.content_hash, site.loop_depth,
-                site.snippet, site.snippet_start_line,
+                site.snippet, site.snippet_start_line, site.service_id,
             ),
         )
         # One event per call site, owner-selected: the finest grain, so the canvas can draw an
@@ -1546,6 +1546,73 @@ class GraphStore:
         ).fetchall()
         return {row["vendor_id"]: (row["sites"], row["last_indexed"]) for row in rows}
 
+    def service_coverage(self, repo_id: str) -> list[dict]:
+        """The API products one repository calls, per vendor: `Charges` under `stripe`.
+
+        A vendor is the provider; a service is one of the APIs it sells. `call_site_coverage`
+        above answers the provider question and this one answers the product question, and
+        neither summarises the other -- a vendor's call sites are the sum of its services' only
+        once every one of its operations has been mapped onto a product.
+
+        **A row with `service_id` NULL is grouped under NULL rather than dropped**, and that is
+        the whole discipline: only a vendor adapter can map an operation onto a product, none
+        supplies that mapping for every operation, and a query that filtered the ungrouped rows
+        out would report a vendor as having no services when what it has is no tag. The caller
+        renders the NULL group as work not done. `operations` counts distinct operations so a
+        reader can see how much of a vendor's surface each product covers.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id,
+                   service_id,
+                   count(*)                     AS sites,
+                   count(DISTINCT operation_id) AS operations,
+                   max(indexed_at)              AS last_indexed
+              FROM call_site
+             WHERE repo_id = %s AND retracted_at IS NULL
+             GROUP BY vendor_id, service_id
+             ORDER BY vendor_id, count(*) DESC, service_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def operation_coverage(self, repo_id: str) -> list[dict]:
+        """Every vendor operation this repository calls, with the product it belongs to.
+
+        `service_coverage` above is the roll-up and this is the grain beneath it. Both are their
+        own SQL aggregate rather than one being summed out of the other in Python: two numbers
+        that cannot contradict each other are two numbers that can never reveal one of them is
+        wrong, which is the reasoning `severity_rollup` already carries.
+
+        The console printed *"operations not listed"* on the services screen for as long as no
+        query answered this -- absent work stated rather than an empty panel, which was right
+        while it was true.
+
+        **No file count, and it was measured out rather than left out.** This carried
+        `count(DISTINCT path)` for one column, and at 10,000 call sites that single aggregate cost
+        **96 ms of the query's 104 ms** -- the same query without it is 8 ms. It was also the
+        weakest figure on the screen: a file calling three of a product's operations is one file,
+        so the per-operation counts cannot be summed and the column could only ever be rendered as
+        a floor. A thirteenfold cost for a number that had to be qualified is not a trade worth
+        making on a route two screens read.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT vendor_id,
+                   service_id,
+                   operation_id,
+                   count(*)        AS sites,
+                   max(indexed_at) AS last_indexed
+              FROM call_site
+             WHERE repo_id = %s AND retracted_at IS NULL
+             GROUP BY vendor_id, service_id, operation_id
+             ORDER BY vendor_id, count(*) DESC, operation_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def get_call_site(self, call_site_id: str) -> CallSite:
         """One call site by id, retracted or not.
 
@@ -2161,6 +2228,38 @@ class GraphStore:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    def get_finding(self, finding_id: str) -> Finding | None:
+        """One finding as the model the remediation graph takes, or None when it is not held.
+
+        The ticket executor's read: `sync run` remediates the findings its own scan just
+        produced in memory, but a ticket names a finding by id across process boundaries, so
+        the row has to become a `Finding` again. Every column maps one-to-one; `created_at`
+        stays behind because the model never carried it.
+        """
+        row = self._connect().execute(
+            "SELECT * FROM finding WHERE id = %s", (finding_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return Finding(
+            id=row["id"], detector=row["detector"], claim=row["claim"],
+            call_site_id=row["call_site_id"], vendor_change_id=row["vendor_change_id"],
+            severity=row["severity"], rationale=row["rationale"], status=row["status"],
+            binding_rung=row["binding_rung"],
+        )
+
+    def stamp_ticket_thread(self, ticket_id: int, thread_id: str) -> None:
+        """The checkpointer thread a claimed ticket's run actually used.
+
+        Claiming stamps a provisional thread id because the claim happens before the finding
+        is loaded; the executor corrects it the moment the real coordinates exist, so the
+        console's join from ticket to workflow never dangles.
+        """
+        self._connect().execute(
+            "UPDATE remediation_ticket SET thread_id = %s WHERE id = %s",
+            (thread_id, ticket_id),
+        )
+
     def close_ticket(self, ticket_id: int, *, outcome: str, detail: str | None) -> None:
         """A picked-up ticket settled with the run's own terminal outcome."""
         self._connect().execute(
@@ -2751,16 +2850,28 @@ class GraphStore:
             ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
 
-    def finding_repo_ids(self) -> dict[str, str]:
-        """Map every finding_id to its call_site.repo_id (B149)."""
+    def finding_identities(self) -> dict[str, dict]:
+        """Map every finding_id to the call-site facts a run row needs about it.
+
+        The repository (B149), and the vendor and operation `sync.core.naming.finding_name`
+        derives a sayable name from. One query rather than two: the runs view needs both, and
+        the second round trip would be over the same join.
+
+        Widened from `finding_repo_ids`, which returned the repository alone. It had exactly one
+        caller, so this replaced it rather than sitting beside it -- two maps over one join is
+        the pair that disagrees the first time only one of them is updated.
+        """
         rows = self._connect().execute(
             """
-            SELECT finding.id AS finding_id, call_site.repo_id AS repo_id
+            SELECT finding.id AS finding_id,
+                   call_site.repo_id AS repo_id,
+                   call_site.vendor_id AS vendor_id,
+                   call_site.operation_id AS operation_id
               FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
             """
         ).fetchall()
-        return {row["finding_id"]: row["repo_id"] for row in rows}
+        return {row["finding_id"]: dict(row) for row in rows}
 
     def migration_outcome_rollup_by_kind(self) -> list[dict]:
         """One row per (`change_kind`, `tier`) actually attempted -- a real SQL `GROUP BY` over
@@ -3657,41 +3768,6 @@ class GraphStore:
             return None
         facts = row["facts"] if isinstance(row["facts"], dict) else json.loads(row["facts"])
         return {**facts, "computed_at": row["computed_at"].isoformat()}
-
-    def begin_run_heartbeat(self, thread_id: str, *, expire_after_secs: int = 90) -> None:
-        """Open (or re-open, on resume) the heartbeat row for one run.
-
-        A resumed thread reuses its row: the previous generation's `stopped_at` or
-        `expired_at` describes a process that is over, and carrying either into a run that is
-        executing right now would report the new process through the old one's death.
-        """
-        self._connect().execute(
-            """
-            INSERT INTO run_heartbeat (thread_id, expire_after_secs)
-            VALUES (%s, %s)
-            ON CONFLICT (thread_id) DO UPDATE SET
-               started_at = now(),
-               last_heartbeat_at = now(),
-               expire_after_secs = EXCLUDED.expire_after_secs,
-               stopped_at = NULL,
-               expired_at = NULL
-            """,
-            [thread_id, expire_after_secs],
-        )
-
-    def heartbeat_run(self, thread_id: str) -> None:
-        """The tick. Idempotent and tiny on purpose: it runs on a timer from a worker thread."""
-        self._connect().execute(
-            "UPDATE run_heartbeat SET last_heartbeat_at = now() WHERE thread_id = %s",
-            [thread_id],
-        )
-
-    def stop_run_heartbeat(self, thread_id: str) -> None:
-        """The clean exit, whatever the outcome -- an abandoned run still exited cleanly."""
-        self._connect().execute(
-            "UPDATE run_heartbeat SET stopped_at = now() WHERE thread_id = %s",
-            [thread_id],
-        )
 
     def expire_stale_heartbeats(self) -> list[str]:
         """Record EXPIRED for every run whose heartbeats stopped with no clean exit.

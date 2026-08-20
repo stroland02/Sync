@@ -13,6 +13,7 @@ import os
 
 import pytest
 
+from sync.core.models import CallSite, Finding, VendorChange
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get('SYNC_DSN', 'postgresql://sync:sync@localhost:5433/sync')
@@ -96,3 +97,58 @@ def test_a_second_lane_converges_without_stealing_the_ticket(store: GraphStore) 
 
     assert second["id"] == first["id"]
     assert second["source"] == "operator"
+
+
+def test_a_stored_finding_becomes_the_model_the_graph_takes(store: GraphStore) -> None:
+    # The executor's read: a ticket names a finding by id across process boundaries, so the
+    # row has to come back as the same `Finding` the scan wrote, rung and provenance intact.
+    site_id = store.upsert_call_site(
+        CallSite(
+            repo_id="acme", path="src/billing.ts", line=12, col=4, vendor_id="stripe",
+            operation_id="PostCharges", symbol="stripe.charges.create", args_keys=["amount"],
+            response_fields_read=["status"], sdk_version="18.0.0", content_hash="h-1",
+        )
+    )
+    change_id = store.upsert_vendor_change(
+        VendorChange(
+            vendor_id="stripe", from_version="v2300", to_version="v2345",
+            kind="response-property-removed", operation_id="PostCharges",
+            path_ptr="/paths/x", severity="breaking", source="oasdiff",
+        )
+    )
+    written = Finding(
+        detector="vendor_change", claim="response-field", call_site_id=site_id,
+        vendor_change_id=change_id, severity="breaking", rationale="status removed",
+        binding_rung="static",
+    )
+    finding_id = store.insert_finding(written)
+
+    loaded = store.get_finding(finding_id)
+
+    assert loaded is not None
+    assert loaded.id == finding_id
+    assert loaded.detector == written.detector
+    assert loaded.claim == written.claim
+    assert loaded.call_site_id == site_id
+    assert loaded.vendor_change_id == change_id
+    assert loaded.severity == written.severity
+    assert loaded.rationale == written.rationale
+    assert loaded.binding_rung == "static"
+
+
+def test_a_retracted_finding_loads_as_none(store: GraphStore) -> None:
+    assert store.get_finding("no-such-finding") is None
+
+
+def test_the_real_thread_replaces_the_provisional_one(store: GraphStore) -> None:
+    # The claim happens before the finding is loaded, so it stamps a provisional thread; the
+    # executor corrects it once the real coordinates exist, keeping the console's join intact.
+    store.create_ticket("f-1", "acme", source="operator")
+    claimed = store.claim_next_ticket("acme", thread_id="claimed")
+    assert claimed is not None
+
+    store.stamp_ticket_thread(claimed["id"], "f-1:abc123:1")
+
+    settled = store.ticket_for_finding("f-1")
+    assert settled is not None
+    assert settled["thread_id"] == "f-1:abc123:1"

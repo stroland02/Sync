@@ -269,6 +269,33 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
         # no call sites at all. A render site that fills a missing key with a zero would claim its
         # operations had been examined and found clean.
         "by_binding_status": store.binding_status_rollup(repo_id),
+        # The product question beside the provider question, on the same payload because the
+        # screen that asks one asks the other and two routes would be two round trips against one
+        # table. `service_id` is None where no tag maps the operation onto a product; the
+        # transport carries the None through rather than dropping the group, so the console can
+        # say how much of a vendor's surface is not grouped yet.
+        "by_service": [
+            {
+                "vendor_id": row["vendor_id"],
+                "service_id": row["service_id"],
+                "call_sites": row["sites"],
+                "operations": row["operations"],
+                "last_indexed": row["last_indexed"].isoformat(),
+            }
+            for row in store.service_coverage(repo_id)
+        ],
+        # The grain beneath the roll-up: one row per operation, carrying the product it belongs to
+        # so the console can list a product's operations without a second round trip.
+        "by_operation": [
+            {
+                "vendor_id": row["vendor_id"],
+                "service_id": row["service_id"],
+                "operation_id": row["operation_id"],
+                "call_sites": row["sites"],
+                "last_indexed": row["last_indexed"].isoformat(),
+            }
+            for row in store.operation_coverage(repo_id)
+        ],
     }
 
 

@@ -1241,6 +1241,90 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
     return 0
 
 
+def cmd_tickets(args) -> int:
+    """Execute requested remediation tickets for one repository, oldest first.
+
+    The console's POST records a request and returns; this verb is the process that picks
+    requests up, which is what keeps the API a non-executor -- a dead runner reads as a ticket
+    parked at `requested`, never as an HTTP timeout pretending to be progress. Each ticket runs
+    the same remediation graph `sync run` drives, against the same clone-per-process, and the
+    ticket closes with the run's own terminal outcome.
+    """
+    cache = Path(args.cache)
+    cache.mkdir(parents=True, exist_ok=True)
+    prepared = prepare_vendor(args.vendor, VendorContext(
+        cache_dir=cache, from_version=args.from_version, to_version=args.to_version,
+    ))
+    store = GraphStore(args.dsn)
+    store.apply_schema()
+
+    with tempfile.TemporaryDirectory() as workdir:
+        repo = _clone(args.repo, Path(workdir) / "repo")
+        try:
+            adapter = select_language_adapter(repo, prepared.adapter)
+        except LookupError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
+        context_row = store.repo_context(repo.repo_id)
+        repo_context = context_row.body if context_row is not None else ""
+
+        with PostgresSaver.from_conn_string(args.dsn) as checkpointer:
+            checkpointer.setup()
+            catalogue = load_catalogue()
+            graph = build_graph(
+                store=store, adapter=adapter,
+                remediator=build_remediator(catalogue, repo_context=repo_context),
+                forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
+            )
+            executed = 0
+            while args.limit == 0 or executed < args.limit:
+                ticket = store.claim_next_ticket(repo.repo_id, thread_id="claimed")
+                if ticket is None:
+                    break
+                finding = store.get_finding(ticket["finding_id"])
+                if finding is None:
+                    # A scan can retract the finding between the request and the pickup. The
+                    # ticket closes saying so rather than parking forever.
+                    store.close_ticket(
+                        ticket["id"], outcome="reported",
+                        detail="the finding is no longer held; a later scan retracted it",
+                    )
+                    print(f"ticket {ticket['id']}: finding gone, closed as reported")
+                    continue
+
+                base = f"{finding.id}:{args.run_id or repo.head_sha[:12]}"
+                thread_id, resuming = _thread_to_invoke(graph, base)
+                store.stamp_ticket_thread(ticket["id"], thread_id)
+                config = {"configurable": {"thread_id": thread_id}}
+
+                if resuming:
+                    _checkout_branch(repo, graph.get_state(config).values["branch"])
+                    graph.update_state(config, {"repo": repo})
+                else:
+                    _reset_clone(repo)
+                    if adapter.discard_contaminated_dependencies(repo):
+                        print("discarded the previous ticket's dependency tree")
+
+                with RunHeartbeat(args.dsn, thread_id):
+                    state = graph.invoke(
+                        None if resuming else {"finding": finding, "repo": repo},
+                        config=config,
+                    )
+                detail = (
+                    state.get("pr_url")
+                    or state.get("abandon_reason")
+                    or state.get("report_reason")
+                )
+                store.close_ticket(ticket["id"], outcome=state["outcome"], detail=detail)
+                executed += 1
+                print(f"ticket {ticket['id']} ({finding.id[:12]}): {state['outcome']}: {detail}")
+
+            if executed == 0:
+                print("no requested tickets; nothing to execute")
+    return 0
+
+
 def _operation_resolver(correlator) -> Callable[[str, str], str | None]:
     """Turn a request method and a full URL into an operation id, or None.
 
@@ -2618,6 +2702,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reconcile_parser.add_argument("--dsn", default=DEFAULT_DSN)
     reconcile_parser.set_defaults(func=reconcile_pull_requests)
+
+    tickets_parser = sub.add_parser(
+        "tickets", help="execute requested remediation tickets for one repository"
+    )
+    tickets_parser.add_argument("--vendor", default="stripe", choices=available_vendors())
+    tickets_parser.add_argument("--from-version", required=True)
+    tickets_parser.add_argument("--to-version", required=True)
+    tickets_parser.add_argument("--repo", required=True, help="git remote URL of the repository whose tickets to execute")
+    tickets_parser.add_argument("--dsn", default=DEFAULT_DSN)
+    tickets_parser.add_argument("--cache", default=".cache/specs")
+    tickets_parser.add_argument("--limit", type=int, default=1, help="tickets to execute; 0 for all")
+    tickets_parser.add_argument("--run-id", default=None, help="checkpoint namespace; defaults to the cloned commit")
+    tickets_parser.set_defaults(func=cmd_tickets)
 
     rehearse_parser = sub.add_parser(
         "rehearse",

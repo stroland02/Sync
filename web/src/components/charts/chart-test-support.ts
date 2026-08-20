@@ -4,7 +4,7 @@
  * Imported only by test files, so it never reaches the bundle.
  *
  * **The tokens are sentinels rather than colours.** What a chart suite proves is that a builder
- * reads a token *through*, never what the token's value is — `echart.tsx` resolves every chart
+ * reads a token *through*, never what the token's value is â€” `echart.tsx` resolves every chart
  * colour from the stylesheet at render time, so the value that arrives is whatever the theme
  * says. Real colours here would also be colours invented outside `index.css`, which the design
  * token guard refuses and rightly.
@@ -26,9 +26,9 @@ export const CHART_TOKENS: ChartTokens = {
   grid: "token:grid",
   axis: "token:axis",
   labelOnLight: "token:label-on-light",
-  goodInk: "#3ecf8e",
-  warningInk: "#ffb224",
-  seriousInk: "#f76b15",
+  goodInk: "token:good-ink",
+  warningInk: "token:warning-ink",
+  seriousInk: "token:serious-ink",
   series: Array.from({ length: 8 }, (_, i) => `token:series-${i + 1}`),
 }
 
@@ -37,7 +37,7 @@ export const CHART_TOKENS: ChartTokens = {
  * than one series.
  *
  * The legend clause is conditional rather than absolute, so this takes the series count and
- * checks the right direction — a one-series chart with a legend names the obvious, and a
+ * checks the right direction â€” a one-series chart with a legend names the obvious, and a
  * multi-series chart without one leaves the reader to guess which band is which.
  */
 export function expectQuietChart(option: Record<string, any>): void {

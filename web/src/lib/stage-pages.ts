@@ -7,7 +7,13 @@
  * workspace-reachable route lands in exactly one stage.
  */
 
-import { ROUTES, WORKFLOW_STAGES, type RouteEntry, type WorkflowStage } from "@/lib/routes"
+import { ROUTES, WORKFLOW_STAGES, destinationHref, type RouteEntry, type WorkflowStage } from "@/lib/routes"
+
+// Re-exported so the Overview's components take the registry through this module alone.
+// `features/` may not import `lib/routes` directly (B120: routes.ts imports every feature page
+// to build its element, so the reverse import closes a module-init cycle); everything here
+// reads the registry inside function bodies, which is what keeps the indirection init-safe.
+export { destinationHref, type RouteEntry, type WorkflowStage }
 
 /** What each stage does to the graph, in the owner's own words for the stage vocabulary. */
 export const STAGE_DOES: Record<WorkflowStage, string> = {

@@ -1,4 +1,4 @@
-﻿"""View-model queries for the fleet screen: every run, the repair record, the repo roll-up.
+"""View-model queries for the fleet screen: every run, the repair record, the repo roll-up.
 
 Follows `tests/test_dashboard_queries.py`'s fixture pattern for the checkpointer side --
 `PostgresSaver.put`'s row shape, and the thread-id convention `sync.cli` writes:

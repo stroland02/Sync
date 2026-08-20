@@ -373,7 +373,7 @@ export function RunsCard() {
             as that takes, by design. What tells that run apart from one that died is the
             heartbeat: the runner's process says "still here" on a timer, straight through a CI
             wait, and a run whose heartbeats stop with no clean exit is recorded{" "}
-            <span className="font-mono">expired</span> by a sweep — a stored transition, not a
+            <span className="font-mono">expired</span> by a sweep — a stored state change, not a
             guess made at render time. A run marked <span className="font-mono">not monitored</span>{" "}
             predates that mechanism, and for it this screen still does not guess.
           </p>

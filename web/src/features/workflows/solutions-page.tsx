@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Solutions: every run that reached a pull request, and the door into each one's workflow —
  * the owner's page, named 2026-08-18: "shows the PR information and the solution workflow".
  *

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The frame every level renders inside: one full-height sidebar, and the content column beside it.
  */
 

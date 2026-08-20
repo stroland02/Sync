@@ -815,9 +815,37 @@ def _drive_index_codebase(root: Path) -> None:
     assert "bad.ts" in report.unread_paths
 
 
+def _drive_attach_snippets(root: Path) -> None:
+    """A file that stopped decoding between the parse and the snippet pass leaves its site bare.
+
+    The snippet is evidence for a reader, not part of the binding, so the pass keeps the site
+    and drops only the window rather than abandoning the repository.
+    """
+    from sync.core import CallSite
+    from sync.index.codebase import _attach_snippets
+
+    (root / "billing.ts").write_bytes(b"const caf\xe9 = 1;\n")
+    site = CallSite(
+        repo_id="r1", path="billing.ts", line=1, col=1, vendor_id="stripe",
+        operation_id="PostCharges", symbol="stripe.charges.create",
+        sdk_version="unknown", content_hash="h1",
+    )
+    bare = _attach_snippets(root, [site])
+    assert bare[0].snippet is None
+
+    # The control: the same site over a readable file gains its window, so the assertion above
+    # cannot pass on a pass that never attaches anything.
+    (root / "billing.ts").write_text("const cafe = 1;\n", encoding="utf-8")
+    attached = _attach_snippets(root, [site])
+    assert attached[0].snippet == "const cafe = 1;"
+    assert attached[0].snippet_start_line == 1
+
+
 DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/api/auth.py::extract_credential::Error+UnicodeDecodeError": _drive_extract_credential,
     "sync/index/codebase.py::index_codebase::UnicodeDecodeError": _drive_index_codebase,
+    "sync/index/codebase.py::_attach_snippets::OSError+UnicodeDecodeError+ValueError":
+        _drive_attach_snippets,
     "sync/benchmark/checkout.py::read_checkout::UnicodeDecodeError": _drive_checkout,
     "sync/index/python_lang.py::PythonAdapter._readable_sources::UnicodeDecodeError":
         _drive_python_sources,
@@ -1020,6 +1048,10 @@ def test_a_chain_naming_only_a_base_class_is_outside_this_inventory(tmp_path: Pa
 # to drive, and an obligation that cannot be satisfied is one somebody eventually silences.
 _DECODES_NOTHING = (
     "sync/api/app.py::_int_param::ValueError",
+    # `int(raw)` over strings the HTTP layer already decoded, the plural of `_int_param` --
+    # an unparseable value becomes -1, a value the column cannot hold, so the page is empty
+    # rather than silently wider. Nothing under the clause reads bytes.
+    "sync/api/app.py::_int_values_param::ValueError",
     "sync/cli.py::_signing_key::TypeError+ValueError",
     "sync/cli.py::_window_bound::ValueError",
     "sync/mcp/tools.py::GraphSurface._change_for::KeyError+LookupError+ValueError",
@@ -1064,6 +1096,14 @@ _DECODES_NOTHING = (
 # decision is made inside the stage, at the read, by a handler this file can already see.
 _WHOLE_STAGE_CATCH_ALL = (
     "sync/benchmark/reconcile.py::reconcile_pull_request_outcomes::Exception",
+    # Wraps one `gh issue create` subprocess so a notify that dies becomes a `failed`
+    # IssueOutcome instead of killing the run that only wanted to mention something.
+    # The subprocess output is decoded by `_run` with its own handling.
+    "sync/forge/notify.py::IssueNotifier.notify_finding_issue::Exception",
+    # Wraps the manifest probe for one vendor's tick so a dead registry reads as "probe
+    # failed, retries next tick" for every due subscription rather than ending the tick.
+    # The reads that decode bytes live inside `spec_source` and carry their own handlers.
+    "sync/watch/tick.py::_tick_generated::Exception",
     "sync/cli.py::_decline_line::Exception",
     "sync/cli.py::_model_deprecations::Exception",
     "sync/cli.py::_parameter_deprecations::Exception",

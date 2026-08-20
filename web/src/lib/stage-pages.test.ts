@@ -2,14 +2,14 @@
  * The Overview draws every door a workspace has, or the build says which one it dropped.
  *
  * A page added to the registry and forgotten here is a screen nothing links to from the one
- * place a reader starts — reachable by typed URL and by nothing else.
+ * place a reader starts â€” reachable by typed URL and by nothing else.
  */
 
 import { describe, expect, it } from "vitest"
 
 import { WORKFLOW_STAGES } from "@/lib/routes"
 import { LOOP_PREREQUISITES, SETTING_GROUPS } from "@/features/settings/groups"
-import { PIPELINE_HOME, pagesByStage, stageOf, workspacePages } from "@/features/repositories/stage-pages"
+import { PIPELINE_HOME, pagesByStage, stageOf, workspacePages } from "@/lib/stage-pages"
 
 describe("the pipeline's pages", () => {
   it("gives every page a workspace can reach exactly one stage", () => {

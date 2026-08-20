@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS call_site (
     snippet              TEXT,
     -- 1-based file line of the snippet's first line.
     snippet_start_line   INTEGER,
+    -- The API product the call's operation belongs to, from the vendor's own OpenAPI tags.
+    -- NULL is *not grouped yet* -- only the vendor's adapter can map an operation onto a product,
+    -- never a call site outside every service, and no reader may render the two alike.
+    service_id           TEXT,
     indexed_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- When a pass over this repository stopped finding the call at this position. NULL means the
     -- revision last indexed has it. Nullable and with no default because that is the only shape
@@ -531,6 +535,12 @@ CREATE TABLE IF NOT EXISTS repo_settings (
 -- EXISTS` never alters an existing table, so a schema-only addition silently misses every
 -- database that predates it -- this is the one statement that reaches them.
 ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS remote_url TEXT;
+
+-- Deployed clusters predate the column; nullable with no default is the only shape
+-- `apply_schema` can add to a populated table.
+ALTER TABLE call_site ADD COLUMN IF NOT EXISTS service_id TEXT;
+
+CREATE INDEX IF NOT EXISTS call_site_service_idx ON call_site (repo_id, vendor_id, service_id);
 
 -- Grain: one row per repository -- the newest technical census of its checkout.
 --

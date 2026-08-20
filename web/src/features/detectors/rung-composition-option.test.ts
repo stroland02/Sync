@@ -29,9 +29,9 @@ const TOKENS: ChartTokens = {
   grid: "chart-grid",
   axis: "chart-axis",
   labelOnLight: "chart-label-on-light",
-  goodInk: "#3ecf8e",
-  warningInk: "#ffb224",
-  seriousInk: "#f76b15",
+  goodInk: "good-ink",
+  warningInk: "warning-ink",
+  seriousInk: "serious-ink",
   series: Array.from({ length: 8 }, (_, i) => `series-${i + 1}`),
 }
 

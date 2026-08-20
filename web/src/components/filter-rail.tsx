@@ -1,7 +1,7 @@
 /**
  * A left rail that narrows a set too large to read, with a count beside every option.
  *
- * The arrangement is a convention of the form — `.claude/rules/interface-originality.md` permits
+ * The arrangement is a convention of the form â€” `.claude/rules/interface-originality.md` permits
  * a filter rail the way it permits a table. **What is ours is the count.**
  * `docs/superpowers/plans/2026-08-18-page-information-architecture.md:150-152` puts the entire
  * value of this surface there: the counts *"tell you what you would get before you click"*. That
@@ -11,13 +11,13 @@
  * **A confirmed zero and an unanswered count are different facts and there is no `number` to
  * pass.** A count is `{ kind: "counted", value }` or `{ kind: "unanswered", why }`. A view that
  * never asked the question cannot render `0` by accident; it renders the console's one absence
- * marker, and the reason travels with it — on the option for a screen reader, and in the rail's
+ * marker, and the reason travels with it â€” on the option for a screen reader, and in the rail's
  * own note for everyone else. An absence marker with no reason behind it is the defect this
  * console has closed repeatedly: "we did not ask", "the route failed" and "this view cannot see
  * it" all arrive as one glyph otherwise.
  *
- * **An option counted at zero stays selectable.** It is a real answer — the filter would return
- * nothing — and that is worth clicking to establish. Disabling it, or dropping it from the list,
+ * **An option counted at zero stays selectable.** It is a real answer â€” the filter would return
+ * nothing â€” and that is worth clicking to establish. Disabling it, or dropping it from the list,
  * makes the rail assert the value does not exist in the vocabulary, which is a different claim
  * and a false one.
  *
@@ -34,7 +34,7 @@
  *   above its table is a separate surface with its own dependency question, and is not here.
  *
  * `FilterCount` is `TriageCount` under another name rather than a second declaration of the same
- * shape. Two spellings of "counted or unanswered" would drift, and the drift would be silent —
+ * shape. Two spellings of "counted or unanswered" would drift, and the drift would be silent â€”
  * which is the expensive kind. The type wants a home neither component owns; see this file's
  * deferred-work note in the task report.
  */
@@ -47,7 +47,7 @@ import type { TriageCount } from "@/components/triage-tabs"
 import { chipSurface } from "@/lib/selectable-surface"
 
 /**
- * How many records an option accounts for — or that nobody answered the question.
+ * How many records an option accounts for â€” or that nobody answered the question.
  *
  * `why` is required on the unanswered arm, and it is the sentence a reader gets instead of a
  * figure. There is no arm that carries absence without a reason.
@@ -67,13 +67,13 @@ export interface FilterOption {
  * One facet of the rail: a legend, a closed set of values, and which one is narrowing the set.
  *
  * `options` is a non-empty tuple. Every facet this rail serves is a closed vocabulary known
- * before the query runs — a time range, a change kind, a run outcome — so an empty list is not
+ * before the query runs â€” a time range, a change kind, a run outcome â€” so an empty list is not
  * "this facet has no values", it is a caller that has not got its vocabulary yet. Making that
  * uncompilable is cheaper than rendering a blank fieldset that reads as an answer.
  */
 export interface FilterGroup {
   readonly id: string
-  /** What the facet divides, in this facet's own words — "Time range", "Level". */
+  /** What the facet divides, in this facet's own words â€” "Time range", "Level". */
   readonly legend: string
   readonly options: readonly [FilterOption, ...FilterOption[]]
   /**
@@ -119,7 +119,7 @@ export type ActiveSelection =
   | { readonly kind: "outside-vocabulary"; readonly legend: string; readonly value: string }
 
 /**
- * The count as text, or `null` for absence — never a glyph, per `@/lib/format`'s contract.
+ * The count as text, or `null` for absence â€” never a glyph, per `@/lib/format`'s contract.
  *
  * Exported because the mapping from an unanswered count to absence is the one derivation on this
  * surface with a wrong answer, and `.claude/rules/console-dev-loop.md` puts those under test.
@@ -154,8 +154,8 @@ export function unansweredCounts(groups: readonly FilterGroup[]): UnansweredCoun
 /**
  * What each narrowed facet is narrowed by.
  *
- * A selection its own group does not hold — a stale URL parameter, a value retired from the
- * vocabulary — is reported rather than dropped. Dropping it leaves a rail with nothing pressed
+ * A selection its own group does not hold â€” a stale URL parameter, a value retired from the
+ * vocabulary â€” is reported rather than dropped. Dropping it leaves a rail with nothing pressed
  * over a table that is nonetheless narrowed, which is the "a reader cannot tell what this view
  * can see" failure in its purest form.
  */
@@ -276,7 +276,7 @@ function Group({ group }: { group: FilterGroup }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={`Search ${group.options.length} values`}
-            className="w-full rounded-control border border-line bg-surface-subtle px-field py-field text-meta text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="w-full rounded-control border border-line bg-surface-subtle px-field py-field text-meta text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </>
       )}
@@ -311,7 +311,7 @@ function Group({ group }: { group: FilterGroup }) {
       {stray.map((selection) => (
         <p key={selection.value} className="max-w-prose text-meta text-ink-muted">
           Narrowed by <span className="font-mono text-ink">{selection.value}</span>, which is not
-          one of this facet&rsquo;s values — nothing above is selected for it because nothing
+          one of this facet&rsquo;s values â€” nothing above is selected for it because nothing
           above matches it, and the counts beside these options do not describe the set on screen.
         </p>
       ))}
@@ -321,7 +321,7 @@ function Group({ group }: { group: FilterGroup }) {
 
 /**
  * The rail itself. Stateless: every selection is the caller's, sent to the API rather than
- * applied to the rows already on screen — a filter applied to the current page reports a total
+ * applied to the rows already on screen â€” a filter applied to the current page reports a total
  * drawn from the set it never filtered.
  */
 export function FilterRail({
