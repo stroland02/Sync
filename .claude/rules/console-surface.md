@@ -36,11 +36,17 @@ Dark-only since 2026-08-05, on the owner's instruction. The theme resolver, its 
 `web/CLAUDE.md` holds the refusal; this is where it gets reached for, because a design system is
 exactly the moment somebody wants a coloured badge.
 
-**Colour claims a judgement, motion claims a time, depth claims a relationship.** Three channels may
-carry a claim because the data holds one: run outcome, error state, absence. **A status colour never
-travels alone** — it ships with an icon and a word, because colour is never the only channel.
+**Colour claims a judgement, motion claims a time, depth claims a relationship.** Run outcome,
+error state and absence may carry a claim because the data holds one — and by the owner's
+re-ruling of 2026-08-19, so may any **closed state vocabulary** rendered through
+`components/tag.tsx`'s tone axis: severity, disposition, an adapter gap. The discipline that
+survives the widening: a tone comes only from the four reserved status colours plus neutral, the
+mapping must rank the way the vocabulary ranks, an unknown member renders neutral, and **a status
+colour never travels alone** — it ships with a glyph and a word, because colour is never the only
+channel.
 
-The provenance rung stays monochrome at both levels and is never a hideable column.
+The provenance rung stays monochrome at both levels and is never a hideable column — evidence
+class is not a state, and it is the one vocabulary the re-ruling did not touch.
 
 ## The protected distinctions
 

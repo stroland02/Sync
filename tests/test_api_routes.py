@@ -396,6 +396,10 @@ def _build_app(
     integration_changes_reader=_fake_integration_changes_reader,
     settings_reader=_fake_settings_reader,
     settings_writer=_fake_settings_writer,
+    call_site_source_reader=None,
+    ticket_writer=None,
+    tickets_reader=None,
+    serve_source: bool = True,
     api_password: str | None = None,
 ) -> Starlette:
     """`create_app` with every reader defaulted to a fake, so a test naming one override is
@@ -439,6 +443,10 @@ def _build_app(
         findings_reader=findings_reader,
         settings_reader=settings_reader,
         settings_writer=settings_writer,
+        call_site_source_reader=call_site_source_reader,
+        ticket_writer=ticket_writer,
+        tickets_reader=tickets_reader,
+        serve_source=serve_source,
         api_password=api_password,
     )
 
@@ -1143,21 +1151,24 @@ def test_change_units_route_passes_query_params():
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
 
 
-def test_binding_route_returns_the_readers_payload_unaltered():
+def test_binding_route_returns_the_readers_payload_plus_the_source_policy():
+    # "Unaltered" until 2026-08-19: the route now states the deployment's source policy on the
+    # way through, because the rows can carry index-captured snippets and a reader has to be
+    # able to tell withheld from never-captured. Everything the reader said is still forwarded.
     payload = {
         "vendor_id": "stripe", "operation_id": "PostCharges", "repo_id": None,
         "call_sites": [{"path": "src/pay.ts", "binding_rung": "static"}], "changes": [],
     }
     app = _build_app(
         surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED),
-        binding_reader=lambda vendor_id, operation_id, *, repo_id=None, **_: payload,
+        binding_reader=lambda vendor_id, operation_id, *, repo_id=None, **_: dict(payload),
     )
     client = TestClient(app)
 
     response = client.get("/api/vendors/stripe/operations/PostCharges/bindings")
 
     assert response.status_code == 200
-    assert response.json() == payload
+    assert response.json() == {**payload, "source_served": True}
 
 
 def test_binding_route_passes_the_path_segments_and_the_repo_id_query_param():
@@ -1949,6 +1960,11 @@ _NOT_COLLECTIONS = {
     # one per tier that ran -- bounded by the calendar and by the tier ladder, not by how
     # many attempts exist.
     "/api/corpus/activity",
+    # Tickets: one row per remediation request against one repository's open findings -- bounded
+    # by how many findings an operator or the watch loop has asked about, a set the same order of
+    # magnitude as the open findings themselves. The Detectors page renders the whole lifecycle
+    # split, and a page cursor over it would truncate the funnel while looking complete.
+    "/api/repositories/{repo_id:path}/tickets",
     # A stream is not a page. It has no total to report and no offset to advance, and it ends when
     # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
     # mean here.
@@ -2945,3 +2961,118 @@ def test_an_unparseable_loop_depth_narrows_to_nothing_rather_than_widening():
     client.get("/api/repositories/r1/call-sites?loop_depth=2&loop_depth=abc")
 
     assert seen["loop_depths"] == [2, -1]
+# -- source policy ----------------------------------------------------------------
+#
+# Owner re-ruling 2026-08-19, scoping the threat-model rule at the top of `app.py`: bounded,
+# index-captured windows are served unless the deployment switches them off. `source_served`
+# is always present so a console can tell policy from absence -- a row with no snippet on a
+# serving deployment was indexed before capture existed, a different nothing from withheld.
+
+
+def _source_policy_client(serve_source: bool) -> TestClient:
+    def reader(repo_id, **_kw):
+        return {
+            "repo_id": repo_id,
+            "items": [
+                {"path": "src/a.ts", "line": 3, "snippet": "const x = 1", "snippet_start_line": 1}
+            ],
+            "total": 1,
+            "next_offset": None,
+        }
+
+    surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
+    app = _build_app(surface=surface, call_sites_reader=reader, serve_source=serve_source)
+    return TestClient(app)
+
+
+def test_call_sites_serve_captured_source_by_default():
+    page = _source_policy_client(True).get("/api/repositories/acme/call-sites").json()
+
+    assert page["source_served"] is True
+    assert page["items"][0]["snippet"] == "const x = 1"
+    assert page["items"][0]["snippet_start_line"] == 1
+
+
+def test_source_policy_withholds_snippets_and_says_which_nothing_it_is():
+    page = _source_policy_client(False).get("/api/repositories/acme/call-sites").json()
+
+    assert page["source_served"] is False
+    assert "snippet" not in page["items"][0]
+    assert "snippet_start_line" not in page["items"][0]
+
+
+# -- tickets ------------------------------------------------------------------------
+#
+# The console's second write, owner-ruled 2026-08-19, and the one it actually calls: a ticket
+# is a remediation *request* row. The route records the ask and returns -- `sync tickets` is
+# the process that executes, so a dead runner reads as a ticket parked at `requested`, never
+# as an HTTP timeout pretending to be progress.
+
+
+def _ticket_client(writes: list, tickets: list | None = None) -> TestClient:
+    def writer(finding_id: str, repo_id: str) -> dict:
+        writes.append((finding_id, repo_id))
+        return {"id": 1, "finding_id": finding_id, "repo_id": repo_id, "source": "operator",
+                "status": "requested"}
+
+    surface = GraphSurface(
+        FakeGraph(findings=[_finding("f1", "s1", "c1")], sites=[_site("s1")], changes=[_change("c1")]),
+        feed_fetched_at=FETCHED,
+    )
+    app = _build_app(
+        surface=surface,
+        ticket_writer=writer,
+        tickets_reader=lambda repo_id, *, source=None: [
+            t for t in (tickets or []) if source is None or t["source"] == source
+        ],
+    )
+    return TestClient(app)
+
+
+def test_posting_a_ticket_records_the_request_against_the_findings_own_repository():
+    writes: list = []
+    client = _ticket_client(writes)
+
+    response = client.post("/api/findings/f1/ticket")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "requested"
+    assert len(writes) == 1
+    assert writes[0][0] == "f1"
+
+
+def test_a_ticket_for_a_finding_nobody_holds_is_not_found():
+    writes: list = []
+    client = _ticket_client(writes)
+
+    response = client.post("/api/findings/f-unknown/ticket")
+
+    assert response.status_code == 404
+    assert writes == []
+
+
+def test_the_tickets_route_forwards_the_lane_filter():
+    rows = [
+        {"id": 1, "finding_id": "f1", "source": "operator", "status": "requested"},
+        {"id": 2, "finding_id": "f2", "source": "watch", "status": "done"},
+    ]
+    client = _ticket_client([], tickets=rows)
+
+    everything = client.get("/api/repositories/r1/tickets").json()
+    automatic = client.get("/api/repositories/r1/tickets?source=watch").json()
+
+    assert len(everything["tickets"]) == 2
+    assert [t["finding_id"] for t in automatic["tickets"]] == ["f2"]
+
+
+def test_the_consoles_binding_statuses_match_the_stores_in_order():
+    # `web/src/api/types.ts` restates `BINDING_STATUSES` because the console cannot import
+    # Python, and nothing in TypeScript knows the list is a restatement. Same shape and same
+    # reason as `RunDisposition` above -- and this one is ordered, so the assertion is on the
+    # list rather than the set: the order is the rail's option order, most-wanting-attention
+    # first, and a member inserted in the middle silently reorders a control a reader scans.
+    source = _web_source("src/api/types.ts")
+    match = re.search(r"export const BINDING_STATUSES = \[([^\]]+)\]", source)
+    assert match is not None, "web/src/api/types.ts no longer declares BINDING_STATUSES"
+    declared = re.findall(r'"([^"]+)"', match.group(1))
+    assert declared == list(BINDING_STATUSES)

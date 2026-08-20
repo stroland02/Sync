@@ -59,6 +59,7 @@ import { ScopeChip } from "@/components/scope-chip"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
+import { AutomationPanel } from "@/features/tickets/automation-panel"
 import { DetectorsDashboards } from "@/features/detectors/detectors-dashboards"
 
 
@@ -77,6 +78,11 @@ export function DetectorsPage() {
 
   return (
     <section className="flex flex-col gap-8">
+      {/* The page's opening answer as of the owner's ruling, 2026-08-19: what the platform did
+          without a human -- detected, ticketed, ran the workflow, opened the PR. Attribution
+          stays below: which detector stood behind each finding is this page's second question. */}
+      <AutomationPanel repoId={repoId} />
+
       {/* Dashboards D1 and D2, opening the page with every other screen's strip. This page
           carried one chart and a table; the strip says how much was attributed and to how
           many detectors, and the ranking says which detector is loudest -- which the rung

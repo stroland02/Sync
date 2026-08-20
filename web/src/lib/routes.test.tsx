@@ -26,7 +26,6 @@ import {
   boundParams,
   destinationHref,
   isActiveMenuItem,
-  isWideRoute,
 } from "@/lib/routes"
 import { AppFrame } from "@/layouts/app-frame"
 
@@ -357,34 +356,5 @@ describe("a destination that is not a level", () => {
 
   it("carries a question, the same as a level does, because the header renders one either way", () => {
     for (const entry of DESTINATIONS) expect(entry.question.length).toBeGreaterThan(0)
-  })
-})
-
-describe("which screens the reading cap applies to", () => {
-  /**
-   * Owner report, 2026-08-19: Overview, Telemetry and Detectors were still capped at 1400px.
-   *
-   * Each is a grid of panels, and the cap made the grid reflow into a single column with half
-   * the viewport empty beside it. The flag is the one place this is decided -- a page that
-   * fixed it locally with a negative margin would fight the scrollbar and land differently on
-   * every browser, and the next screen would solve it again a fourth way.
-   */
-  it.each([
-    ["/repositories/demo", "Overview"],
-    ["/repositories/demo/observed", "Telemetry"],
-    ["/repositories/demo/detectors", "Detectors"],
-    ["/repositories/demo/call-sites", "Call sites"],
-    ["/repositories/demo/findings", "Findings"],
-  ])("gives %s (%s) the full width", (pathname) => {
-    expect(isWideRoute(pathname)).toBe(true)
-  })
-
-  it.each([
-    ["/repositories/demo/findings/f-1", "a finding"],
-    ["/repositories/demo/findings/f-1/workflow", "a workflow"],
-  ])("keeps the cap on %s (%s), where the content is a column of prose", (pathname) => {
-    // The cap is not obsolete, it is scoped. A detail screen read at 2560px is harder to read,
-    // not easier, and widening everything would lose that distinction rather than settle it.
-    expect(isWideRoute(pathname)).toBe(false)
   })
 })

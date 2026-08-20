@@ -94,7 +94,20 @@ export function RemediationFlow({ repoId }: { repoId: string }) {
     nodes.push({ id: "attempted", label: "Attempted" })
     links.push({ source: "open", target: "attempted", value: attempted })
     for (const [status, n] of [...byOutcome].sort(([a], [b]) => a.localeCompare(b))) {
-      nodes.push({ id: status, label: OUTCOME_LABEL[status] ?? status })
+      // The outcome node wears the same tone its tag wears everywhere (owner ruling
+      // 2026-08-19); a status the console has not caught up with stays untoned.
+      nodes.push({
+        id: status,
+        label: OUTCOME_LABEL[status] ?? status,
+        tone:
+          status === "opened"
+            ? "good"
+            : status === "abandoned"
+              ? "serious"
+              : status === "reported"
+                ? "warning"
+                : undefined,
+      })
       links.push({ source: "attempted", target: status, value: n })
     }
   }

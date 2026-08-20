@@ -568,10 +568,32 @@ def admin_connection_once_ready(
             sleep(POSTGRES_RECOVERY_POLL_SECONDS)
 
 
+def refuse_live_pin(pinned_dsn: str | None) -> None:
+    """Refuse a pin at the live console database, because every store fixture truncates.
+
+    Measured 2026-08-19, twice in one afternoon: a shell that had exported SYNC_DSN to point
+    the API at the graph ran the ordinary gate, `database_for` honoured the pin, and the
+    console's workspaces were truncated to whichever fixture rows the suite wrote last. The
+    operator saw an empty console and no run saw an error. A pin is for CI and for debugging
+    a *test* database; the live default is the one database a test run must never be handed.
+    """
+    if pinned_dsn is None:
+        return
+    from sync.graph.store import DEFAULT_DSN
+
+    if conninfo_to_dict(pinned_dsn).get("dbname") == conninfo_to_dict(DEFAULT_DSN).get("dbname"):
+        raise pytest.UsageError(
+            "SYNC_DSN is pinned to the live console database, and this suite truncates every "
+            "database it is handed. Unset SYNC_DSN to get a per-run database, or pin a "
+            "dedicated test database (any dbname but the default)."
+        )
+
+
 def pytest_configure(config) -> None:
     global _created_dbname, _admin_dsn
 
     pinned = os.environ.get("SYNC_DSN")
+    refuse_live_pin(pinned)
     worker = os.environ.get("PYTEST_XDIST_WORKER")
     dbname = database_for(pinned, worker, os.getpid())
     if dbname is None:

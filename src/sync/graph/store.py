@@ -63,23 +63,6 @@ def _stable_id(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
 
 
-def _value_set(values: Sequence, name: str) -> tuple:
-    """One multi-select filter's chosen values, de-duplicated and order-stable.
-
-    The string check is the only validation in this module that guards an internal caller, and
-    it is here because the failure it catches is silent. A string is a sequence of characters,
-    so `vendor_ids="stripe"` reaches Postgres as `= ANY(ARRAY['s','t','r','i','p','e'])`, which
-    matches nothing and returns an empty page -- indistinguishable on screen from an honest "no
-    call site matches this narrowing".
-
-    Order-stable rather than a `set` so a query plan and a cache key do not vary by iteration
-    order, which would make two identical narrowings look like two different reads.
-    """
-    if isinstance(values, str):
-        raise TypeError(f"{name} takes a sequence of values, not the string {values!r}")
-    return tuple(dict.fromkeys(values))
-
-
 # Entries in a CREATE TABLE body that declare a constraint rather than a column. Everything
 # else is a column, which is what makes this list the whole of the grammar this needs to know.
 _TABLE_CONSTRAINTS = frozenset(
@@ -666,8 +649,8 @@ class GraphStore:
             """
             INSERT INTO call_site (id, repo_id, path, line, col, vendor_id, operation_id,
                                    symbol, args_keys, response_fields_read, sdk_version, content_hash,
-                                   loop_depth)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   loop_depth, snippet, snippet_start_line)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 line = EXCLUDED.line,
                 col = EXCLUDED.col,
@@ -677,6 +660,8 @@ class GraphStore:
                 sdk_version = EXCLUDED.sdk_version,
                 content_hash = EXCLUDED.content_hash,
                 loop_depth = EXCLUDED.loop_depth,
+                snippet = EXCLUDED.snippet,
+                snippet_start_line = EXCLUDED.snippet_start_line,
                 indexed_at = now(),
                 retracted_at = NULL
             """,
@@ -684,6 +669,7 @@ class GraphStore:
                 site_id, site.repo_id, site.path, site.line, site.col, site.vendor_id,
                 site.operation_id, site.symbol, site.args_keys, site.response_fields_read,
                 site.sdk_version, site.content_hash, site.loop_depth,
+                site.snippet, site.snippet_start_line,
             ),
         )
         # One event per call site, owner-selected: the finest grain, so the canvas can draw an
@@ -1043,9 +1029,7 @@ class GraphStore:
         self,
         repo_id: str,
         *,
-        vendor_ids: Sequence[str] = (),
-        operation_ids: Sequence[str] = (),
-        loop_depths: Sequence[int] = (),
+        vendor_id: str | None = None,
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -1062,49 +1046,19 @@ class GraphStore:
         vendor counts honour a path prefix and ignore the vendor selection, and nothing here
         sums them into a total the caller did not ask for.
 
-        **Each filter takes a set, and a set is a union.** A codebase with forty integrations is
-        not filterable one at a time, and the pair a reader usually wants -- two integrations,
-        or the depths above one -- has no single-value spelling. An empty set is absent rather
-        than "match nothing": deselecting the last option means stop narrowing, and a rail whose
-        final deselection emptied the table would strand a reader with no visible way back.
-
-        **There is no rung filter and the table holds no rung column.** A rung describes a
-        binding rather than a call site; offering a facet whose vocabulary has one member would
-        assert the others exist.
-
         Retracted rows are excluded, as everywhere: a site the last pass stopped finding is not
         a place this codebase calls the vendor, and `total` counts what the filters admit so
         the pager walks exactly the set on screen.
         """
         limit = max(limit, 1)
-        vendor_ids = _value_set(vendor_ids, "vendor_ids")
-        operation_ids = _value_set(operation_ids, "operation_ids")
-        loop_depths = _value_set(loop_depths, "loop_depths")
-
-        def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
-            """The WHERE terms, optionally leaving one facet's own filter out.
-
-            One builder rather than two, because the facet queries and the page query differing
-            by anything but the named omission is the defect this rule exists to prevent -- and
-            a second hand-maintained copy of the terms is exactly how they would come to differ.
-            """
-            where = ["repo_id = %s", "retracted_at IS NULL"]
-            params: list[object] = [repo_id]
-            if vendor_ids and ignoring != "vendor_id":
-                where.append("vendor_id = ANY(%s)")
-                params.append(list(vendor_ids))
-            if operation_ids and ignoring != "operation_id":
-                where.append("operation_id = ANY(%s)")
-                params.append(list(operation_ids))
-            if loop_depths and ignoring != "loop_depth":
-                where.append("loop_depth = ANY(%s)")
-                params.append(list(loop_depths))
-            if path_prefix and ignoring != "path":
-                where.append("path LIKE %s")
-                params.append(f"{path_prefix}%")
-            return where, params
-
-        where, params = predicates()
+        where = ["repo_id = %s", "retracted_at IS NULL"]
+        params: list[object] = [repo_id]
+        if vendor_id is not None:
+            where.append("vendor_id = %s")
+            params.append(vendor_id)
+        if path_prefix:
+            where.append("path LIKE %s")
+            params.append(f"{path_prefix}%")
         clause = " AND ".join(where)
 
         total = int(
@@ -1117,21 +1071,22 @@ class GraphStore:
             [*params, limit, offset],
         ).fetchall()
 
-        # Each facet, counted over everything the OTHER filters admit.
-        def facet(column: str) -> list:
-            facet_where, facet_params = predicates(ignoring=column)
-            return self._connect().execute(
-                f"""
-                SELECT {column} AS key, count(*) AS n
-                  FROM call_site
-                 WHERE {" AND ".join(facet_where)}
-                 GROUP BY {column}
-                 ORDER BY {column}
-                """,
-                facet_params,
-            ).fetchall()
-
-        vendor_rows = facet("vendor_id")
+        # The vendor facet, counted over everything the OTHER filters admit.
+        facet_where = ["repo_id = %s", "retracted_at IS NULL"]
+        facet_params: list[object] = [repo_id]
+        if path_prefix:
+            facet_where.append("path LIKE %s")
+            facet_params.append(f"{path_prefix}%")
+        vendor_rows = self._connect().execute(
+            f"""
+            SELECT vendor_id, count(*) AS n
+              FROM call_site
+             WHERE {" AND ".join(facet_where)}
+             GROUP BY vendor_id
+             ORDER BY vendor_id
+            """,
+            facet_params,
+        ).fetchall()
 
         def rendered(row) -> dict:
             # `indexed_at` arrives as a datetime and the transport is JSON, so it is rendered
@@ -1150,13 +1105,9 @@ class GraphStore:
             "items": [rendered(row) for row in rows],
             "total": total,
             "next_offset": consumed if consumed < total else None,
-            "by_vendor": {row["key"]: int(row["n"]) for row in vendor_rows},
-            "by_operation": {row["key"]: int(row["n"]) for row in facet("operation_id")},
-            "by_loop_depth": {int(row["key"]): int(row["n"]) for row in facet("loop_depth")},
+            "by_vendor": {row["vendor_id"]: int(row["n"]) for row in vendor_rows},
             "unfiltered_total": sum(int(row["n"]) for row in vendor_rows),
-            "vendor_ids": list(vendor_ids),
-            "operation_ids": list(operation_ids),
-            "loop_depths": list(loop_depths),
+            "vendor_id": vendor_id,
             "path_prefix": path_prefix,
         }
 
@@ -1238,6 +1189,27 @@ class GraphStore:
             "multi_vendor_files": [dict(row) for row in multi_vendor],
             "by_loop_depth": {str(row["loop_depth"]): int(row["n"]) for row in loops},
         }
+
+    def call_site_source(
+        self, path: str, line: int, repo_id: str | None = None
+    ) -> dict | None:
+        """The captured source window at one position, or None where no current row holds one.
+
+        Keyed the way a finding names its site -- path and line -- because the finding route is
+        the caller and that is what its row carries. A retracted row's window is not served: the
+        code no longer has this call at this position, and a snippet would show source the
+        finding is no longer about.
+        """
+        where = "path = %s AND line = %s AND retracted_at IS NULL AND snippet IS NOT NULL"
+        params: list[object] = [path, line]
+        if repo_id is not None:
+            where += " AND repo_id = %s"
+            params.append(repo_id)
+        row = self._connect().execute(
+            f"SELECT snippet, snippet_start_line, line FROM call_site WHERE {where} LIMIT 1",
+            params,
+        ).fetchone()
+        return dict(row) if row is not None else None
 
     def call_sites_for_repository_count(self, repo_id: str) -> int:
         """How many current call sites one repository holds, read without fetching their columns."""
@@ -1442,8 +1414,8 @@ class GraphStore:
     def vendor_changes_page(
         self,
         *,
-        vendor_ids: Sequence[str] = (),
-        severities: Sequence[str] = (),
+        vendor_id: str | None = None,
+        severity: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
@@ -1461,21 +1433,14 @@ class GraphStore:
         say so on screen.
         """
         limit = max(limit, 1)
-        vendor_ids = _value_set(vendor_ids, "vendor_ids")
-        severities = _value_set(severities, "severities")
-
-        def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
-            where: list[str] = []
-            params: list[object] = []
-            if vendor_ids and ignoring != "vendor_id":
-                where.append("vendor_id = ANY(%s)")
-                params.append(list(vendor_ids))
-            if severities and ignoring != "severity":
-                where.append("severity = ANY(%s)")
-                params.append(list(severities))
-            return where, params
-
-        where, params = predicates()
+        where: list[str] = []
+        params: list[object] = []
+        if vendor_id is not None:
+            where.append("vendor_id = %s")
+            params.append(vendor_id)
+        if severity is not None:
+            where.append("severity = %s")
+            params.append(severity)
         clause = f"WHERE {' AND '.join(where)}" if where else ""
 
         total = int(
@@ -1495,7 +1460,14 @@ class GraphStore:
         ).fetchall()
 
         def facet(column: str, ignoring: str) -> dict[str, int]:
-            facet_where, facet_params = predicates(ignoring=ignoring)
+            facet_where: list[str] = []
+            facet_params: list[object] = []
+            if vendor_id is not None and ignoring != "vendor_id":
+                facet_where.append("vendor_id = %s")
+                facet_params.append(vendor_id)
+            if severity is not None and ignoring != "severity":
+                facet_where.append("severity = %s")
+                facet_params.append(severity)
             facet_clause = f"WHERE {' AND '.join(facet_where)}" if facet_where else ""
             found = self._connect().execute(
                 f"SELECT {column} AS key, count(*) AS n FROM vendor_change {facet_clause}"
@@ -1546,8 +1518,8 @@ class GraphStore:
             # returns groups that exist, and a render site must not fill a missing key with a zero.
             "by_vendor_severity": by_vendor_severity,
             "unfiltered_total": sum(by_vendor.values()),
-            "vendor_ids": list(vendor_ids),
-            "severities": list(severities),
+            "vendor_id": vendor_id,
+            "severity": severity,
         }
 
     def vendor_intake_rollup(self) -> dict[str, dict]:
@@ -1952,6 +1924,89 @@ class GraphStore:
             """
         ).fetchall()
         return {row["reason"]: int(row["n"]) for row in rows}
+
+    def create_ticket(self, finding_id: str, repo_id: str, *, source: str) -> dict:
+        """One remediation request for one finding, converging on the open one if it exists.
+
+        The partial unique index is the idempotence rule: at most one ticket per finding that
+        is not yet done, so an operator's double-click and the watch tick racing an operator
+        both land on the same row. `source` records which lane asked -- 'operator' or 'watch'
+        -- because the Detectors page renders the split and a row that lost its lane would
+        erase that page's question.
+        """
+        if source not in ("operator", "watch"):
+            raise ValueError(f"unknown ticket source {source!r}; 'operator' or 'watch'")
+        row = self._connect().execute(
+            """
+            INSERT INTO remediation_ticket (finding_id, repo_id, source)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (finding_id) WHERE status <> 'done' DO UPDATE
+                SET finding_id = EXCLUDED.finding_id
+            RETURNING *
+            """,
+            (finding_id, repo_id, source),
+        ).fetchone()
+        return dict(row)
+
+    def tickets(self, repo_id: str, *, source: str | None = None) -> list[dict]:
+        """One repository's tickets, newest request first, optionally one lane's."""
+        where = "repo_id = %s"
+        params: list[object] = [repo_id]
+        if source is not None:
+            where += " AND source = %s"
+            params.append(source)
+        rows = self._connect().execute(
+            f"SELECT * FROM remediation_ticket WHERE {where} ORDER BY requested_at DESC, id DESC",
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def ticket_for_finding(self, finding_id: str) -> dict | None:
+        """The newest ticket standing against one finding, done or not, or None."""
+        row = self._connect().execute(
+            """
+            SELECT * FROM remediation_ticket
+             WHERE finding_id = %s
+             ORDER BY requested_at DESC, id DESC
+             LIMIT 1
+            """,
+            (finding_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def claim_next_ticket(self, repo_id: str, *, thread_id: str) -> dict | None:
+        """The oldest requested ticket, moved to picked_up in the same statement, or None.
+
+        One UPDATE with a self-select so two runners cannot claim one ticket: the row moves
+        out of 'requested' atomically, and the loser's subquery finds the next row or nothing.
+        """
+        row = self._connect().execute(
+            """
+            UPDATE remediation_ticket
+               SET status = 'picked_up', picked_up_at = now(), thread_id = %s
+             WHERE id = (
+                SELECT id FROM remediation_ticket
+                 WHERE repo_id = %s AND status = 'requested'
+                 ORDER BY requested_at, id
+                 LIMIT 1
+                 FOR UPDATE SKIP LOCKED
+             )
+            RETURNING *
+            """,
+            (thread_id, repo_id),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def close_ticket(self, ticket_id: int, *, outcome: str, detail: str | None) -> None:
+        """A picked-up ticket settled with the run's own terminal outcome."""
+        self._connect().execute(
+            """
+            UPDATE remediation_ticket
+               SET status = 'done', done_at = now(), outcome = %s, detail = %s
+             WHERE id = %s
+            """,
+            (outcome, detail, ticket_id),
+        )
 
     def observed_edges_for_repository(self, repo_id: str) -> list[dict]:
         """One row per (vendor, operation, rung) this repository's traffic actually named.
@@ -2965,6 +3020,82 @@ class GraphStore:
     def observed_calls_count(self, repo_id: str) -> int:
         row = self._connect().execute(
             "SELECT count(*) AS n FROM observed_call WHERE repo_id = %s", (repo_id,)
+        ).fetchone()
+        return row["n"]
+
+    def observed_traffic_rollup(self, repo_id: str) -> list[dict]:
+        """Traffic per operation, pooled across every unit of work this table holds.
+
+        Grain: one row per `(vendor_id, operation_id, server_address, http_method,
+        binding_rung)` -- the natural key without the trace, which is `status_rate`'s own
+        population, plus the rung so a caller can keep correlated traffic and unattributed
+        traffic apart rather than averaging a gap into a measurement.
+
+        The denominator rule is `StatusRateDetector`'s, stated there with the argument:
+        `requests` counts spans that carried a status; a span with none leaves the numerator
+        and the denominator both and is reported in `unstatused` so a reader can discount a
+        rate computed over a shrunken sample. No rate is computed here -- both counts travel,
+        and the screen that divides them shows both.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT oc.vendor_id,
+                   oc.operation_id,
+                   oc.server_address,
+                   oc.http_method,
+                   oc.binding_rung,
+                   max(oc.url_template)                                       AS url_template,
+                   count(DISTINCT oc.trace_id)                                AS traces,
+                   count(*) FILTER (WHERE (s.value->>'status') IS NOT NULL)   AS requests,
+                   count(*) FILTER (WHERE (s.value->>'status')::int >= 400)   AS errors,
+                   count(*) FILTER (WHERE (s.value->>'status') IS NULL)       AS unstatused,
+                   count(DISTINCT s.value->>'target')                         AS distinct_targets,
+                   coalesce(max((s.value->>'resend')::int), 0)                AS max_resend,
+                   min(oc.first_seen)                                         AS first_seen,
+                   max(oc.last_seen)                                          AS last_seen
+              FROM observed_call oc
+             CROSS JOIN LATERAL jsonb_each(oc.spans) AS s
+             WHERE oc.repo_id = %s
+             GROUP BY oc.vendor_id, oc.operation_id, oc.server_address, oc.http_method,
+                      oc.binding_rung
+             ORDER BY requests DESC, oc.vendor_id, oc.operation_id
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def observed_traffic_series(self, repo_id: str) -> list[dict]:
+        """Requests and errors per hour, over everything this table currently holds.
+
+        Bucketed by each unit of work's `first_seen`, because a span carries no timestamp of
+        its own -- a long-running trace's spans all land on the hour its first request did.
+        The caller states that rather than smoothing it; inventing per-span times would be a
+        measurement nobody made.
+        """
+        rows = self._connect().execute(
+            """
+            SELECT date_trunc('hour', oc.first_seen)                          AS bucket,
+                   count(*) FILTER (WHERE (s.value->>'status') IS NOT NULL)   AS requests,
+                   count(*) FILTER (WHERE (s.value->>'status')::int >= 400)   AS errors
+              FROM observed_call oc
+             CROSS JOIN LATERAL jsonb_each(oc.spans) AS s
+             WHERE oc.repo_id = %s
+             GROUP BY 1
+             ORDER BY 1
+            """,
+            (repo_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def indexed_operation_count(self, repo_id: str) -> int:
+        """How many distinct vendor operations this repository's current call sites bind."""
+        row = self._connect().execute(
+            """
+            SELECT count(DISTINCT (vendor_id || ':' || operation_id)) AS n
+              FROM call_site
+             WHERE repo_id = %s AND retracted_at IS NULL
+            """,
+            (repo_id,),
         ).fetchone()
         return row["n"]
 

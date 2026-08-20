@@ -4819,3 +4819,26 @@ own toolchain already produced (`npm audit`, `pip-audit` output) and never fetch
 
 **Evidence that closes it:** the owner names the route, and a dependency with a known advisory
 appears on the Overview with its source and freshness stated.
+
+
+### B197 — the comparison's vendor pane: the operation's SDK type slice, captured at index time
+
+The finding page's "The call, in place" panel shows the captured call-site window (CI-W526);
+the owner's ask was a comparison — your call beside the vendor's contract. The contract pane
+v1 is the recorded shape (args keys, response fields), which is the surface a change breaks
+but not the vendor's own words. The full answer is the operation's declaration sliced from the
+installed SDK's `.d.ts` at index time, the same capture-not-serve pattern `call_site.snippet`
+uses — the graph stores no path to a checkout, so index time is the only moment the types are
+in hand. Needs: the TS indexer recording where in the type declarations each operation's
+symbol resolves, a bounded slice stored beside the binding, and the pane rendering both
+windows side by side. Retires the recorded-shape-only vendor pane.
+
+### B198 — the Solution Workflow shows the remediation agent working: code and thoughts, live
+
+Owner ask, 2026-08-19: the workflow page should display the software-engineering work as it
+happens — the code being written and the agent's reasoning — on the way to the PR, not only
+the checkpointed node outcomes after each lands. The checkpointer already carries per-node
+evidence and timestamps; what is missing is the remediation runner recording its transcript
+(patch attempts, tool output, reasoning summaries) into checkpoint payloads at a grain the
+console can stream, and the workflow page polling it into the existing node sequence. Scope
+it with the latency spec in hand: recording must not lengthen the critical path.

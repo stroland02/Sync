@@ -26,6 +26,14 @@ export interface FlowNode {
   readonly id: string
   /** What the reader sees. Short — this sits inside the diagram. */
   readonly label: string
+  /**
+   * A reserved status tone for a node that IS a state (an outcome, a lifecycle stage), or
+   * absent for a structural node. The band flowing INTO a toned node wears its ink, so the
+   * flow's colours agree with the tags the same outcomes wear everywhere else (owner ruling
+   * 2026-08-19). Colour is never alone — the label and count sit on every node, and the
+   * hover says the whole sentence.
+   */
+  readonly tone?: "good" | "warning" | "serious" | "critical"
 }
 
 export interface FlowLink {
@@ -58,6 +66,7 @@ export function assertConserves(links: readonly FlowLink[]): string[] {
 }
 
 interface LaidOutNode {
+  tone?: "good" | "warning" | "serious" | "critical"
   id: string
   label: string
   x0: number
@@ -139,10 +148,19 @@ export function SankeyFlow({
             key={index}
             d={sankeyLinkHorizontal()(link as never) ?? undefined}
             fill="none"
-            stroke={ramp((link.value ?? 0) / total)}
+            stroke={
+              (link.target as LaidOutNode).tone !== undefined
+                ? `var(--color-${(link.target as LaidOutNode).tone}-ink)`
+                : ramp((link.value ?? 0) / total)
+            }
             strokeOpacity={0.55}
             strokeWidth={Math.max(link.width ?? 1, 1)}
-          />
+            className="hover:[stroke-opacity:0.85]"
+          >
+            <title>
+              {`${link.value} ${unit}: ${(link.source as LaidOutNode).label} to ${(link.target as LaidOutNode).label}`}
+            </title>
+          </path>
         ))}
       </g>
       <g>
@@ -155,8 +173,14 @@ export function SankeyFlow({
                 y={node.y0}
                 width={node.x1 - node.x0}
                 height={Math.max(node.y1 - node.y0, 1)}
-                fill={ramp((node.value ?? 0) / total)}
-              />
+                fill={
+                  node.tone !== undefined
+                    ? `var(--color-${node.tone}-ink)`
+                    : ramp((node.value ?? 0) / total)
+                }
+              >
+                <title>{`${node.label}: ${(node.value ?? 0).toLocaleString()} ${unit}`}</title>
+              </rect>
               {/* The count travels with the label. A reader must never have to recover a
                   quantity from a band's thickness. */}
               <text

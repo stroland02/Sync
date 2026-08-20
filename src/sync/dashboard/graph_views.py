@@ -81,6 +81,10 @@ def _call_site_row(site) -> dict:
         "loop_depth": site.loop_depth,
         "binding_rung": _CALL_SITE_RUNG,
         "indexed_at": site.indexed_at.isoformat(),
+        # Index-captured window, or None on rows from passes that predate capture. Whether it
+        # reaches a client is the API's policy decision, applied at the route, not here.
+        "snippet": site.snippet,
+        "snippet_start_line": site.snippet_start_line,
     }
 
 
@@ -377,12 +381,58 @@ def observed_telemetry(
         else None
     )
 
+    # The rollup the live page leads with (owner direction 2026-08-19): traffic per operation,
+    # split by rung so correlated traffic and the unattributed gap never pool -- averaging a
+    # correlation gap into a measurement is the substitution this rung exists to refuse. The
+    # counts travel raw (requests, errors, unstatused); no rate is computed on this side, so
+    # the screen that divides them has to show both.
+    rollup = [_traffic_row(row) for row in store.observed_traffic_rollup(repo_id)]
+    traffic = [row for row in rollup if row["binding_rung"] == "observed"]
+    unattributed = [row for row in rollup if row["binding_rung"] != "observed"]
+    series = [
+        {
+            "bucket": row["bucket"].isoformat(),
+            "requests": int(row["requests"]),
+            "errors": int(row["errors"]),
+        }
+        for row in store.observed_traffic_series(repo_id)
+    ]
+
     return {
         "repo_id": repo_id,
         "telemetry_attached_at": telemetry_attached_at,
         "calls": calls_page,
         "shapes": shapes_page,
         "error_windows": windows_page,
+        "traffic": traffic,
+        "unattributed": unattributed,
+        "series": series,
+        "totals": {
+            "requests": sum(row["requests"] for row in traffic),
+            "errors": sum(row["errors"] for row in traffic),
+            "unstatused": sum(row["unstatused"] for row in traffic),
+            "unattributed_requests": sum(row["requests"] for row in unattributed),
+            "operations_observed": len(
+                {(row["vendor_id"], row["operation_id"]) for row in traffic}
+            ),
+            # The coverage denominator: how many distinct operations the index binds. Observed
+            # over indexed is the one join this page can make that neither table makes alone.
+            "operations_indexed": store.indexed_operation_count(repo_id),
+        },
+    }
+
+
+def _traffic_row(row: dict) -> dict:
+    return {
+        **row,
+        "traces": int(row["traces"]),
+        "requests": int(row["requests"]),
+        "errors": int(row["errors"]),
+        "unstatused": int(row["unstatused"]),
+        "distinct_targets": int(row["distinct_targets"]),
+        "max_resend": int(row["max_resend"]),
+        "first_seen": row["first_seen"].isoformat(),
+        "last_seen": row["last_seen"].isoformat(),
     }
 
 

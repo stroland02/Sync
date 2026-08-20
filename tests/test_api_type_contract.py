@@ -184,8 +184,6 @@ CONTRACTS = [
 #: along. The same field, found from the other side.
 KNOWN_UNDECLARED: dict[str, set[str]] = {
     "OverviewResponse": {"repositories"},
-    "RunsPage": {"by_disposition"},
-    "DetectorAccountabilityResponse": {"by_rung"},
 }
 
 

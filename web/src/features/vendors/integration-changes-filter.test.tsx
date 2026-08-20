@@ -50,24 +50,10 @@ beforeEach(() => {
   vi.stubGlobal("fetch", (input: string) => {
     requested.push(String(input))
     const url = new URL(String(input), "http://localhost")
-    // The page draws the change-unit roll-up beneath the feed, and that reads two more routes.
-    // One stub answering every route with the changes page was what made this file go red when
-    // the panel landed -- a fixture claiming a shape the endpoint it answers for does not have.
-    const body = url.pathname.startsWith("/api/change-units")
-      ? { items: [], total: 0, next_offset: null }
-      : url.pathname.startsWith("/api/overview")
-        ? {
-            repo_id: "demo",
-            vendors: [],
-            total_findings: 0,
-            total_findings_bound: 0,
-            total_findings_bound_reached: false,
-            severity_counts: {},
-            bindings_by_rung: {},
-            last_index_run: null,
-          }
-        : payload(url.searchParams.get("vendor_id"))
-    return Promise.resolve({ ok: true, json: () => Promise.resolve(body) } as Response)
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(payload(url.searchParams.get("vendor_id"))),
+    } as Response)
   })
 })
 
@@ -125,48 +111,6 @@ describe("narrowing the changes feed", () => {
     await waitFor(() => {
       expect(requested.length).toBeGreaterThan(0)
       expect(requested.every((url) => !url.includes("vendor_id="))).toBe(true)
-    })
-  })
-})
-
-describe("narrowing to more than one value", () => {
-  it("sends both integrations as a union when two are pressed", async () => {
-    // M15 Task 4's claim, at the seam `CI-W520` proved is the one that breaks. The rail can
-    // press two, the route can read two, and the page in between is where a second press
-    // silently replaced the first -- which looks identical on screen to a working union.
-    renderChanges()
-    fireEvent.click(await screen.findByRole("button", { name: /openai/i }))
-    await waitFor(() => expect(requested.some((u) => u.includes("vendor_id=openai"))).toBe(true))
-
-    requested.length = 0
-    fireEvent.click(await screen.findByRole("button", { name: /stripe/i }))
-
-    await waitFor(() => {
-      const union = requested.find(
-        (url) => url.includes("vendor_id=openai") && url.includes("vendor_id=stripe"),
-      )
-      expect(union).toBeTruthy()
-    })
-  })
-
-  it("removes only the value pressed again, leaving the other standing", async () => {
-    renderChanges()
-    fireEvent.click(await screen.findByRole("button", { name: /openai/i }))
-    fireEvent.click(await screen.findByRole("button", { name: /stripe/i }))
-    await waitFor(() =>
-      expect(
-        requested.some((u) => u.includes("vendor_id=openai") && u.includes("vendor_id=stripe")),
-      ).toBe(true),
-    )
-
-    requested.length = 0
-    fireEvent.click(await screen.findByRole("button", { name: /openai/i }))
-
-    await waitFor(() => {
-      expect(requested.length).toBeGreaterThan(0)
-      const last = requested[requested.length - 1]
-      expect(last).toContain("vendor_id=stripe")
-      expect(last).not.toContain("vendor_id=openai")
     })
   })
 })

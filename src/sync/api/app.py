@@ -63,6 +63,15 @@ DismissalTallyReader = Callable[[], dict[str, Any]]
 # second copy in the transport is the fact written twice that would disagree first.
 DismissalWriter = Callable[..., None]
 
+# The console's second write, owner-ruled 2026-08-19 and unlike the first one the console DOES
+# call it: a ticket is a remediation *request* row, and recording a request is not running one.
+# The route writes the row and returns; the runner that executes tickets is a separate process
+# (`sync tickets`), so no route here still triggers a run, clones a repository, or mutates what
+# the pipeline derived -- the read-only rule holds for the graph the pipeline writes, and the
+# ticket table is operator-facing state the same way `finding_dismissal` is.
+TicketWriter = Callable[[str, str], dict[str, Any]]
+TicketsReader = Callable[..., list[dict[str, Any]]]
+
 # The fleet roll-ups read the checkpointer and the graph store directly, outside `GraphSurface`
 # -- same reasoning as `WorkflowReader`: a run, a repair record and a repo_id roll-up are not
 # graph-surface questions, and folding them into the surface would ask one abstraction to speak
@@ -194,37 +203,6 @@ def _offset_param(request: Request, name: str = "offset") -> int:
     return max(_int_param(request, name, 0), 0)
 
 
-def _values_param(request: Request, name: str) -> list[str]:
-    """Every value given for one repeated query parameter, empties dropped.
-
-    A multi-select filter is spelled `?vendor_id=a&vendor_id=b` rather than as one
-    comma-joined value, because the values are vendor and operation identifiers and nothing
-    forbids a comma inside one -- a separator that can occur in the data is a parser that is
-    wrong on somebody's repository and wrong silently.
-
-    A single value is still `?vendor_id=a`, so a link a reader saved before this existed still
-    narrows to exactly what it did then.
-    """
-    return [value for value in request.query_params.getlist(name) if value]
-
-
-def _int_values_param(request: Request, name: str) -> list[int]:
-    """The same, for a numeric facet, with an unparseable value kept as unmatchable.
-
-    Dropping it would silently widen the set -- a hand-edited `?loop_depth=abc` would return
-    *more* rows than the URL asks for, which is the one direction a filter must never fail in.
-    `loop_depth` is `NOT NULL` and never negative, so -1 is a value the column cannot hold and
-    the honest empty page is what comes back.
-    """
-    depths: list[int] = []
-    for raw in _values_param(request, name):
-        try:
-            depths.append(int(raw))
-        except ValueError:
-            depths.append(-1)
-    return depths
-
-
 def _not_found(what: str, identifier: str) -> JSONResponse:
     return JSONResponse(
         {"error": f"{what} not found", "identifier": identifier}, status_code=404
@@ -273,6 +251,17 @@ def create_app(
     changes_over_time_reader: Callable[..., dict[str, Any]] | None = None,
     remediation_activity_reader: Callable[[], dict[str, Any]] | None = None,
     catalogue_reader: Callable[..., dict[str, Any]] | None = None,
+    # The captured snippet at one position (path, line, repo_id), or None. Separate from the
+    # frozen `GraphSurface` read the finding route composes with, which explains the call from
+    # its recorded shape and predates capture.
+    call_site_source_reader: Callable[[str, int, str | None], dict[str, Any] | None] | None = None,
+    ticket_writer: TicketWriter | None = None,
+    tickets_reader: TicketsReader | None = None,
+    # Owner re-ruling, 2026-08-19, scoping the threat-model rule above: bounded, index-captured
+    # source windows ARE served -- on a deployment that has not switched them off. Hosted
+    # deployments set SYNC_SERVE_SOURCE=false and the ruling's original argument (a partner can
+    # reach a hosted console) holds there unchanged. Whole files stay unserved everywhere.
+    serve_source: bool = True,
     api_password: str | None = None,
 ) -> Starlette:
     """Build the Starlette app bound to a particular surface and readers.
@@ -284,6 +273,20 @@ def create_app(
     at start-up with a `TypeError` naming the missing argument, not serve a route that 500s the
     first time a customer opens it.
     """
+
+    def _with_source_policy(payload: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """The payload, with snippets stripped where policy says so, and the policy stated.
+
+        `source_served` is always present so the console can tell policy from absence: a row
+        without a snippet on a serving deployment was indexed before capture existed, which is
+        a different nothing from a deployment that withholds them.
+        """
+        if not serve_source:
+            for row in rows:
+                row.pop("snippet", None)
+                row.pop("snippet_start_line", None)
+        payload["source_served"] = serve_source
+        return payload
     effective_findings_reader = findings_reader if findings_reader is not None else vendor_findings_reader
 
     async def overview(request: Request) -> JSONResponse:
@@ -380,10 +383,18 @@ def create_app(
             # The row named the site, so the surface should hold it; a `None` here is a
             # race between pages, and the honest answer is still "not found".
             return _not_found("finding", finding_id)
+        # The captured window around the call site, where policy serves it and a pass captured
+        # one. Fetched here rather than through `explain_call_site` because `GraphSurface` is
+        # frozen; `None` under `source_served: true` means no pass has captured this row yet.
+        source = None
+        if serve_source and call_site_source_reader is not None:
+            source = call_site_source_reader(row["file"], row["line"], row.get("repo_id"))
         # Forward finding-level fields: the finding's own rung, its severity, call site, and repository.
         return JSONResponse(
             {
                 **payload,
+                "source_served": serve_source,
+                "call_site_source": source,
                 "finding": {
                     "finding_id": finding_id,
                     "binding_source": row["binding_source"],
@@ -394,6 +405,35 @@ def create_app(
                 },
             }
         )
+
+    async def create_ticket(request: Request) -> JSONResponse:
+        """The console's one lane into remediation: record that an operator asked.
+
+        Writes the request row and returns it -- nothing here clones, patches, or invokes the
+        remediation graph. `sync tickets` is the process that picks requests up, so the API
+        stays a non-executor and a dead runner shows up as a ticket that stays `requested`
+        rather than as an HTTP timeout pretending to be progress.
+        """
+        if ticket_writer is None:
+            return JSONResponse({"error": "Ticket writer not configured"}, status_code=501)
+        finding_id = request.path_params["finding_id"]
+        row = surface.finding_by_id(finding_id)
+        if row is None:
+            return _not_found("finding", finding_id)
+        repo_id = row.get("repo_id")
+        if repo_id is None:
+            return JSONResponse(
+                {"error": "finding names no repository, so a ticket has nowhere to run"},
+                status_code=409,
+            )
+        return JSONResponse(ticket_writer(finding_id, repo_id))
+
+    async def list_tickets(request: Request) -> JSONResponse:
+        if tickets_reader is None:
+            return JSONResponse({"error": "Tickets reader not configured"}, status_code=501)
+        repo_id = request.path_params["repo_id"]
+        tickets = tickets_reader(repo_id, source=request.query_params.get("source"))
+        return JSONResponse({"repo_id": repo_id, "tickets": tickets})
 
     async def vendor_changes(request: Request) -> JSONResponse:
         vendor_id = request.path_params["vendor_id"]
@@ -587,8 +627,8 @@ def create_app(
             return JSONResponse({"error": "Changes reader not configured"}, status_code=501)
         return JSONResponse(
             integration_changes_reader(
-                vendor_ids=_values_param(request, "vendor_id"),
-                severities=_values_param(request, "severity"),
+                vendor_id=request.query_params.get("vendor_id"),
+                severity=request.query_params.get("severity"),
                 limit=_limit_param(request),
                 offset=_offset_param(request),
             )
@@ -605,17 +645,24 @@ def create_app(
         """
         if call_sites_reader is None:
             return JSONResponse({"error": "Call sites reader not configured"}, status_code=501)
+        page = call_sites_reader(
+            request.path_params["repo_id"],
+            vendor_ids=_values_param(request, "vendor_id"),
+            operation_ids=_values_param(request, "operation_id"),
+            loop_depths=_int_values_param(request, "loop_depth"),
+            path_prefix=request.query_params.get("path_prefix"),
+            limit=_limit_param(request),
+            offset=_offset_param(request),
         return JSONResponse(
             call_sites_reader(
                 request.path_params["repo_id"],
-                vendor_ids=_values_param(request, "vendor_id"),
-                operation_ids=_values_param(request, "operation_id"),
-                loop_depths=_int_values_param(request, "loop_depth"),
+                vendor_id=request.query_params.get("vendor_id"),
                 path_prefix=request.query_params.get("path_prefix"),
                 limit=_limit_param(request),
                 offset=_offset_param(request),
             )
         )
+        return JSONResponse(_with_source_policy(page, page.get("items", [])))
 
     async def codebase_facts_route(request: Request) -> JSONResponse:
         """One repository's technical census. `facts: null` is an answer -- indexed never, or
@@ -680,19 +727,22 @@ def create_app(
         repo_id = request.query_params.get("repo_id")
         path_prefix = request.query_params.get("path_prefix")
         binding_rung = request.query_params.get("binding_rung")
-        return JSONResponse(
-            binding_reader(
-                vendor_id,
-                operation_id,
-                repo_id=repo_id,
-                path_prefix=path_prefix,
-                binding_rung=binding_rung,
-                call_sites_limit=_limit_param(request, "call_sites_limit"),
-                call_sites_offset=_offset_param(request, "call_sites_offset"),
-                changes_limit=_limit_param(request, "changes_limit"),
-                changes_offset=_offset_param(request, "changes_offset"),
-            )
+        payload = binding_reader(
+            vendor_id,
+            operation_id,
+            repo_id=repo_id,
+            path_prefix=path_prefix,
+            binding_rung=binding_rung,
+            call_sites_limit=_limit_param(request, "call_sites_limit"),
+            call_sites_offset=_offset_param(request, "call_sites_offset"),
+            changes_limit=_limit_param(request, "changes_limit"),
+            changes_offset=_offset_param(request, "changes_offset"),
         )
+        # Only the paged shape carries rows that can hold a snippet; anything else has nothing
+        # to strip and still gets the policy statement.
+        sites = payload.get("call_sites")
+        rows = sites.get("items", []) if isinstance(sites, dict) else []
+        return JSONResponse(_with_source_policy(payload, rows))
 
     async def repository_coverage(request: Request) -> JSONResponse:
         repo_id = request.path_params["repo_id"]
@@ -871,6 +921,8 @@ def create_app(
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
         Route("/api/findings/{finding_id}/dismissal", get_dismissal, methods=["GET"]),
         Route("/api/findings/{finding_id}/dismissal", set_dismissal, methods=["POST"]),
+        Route("/api/findings/{finding_id}/ticket", create_ticket, methods=["POST"]),
+        Route("/api/repositories/{repo_id:path}/tickets", list_tickets, methods=["GET"]),
         Route("/api/workflows/{finding_id}", workflow, methods=["GET"]),
         Route("/api/runs", runs, methods=["GET"]),
         Route("/api/setup", setup, methods=["GET"]),
