@@ -290,12 +290,8 @@ export function useChangeUnits(params: ChangeUnitsParams = {}) {
   const limit = params.limit ?? DEFAULT_LIMIT
   const offset = params.offset ?? 0
   return useQuery({
-    queryKey: ["change-units", params.repoId ?? null, params.severity ?? null, limit, offset],
-    queryFn: ({ signal }) =>
-      fetchChangeUnits(
-        { repoId: params.repoId, severity: params.severity, limit, offset },
-        signal,
-      ),
+    queryKey: ["change-units", params.repoId ?? null, limit, offset],
+    queryFn: ({ signal }) => fetchChangeUnits({ repoId: params.repoId, limit, offset }, signal),
   })
 }
 

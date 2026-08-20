@@ -1,44 +1,70 @@
 /**
- * An integration's mark: a monogram in a palette slot, drawn here and fetched from nowhere.
+ * A vendor's own mark, fetched, small, for identification.
  *
- * **M15 Task 5, owner ruling 2026-08-19: the neutral generated mark.** A vendor's logo is their
- * trademark, and `.claude/rules/interface-originality.md` excludes identity elements from every
- * reference Sync studies. That reasoning extends to the vendors Sync *watches*, so the console
- * draws its own mark rather than reproducing theirs.
+ * **This reverses a refusal, on the owner's ruling (decision 6).** The refusal reasoned that Sync
+ * holds no image and no brand colour for a vendor, so rendering an id was the honest answer. The
+ * half of that argument the decision keeps is the important half and it is kept here literally:
+ * **the mark is never redrawn.** Nothing in this file draws a path, approximates a wordmark or
+ * picks a brand colour. It requests the vendor's own file from a well-known endpoint and, when
+ * that endpoint has none, falls back to letters from the id.
  *
- * ## What this replaces, and why its removal is the point
+ * **The id remains the identity.** The mark is an aid to finding a row in a list, so it is
+ * decorative — `alt=""` — and never replaces the id beside it. A card that showed only a mark
+ * would be claiming Sync knows which company a vendor id belongs to, which it does not; it knows
+ * a string the graph keys on.
  *
- * This module used to build a `logo.clearbit.com` URL and render an `<img>` from it, falling back
- * to letters when the request failed. Three things were wrong with that, and only the first is
- * about trademarks:
+ * The monogram renders at `--text-meta` and not below it. DESIGN.md holds 12px as a floor
+ * rather than the small end of a range, and a label out of room takes fewer characters
+ * instead of a smaller step -- which `monogramFor` already does by capping at two.
  *
- * - **It put third-party marks in the product**, each under its own licence, none reviewed.
- * - **It called a third party from the operator's browser on every render of every vendor.** That
- *   endpoint learns which integrations a customer watches, which is a fact about their codebase —
- *   and Sync's position is that it holds as little of that as it can.
- * - **It made the console's appearance depend on a network** it does not control. A mark that
- *   resolves at a desk and not in a locked-down deployment is a screen that looks broken there.
+ * **The domain is derived, not known.** Sync holds no homepage for a vendor, so the endpoint is
+ * asked about `<id>.com` and the answer is allowed to be "no". That guess is wrong for some
+ * vendors and the degradation is what makes being wrong harmless: a miss renders a monogram, which
+ * is the same thing that renders when a vendor genuinely has no mark. The alternative — a
+ * hard-coded id-to-domain table — would put vendor-specific knowledge in a shared component, which
+ * is the arrangement `CLAUDE.md` refuses everywhere else.
  *
- * Deleted rather than flagged off. `CLAUDE.md`: *delete rather than deprecate* — a disabled fetch
- * is one edit away from being a live one, and `fetchMarks` already defaulted to `true`.
- *
- * ## The colour is identity, not judgement
- *
- * `console-surface.md` lets three channels carry a claim, and none of them is this — a vendor's
- * slot says *which vendor*, exactly as a series colour on a chart says which series. It is drawn
- * from `SERIES_SLOTS`, the categorical palette `DESIGN.md` already argues and whose contrast is
- * already proven there, so this introduces **no new token**. A ninth vendor takes `OTHER_INK`,
- * the contract's own answer for a member past the eighth.
- *
- * The letters carry the identity on their own, so the colour is never the only channel — the same
- * rule a status colour follows.
+ * **This request leaves the machine, and that is a real consequence rather than a footnote.** The
+ * endpoint learns which vendors a codebase depends on. Sync holds no customer secrets and a vendor
+ * id is not one, but the set of them is a fact about a private codebase, and a deployment that
+ * cannot accept that should render monograms. `withoutFetchedMarks` is how that is turned off.
  */
 
-import { OTHER_INK, SERIES_SLOTS } from "@/lib/palette"
-import { vendorName } from "@/features/vendors/vendor-name"
+import { useState } from "react"
 
 /**
- * The letters shown for a vendor: one per part of the id, at most two.
+ * Whether marks are fetched at all.
+ *
+ * A single switch rather than a prop on every call site, because the decision it encodes is a
+ * deployment's, not a screen's.
+ */
+let fetchMarks = true
+
+/** Render monograms only, never reaching the network. Returns the previous setting. */
+export function withoutFetchedMarks(disabled: boolean): boolean {
+  const previous = !fetchMarks
+  fetchMarks = !disabled
+  return previous
+}
+
+/** A hostname label: letters, digits and hyphens, not starting or ending with a hyphen. */
+const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
+
+/**
+ * Where a vendor's mark is asked for, or `null` when the id cannot be part of a hostname.
+ *
+ * Returning `null` rather than a sanitised guess is deliberate: an id holding a space or a path
+ * separator is not a company this endpoint can answer about, and encoding it into a URL would
+ * send a malformed lookup rather than skip one.
+ */
+export function vendorMarkUrl(vendorId: string): string | null {
+  const label = vendorId.trim().toLowerCase()
+  if (!HOSTNAME_LABEL.test(label)) return null
+  return `https://logo.clearbit.com/${label}.com?size=64`
+}
+
+/**
+ * The letters shown when no mark is served: one per part of the id, at most two.
  *
  * `google-maps` gives `GM` and `stripe` gives `S`. Two is the cap because a third letter stops
  * being a monogram and starts being a truncated word.
@@ -52,46 +78,41 @@ export function monogramFor(vendorId: string): string {
   return initials.length === 0 ? "?" : initials.slice(0, 2).join("")
 }
 
-/**
- * Which palette slot a vendor takes.
- *
- * Hashed from the id rather than assigned by position, so a vendor keeps its colour wherever it
- * appears and whatever else is on screen beside it — a mark that changed colour between two
- * screens would be read as two different integrations.
- *
- * Deliberately not a generated hue: the slots are the contract's, and their contrast against the
- * surface is proven in `DESIGN.md` rather than hoped for here.
- */
-export function slotFor(vendorId: string): string {
-  const key = vendorId.trim().toLowerCase()
-  if (key === "") return OTHER_INK
-
-  let hash = 0
-  for (const character of key) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
-  }
-  return SERIES_SLOTS[hash % SERIES_SLOTS.length]
-}
-
 export interface VendorMarkProps {
-  /** The vendor id: the source of both the monogram and the slot. */
+  /** The vendor id. Both the lookup key and, on failure, the source of the monogram. */
   readonly vendorId: string
 }
 
 export function VendorMark({ vendorId }: VendorMarkProps) {
-  return (
-    <span
-      className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-line"
-      style={{ backgroundColor: slotFor(vendorId) }}
-      data-testid="vendor-mark-monogram"
-      // The name is beside the mark everywhere it is used, so announcing the letters again would
-      // read the vendor twice to a screen reader.
-      aria-hidden="true"
-      title={vendorName(vendorId)}
-    >
-      <span className="font-mono text-meta leading-none text-[#101211]">
-        {monogramFor(vendorId)}
+  const url = fetchMarks ? vendorMarkUrl(vendorId) : null
+  const [served, setServed] = useState(true)
+
+  const frame =
+    "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-line bg-surface-muted"
+
+  if (url === null || !served) {
+    return (
+      <span className={frame} data-testid="vendor-mark-monogram" aria-hidden="true">
+        <span className="font-mono text-meta leading-none text-ink-muted">
+          {monogramFor(vendorId)}
+        </span>
       </span>
+    )
+  }
+
+  return (
+    <span className={frame}>
+      <img
+        data-testid="vendor-mark-image"
+        src={url}
+        alt=""
+        width={24}
+        height={24}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        className="size-full object-contain"
+        onError={() => setServed(false)}
+      />
     </span>
   )
 }

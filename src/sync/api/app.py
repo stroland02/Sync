@@ -772,10 +772,6 @@ def create_app(
         return JSONResponse(
             change_units_reader(
                 repo_id=request.query_params.get("repo_id"),
-                # Passed through unvalidated, as every other filter here is: a severity outside
-                # the vocabulary matches nothing, and an empty page is the honest answer to a
-                # stale bookmark where a 400 turns yesterday's URL into an error screen.
-                severity=request.query_params.get("severity"),
                 limit=_limit_param(request),
                 offset=_offset_param(request),
             )

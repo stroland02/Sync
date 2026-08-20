@@ -56,7 +56,6 @@ import {
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { FooterBar } from "@/layouts/footer-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { vendorName } from "@/features/vendors/vendor-name"
 import { useFacetParam } from "@/lib/use-facet-param"
 import { useFilterListParam } from "@/lib/use-filter-list-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -427,7 +426,7 @@ export function CallSitesPage() {
                         <TableCell className="font-mono">{site.symbol}</TableCell>
                       )}
                       {columns.isVisible("vendor") && (
-                        <TableCell className="text-meta">{vendorName(site.vendor_id)}</TableCell>
+                        <TableCell className="font-mono text-meta">{site.vendor_id}</TableCell>
                       )}
                       {columns.isVisible("operation") && (
                       <TableCell className="font-mono text-meta">

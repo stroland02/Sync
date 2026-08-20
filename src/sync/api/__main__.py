@@ -357,16 +357,8 @@ def app_factory() -> Starlette:
     def adapters_reader():
         return adapter_inventory(store)
 
-    def change_units_reader(
-        *,
-        repo_id: str | None = None,
-        severity: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ):
-        return fleet.change_units(
-            store, checkpointer_dsn, repo_id=repo_id, severity=severity, limit=limit, offset=offset
-        )
+    def change_units_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+        return fleet.change_units(store, checkpointer_dsn, repo_id=repo_id, limit=limit, offset=offset)
 
     def context_reader(repo_id: str):
         return graph_views.repo_context(store, repo_id)

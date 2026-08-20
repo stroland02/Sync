@@ -62,23 +62,6 @@ action outside the repository, a decision that invalidates the plan's architectu
 needing a credential or a spend. One blocking question once idled a milestone for three hours.
 `.claude/rules/autonomous-development.md`.
 
-**When one of the three does arrive, ask it as multiple choice.** Owner instruction, 2026-08-19.
-Options with the trade-off spelled out, a recommendation first, and enough context to rule without
-opening the code. This is a rule about *form*, not frequency -- it does not license asking more, and
-an open-ended "what would you like?" is the shape it replaces, because it hands the work of framing
-the decision back to the person with the least context loaded.
-
-**If no answer comes, take your own recommendation and keep going.** Owner instruction, and it is
-what makes the rule safe rather than a new way to stall: mark the option you would pick, and on
-silence proceed as if it had been chosen -- record it as a ruling in the plan's ledger, name it as
-reversible in the next report, and carry on. A question asked and then waited on is the three-hour
-milestone stall wearing a nicer interface.
-
-The two genuine stops are unchanged, and silence is not consent for either: **an irreversible action
-outside the repository, and anything spending money or needing a credential.** Those wait. Everything
-else proceeds on the recommendation, which is why the recommendation has to be the one you would
-actually defend.
-
 **Test first, and watch it fail for the reason you expect.** A test that has never failed has never
 been shown to test anything. When a test asserts on a subprocess, an exit code or an external tool,
 break it deliberately and watch it go red before trusting it — the import-boundary test's original

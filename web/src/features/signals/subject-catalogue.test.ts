@@ -26,7 +26,6 @@ describe("attachedVendors", () => {
       by_vendor: { stripe: 3, twilio: 2 },
       last_indexed: { stripe: INDEXED, twilio: INDEXED },
       total_call_sites: 5,
-      by_service: [],
     })
     expect(entries.map((entry) => entry.vendorId)).toEqual(["stripe", "twilio"])
     expect(entries.map((entry) => entry.callSites)).toEqual([3, 2])
@@ -38,7 +37,6 @@ describe("attachedVendors", () => {
       by_vendor: { twilio: 2, stripe: 3 },
       last_indexed: {},
       total_call_sites: 5,
-      by_service: [],
     })
     expect(entries.map((entry) => entry.vendorId)).toEqual(["stripe", "twilio"])
   })
@@ -49,7 +47,6 @@ describe("attachedVendors", () => {
       by_vendor: { stripe: 3 },
       last_indexed: {},
       total_call_sites: 3,
-      by_service: [],
     })
     expect(entries).toHaveLength(1)
     expect(entries[0]?.lastIndexed).toBeUndefined()
@@ -57,13 +54,7 @@ describe("attachedVendors", () => {
 
   it("has nothing to draw when the index holds no call site", () => {
     expect(
-      attachedVendors({
-        repo_id: "r",
-        by_vendor: {},
-        last_indexed: {},
-        total_call_sites: 0,
-        by_service: [],
-      }),
+      attachedVendors({ repo_id: "r", by_vendor: {}, last_indexed: {}, total_call_sites: 0 }),
     ).toEqual([])
   })
 })
