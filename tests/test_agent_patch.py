@@ -377,6 +377,20 @@ def test_run_agent_configures_the_repo_cwd_and_the_pinned_model(monkeypatch, tmp
     assert options.disallowed_tools == DISALLOWED_TOOLS
 
 
+def test_the_tools_the_gate_would_refuse_are_denied_before_the_model_sees_them():
+    """`Skill` and `Task` are refused by the tool gate, and an unlisted tool is not a blocked
+    tool -- the model still sees it, reaches for it, and burns the attempt on a refusal.
+    Measured live on 2026-08-20: two remediation runs on demo-v1 ended as "the remediator
+    produced no change" because the agent asked for `Skill` twice and gave up. A denial has
+    to be stated, so the pair the gate refuses and the SDK advertises is denied here too.
+    """
+    assert "Skill" in DISALLOWED_TOOLS
+    assert "Task" in DISALLOWED_TOOLS
+    # The pair that was always denied stays denied.
+    assert "WebSearch" in DISALLOWED_TOOLS
+    assert "WebFetch" in DISALLOWED_TOOLS
+
+
 def test_the_run_loads_no_settings_from_the_filesystem(monkeypatch, tmp_path):
     """`cwd` is a clone of a customer's repository, and `.claude/settings.json` is a file that
     repository may ship.

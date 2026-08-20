@@ -450,14 +450,20 @@ def test_the_bindings_reported_are_the_ones_the_adapters_declare():
 
 
 def test_a_registered_vendor_that_declares_no_binding_is_visible_as_such():
-    """The finding this task surfaces rather than fixes: four of six registered vendors resolve
+    """The finding this task surfaces rather than fixes: most registered vendors resolve
     through the registry and can bind no call site, so they can be watched in principle and not
-    in fact. Asserted so the number cannot quietly drift in either direction unnoticed."""
+    in fact. Asserted so the number cannot quietly drift in either direction unnoticed --
+    the drift it caught: the generated-adapter fleet took the unbound set from four to sixteen,
+    and this count moved a landing rather than moving silently."""
     bound = set(vendor_sdk_bindings())
     registered = {vendor for vendor in available_vendors() if not vendor.startswith("mcp:")}
 
     assert bound == {"stripe", "twilio"}
-    assert registered - bound == {"anthropic", "cloudflare", "openai", "vercel"}
+    assert registered - bound == {
+        "anthropic", "browserbase", "cloudflare", "finch", "groq", "increase", "lithic",
+        "mistral", "modern-treasury", "openai", "openlayer", "orb", "perplexity", "ragie",
+        "retell-ai", "vercel",
+    }
 
 
 def test_reading_a_manifest_reaches_no_network(monkeypatch):

@@ -85,9 +85,12 @@ def fake_npx_on_path(tmp_path: Path, monkeypatch) -> Path:
 @pytest.fixture()
 def project(tmp_path: Path) -> Path:
     # No node_modules/.bin/tsc anywhere in this tree, so run_tsc must take
-    # the npx fallback branch -- the one this test is about.
+    # the npx fallback branch -- the one this test is about. A tsconfig has to
+    # exist, because run_tsc now refuses a tree with no TypeScript project in
+    # it before it ever resolves a compiler.
     repo = tmp_path / "repo"
     repo.mkdir()
+    (repo / "tsconfig.json").write_text("{}", encoding="utf-8")
     return repo
 
 

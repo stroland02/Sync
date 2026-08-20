@@ -1341,6 +1341,8 @@ def _origin_with_a_pushed_branch(tmp_path: Path) -> tuple[Path, str]:
 
 def _stub_the_run(monkeypatch, graph, store):
     """Everything `run()` touches outside the loop under test."""
+    import contextlib
+
     from sync.signals.registry import PreparedVendor
 
     monkeypatch.setattr(
@@ -1354,6 +1356,10 @@ def _stub_the_run(monkeypatch, graph, store):
     monkeypatch.setattr(cli, "PostgresSaver", _MemoryCheckpointer)
     monkeypatch.setattr(cli, "load_catalogue", dict)
     monkeypatch.setattr(cli, "build_graph", lambda **kwargs: graph)
+    # The heartbeat (B194) opens its own real connection on a timer thread, and this suite's
+    # DSN deliberately resolves to nothing -- existence-reporting is test_run_heartbeat.py's
+    # subject, not this one's.
+    monkeypatch.setattr(cli, "RunHeartbeat", lambda dsn, thread_id: contextlib.nullcontext())
 
 
 def _run_args(origin: Path, tmp_path: Path, run_id: str):

@@ -64,6 +64,11 @@ class _RecordingStore:
     def fail_index_run(self, repo_id, *, started_at, at, outcome):
         self.runs.append(("fail", repo_id, outcome))
 
+    def upsert_codebase_facts(self, repo_id, facts):
+        # The index pass records what it measured about the checkout; the double only needs to
+        # accept the write, because what the facts contain is compute_facts' own test's subject.
+        self.written.setdefault("facts", []).append((repo_id, facts))
+
 
 def test_the_parser_offers_an_index_subcommand():
     """It did not exist. `run`, `ingest`, `shapes`, `merge`, `publish`, `intake`, `benchmark`,

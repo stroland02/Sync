@@ -747,6 +747,10 @@ def test_two_findings_in_one_run_produce_branches_that_share_no_commits(tmp_path
     monkeypatch.setattr(cli, "AgentRemediator", _EditingRemediator)
     monkeypatch.setattr(cli, "GitHubForge", _LocalForge)
     monkeypatch.setattr(cli, "PostgresSaver", _MemoryCheckpointer)
+    # The heartbeat (B194) opens its own real connection, and this DSN deliberately resolves
+    # to nothing; existence-reporting is test_run_heartbeat.py's subject.
+    import contextlib
+    monkeypatch.setattr(cli, "RunHeartbeat", lambda dsn, thread_id: contextlib.nullcontext())
 
     args = argparse.Namespace(
         vendor="stripe", from_version="v2320", to_version="v2330", repo=str(origin),

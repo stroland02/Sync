@@ -197,6 +197,11 @@ class _RecordingStore:
     def missing_tables(self) -> list[str]:
         return []
 
+    def call_site_source(self, call_site_id: str):
+        # The app factory binds this method as the snippet reader; the fake only needs the
+        # attribute to exist for the wiring under test, which is DSN resolution.
+        return None
+
 
 def test_the_api_and_the_cli_resolve_the_same_default_graph(monkeypatch):
     """Two entry points, one fact. `python -m sync.api` used to raise a bare KeyError here

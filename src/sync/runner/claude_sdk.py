@@ -47,7 +47,13 @@ ALLOWED_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
 # Not merely omitted from ALLOWED_TOOLS: an unlisted tool still falls through
 # to the permission mode instead of being blocked, so network tools have to be
 # denied explicitly to guarantee none run.
-DISALLOWED_TOOLS = ["WebSearch", "WebFetch"]
+#
+# `Skill` and `Task` are here because the tool gate refuses them and an attempted-then-refused
+# tool is a wasted attempt: two live runs on 2026-08-20 ended as "the remediator produced no
+# change" after the agent reached for `Skill` twice. Denied at the SDK, the model never sees
+# either. A skill *inside* the patch lane is a designed change against the threat model
+# (a clone can ship hostile `.claude/skills/`), not a name removed from this list.
+DISALLOWED_TOOLS = ["WebSearch", "WebFetch", "Skill", "Task"]
 
 # No settings are read from any filesystem. `cwd` is a clone of a customer's repository, and
 # `setting_sources` defaults to `None`, which the SDK documents as "all sources are loaded" --

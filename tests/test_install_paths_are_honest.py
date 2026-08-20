@@ -65,7 +65,10 @@ def test_the_readme_states_the_publication_fact_one_way_or_the_other():
     that stopped stating the fact at all would make that guard pass vacuously while telling a
     visitor nothing -- the same defect as a check that cannot fail.
     """
-    assert _readme_says_it_is_not_published() or "npx sync-up" in _readme(), (
+    # The command is derived from the manifest, the way the guard below already derives it:
+    # the package published under its scoped name, and a literal spelling here went stale the
+    # day it did.
+    assert _readme_says_it_is_not_published() or f"npx {_manifest()['name']}" in _readme(), (
         "the README neither says the package is unpublished nor prints the command -- state the "
         "fact one way or the other, because a visitor cannot measure the registry from a README"
     )

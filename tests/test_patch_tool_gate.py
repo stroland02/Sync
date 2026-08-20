@@ -29,6 +29,15 @@ from sync.remediate import agent_patch, tool_gate
 from sync.remediate.agent_patch import AgentRemediator
 
 
+@pytest.fixture(autouse=True)
+def _connected_provider(monkeypatch):
+    """A provider, because the runner refuses without one -- same fixture, same reason, as
+    `test_agent_patch.py`: every test here that reaches `ClaudeSdkRunner` has to connect a
+    model, and one that only exercises the gate is unharmed by the variables existing."""
+    monkeypatch.setenv("SYNC_MODEL", "claude-opus-5")
+    monkeypatch.setenv("SYNC_MODEL_API_KEY", "test-key-not-a-real-credential")
+
+
 def _decide(tool_name: str, tool_input: dict, cwd: str = "/clone") -> str | None:
     return tool_gate.refusal(tool_name, tool_input, cwd)
 
