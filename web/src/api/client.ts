@@ -164,7 +164,7 @@ export function fetchVendorFindings(
     limit: params.limit,
     offset: params.offset,
     repo_id: params.repoId,
-    severity: params.severity ?? undefined,
+    severity: params.severity,
     path: params.path,
     order: params.order,
   })
@@ -342,15 +342,7 @@ export function fetchCorpus(signal?: AbortSignal): Promise<CorpusSummary> {
   return getJson<CorpusSummary>("/api/corpus", signal)
 }
 
-export interface ChangeUnitsParams extends PageParams, ScopeParams {
-  /**
-   * Narrow to one severity before grouping.
-   *
-   * Before rather than after is the whole reconciliation: a unit then reports the findings of
-   * this severity it holds, and the sum still equals the flat total for the same tab.
-   */
-  severity?: string | null
-}
+export interface ChangeUnitsParams extends PageParams, ScopeParams {}
 
 /**
  * Open findings grouped by the vendor change and operation that produced them —
@@ -367,10 +359,6 @@ export function fetchChangeUnits(
 ): Promise<ChangeUnitsPage> {
   const path = withQueryParams("/api/change-units", {
     repo_id: params.repoId,
-    // The severity narrows findings *before* they are grouped, so the grouped totals reconcile
-    // with the flat ones on every tab. A tab that stopped applying once the view changed would
-    // look active over numbers true of something else.
-    severity: params.severity ?? undefined,
     limit: params.limit,
     offset: params.offset,
   })

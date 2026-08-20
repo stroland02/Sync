@@ -16,7 +16,6 @@ instead, naming the commands that fill one.
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
 from pathlib import Path
 
 import uvicorn
@@ -199,32 +198,26 @@ def app_factory() -> Starlette:
 
     def integration_changes_reader(
         *,
-        vendor_ids: Sequence[str] = (),
-        severities: Sequence[str] = (),
+        vendor_id: str | None = None,
+        severity: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ):
         return store.vendor_changes_page(
-            vendor_ids=vendor_ids, severities=severities, limit=limit, offset=offset
+            vendor_id=vendor_id, severity=severity, limit=limit, offset=offset
         )
 
     def call_sites_reader(
         repo_id: str,
         *,
-        vendor_ids: Sequence[str] = (),
-        operation_ids: Sequence[str] = (),
-        loop_depths: Sequence[int] = (),
-        binding_statuses: Sequence[str] = (),
+        vendor_id: str | None = None,
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ):
         return store.call_sites_page(
             repo_id,
-            vendor_ids=vendor_ids,
-            operation_ids=operation_ids,
-            loop_depths=loop_depths,
-            binding_statuses=binding_statuses,
+            vendor_id=vendor_id,
             path_prefix=path_prefix,
             limit=limit,
             offset=offset,
@@ -369,16 +362,8 @@ def app_factory() -> Starlette:
     def adapters_reader():
         return adapter_inventory(store)
 
-    def change_units_reader(
-        *,
-        repo_id: str | None = None,
-        severity: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ):
-        return fleet.change_units(
-            store, checkpointer_dsn, repo_id=repo_id, severity=severity, limit=limit, offset=offset
-        )
+    def change_units_reader(*, repo_id: str | None = None, limit: int = 50, offset: int = 0):
+        return fleet.change_units(store, checkpointer_dsn, repo_id=repo_id, limit=limit, offset=offset)
 
     def context_reader(repo_id: str):
         return graph_views.repo_context(store, repo_id)

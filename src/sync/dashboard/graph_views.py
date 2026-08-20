@@ -45,7 +45,6 @@ from collections import Counter
 
 from sync.core import ALLOWED_MERGE_METHODS, ALLOWED_MERGE_POLICIES
 from sync.core.models import FINDING_RUNGS, SEVERITY_ORDER
-from sync.core.naming import finding_name
 from sync.graph.store import DEFAULT_FINDING_ORDER, FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, _TOKENS_PER_AVOIDED_READ
 
@@ -260,15 +259,6 @@ def index_coverage(store: GraphStore, repo_id: str) -> dict:
             vendor_id: last_indexed.isoformat() for vendor_id, (_, last_indexed) in coverage.items()
         },
         "total_call_sites": sum(count for count, _ in coverage.values()),
-        # How much of this codebase's API surface is at risk, clean, or unexamined — counted over
-        # **operations**, not call sites, so one heavily-called operation cannot dominate a figure
-        # meant to describe breadth. The owner's question of 2026-08-19: the console showed what
-        # was broken and nothing else, so a call that is fine appeared nowhere.
-        #
-        # A status absent here was not counted at nought, and an empty object is a repository with
-        # no call sites at all. A render site that fills a missing key with a zero would claim its
-        # operations had been examined and found clean.
-        "by_binding_status": store.binding_status_rollup(repo_id),
     }
 
 
@@ -483,12 +473,6 @@ def findings_page(
                     "change_kind": row["change_kind"],
                     "severity": row["severity"],
                     "finding_id": row["finding_id"],
-                    # Derived here rather than in the console, so the name a reader reads on
-                    # screen is the name the CLI prints and a pull-request body carries. Three
-                    # copies of one derivation is where they would start to differ.
-                    "name": finding_name(
-                        row["vendor_id"], row["operation_id"], row["finding_id"]
-                    ),
                     "binding_source": row["binding_rung"],
                 }
                 for row in rows

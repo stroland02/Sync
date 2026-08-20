@@ -27,8 +27,8 @@ from sync.api.__main__ import DEFAULT_PORT, _reload_enabled, app_factory
 from sync.api.app import _MAX_LIMIT, create_app
 from sync.core import CallSite, Finding, VendorChange
 from sync.core.models import UNATTRIBUTED, BindingRung
-from sync.dashboard.queries import DISPOSITIONS, _FINISHED
-from sync.graph.store import BINDING_STATUSES, FINDING_ORDERS, GraphStore
+from sync.dashboard.queries import _FINISHED
+from sync.graph.store import FINDING_ORDERS, GraphStore
 from sync.mcp.tools import DEFAULT_LIMIT, GraphSurface
 
 INDEXED = datetime(2026, 7, 28, 6, 0, tzinfo=timezone.utc)
@@ -1136,10 +1136,8 @@ def test_change_units_route_returns_readers_payload_unaltered():
 def test_change_units_route_passes_query_params():
     calls: list[dict[str, Any]] = []
 
-    def reader(*, repo_id=None, severity=None, limit=DEFAULT_LIMIT, offset=0):
-        calls.append(
-            {"repo_id": repo_id, "severity": severity, "limit": limit, "offset": offset}
-        )
+    def reader(*, repo_id=None, limit=DEFAULT_LIMIT, offset=0):
+        calls.append({"repo_id": repo_id, "limit": limit, "offset": offset})
         return {"items": [], "total": 0, "next_offset": None}
 
     app = _build_app(
@@ -1148,16 +1146,8 @@ def test_change_units_route_passes_query_params():
     )
     client = TestClient(app)
 
-    client.get("/api/change-units?repo_id=r1&severity=breaking&limit=25&offset=50")
-    assert calls == [
-        {"repo_id": "r1", "severity": "breaking", "limit": 25, "offset": 50}
-    ]
-
-    # Absent means unnarrowed, and the reader is told so explicitly rather than by omission:
-    # the severity tabs must be able to return to the whole set.
-    calls.clear()
-    client.get("/api/change-units?repo_id=r1")
-    assert calls[0]["severity"] is None
+    client.get("/api/change-units?repo_id=r1&limit=25&offset=50")
+    assert calls == [{"repo_id": "r1", "limit": 25, "offset": 50}]
 
 
 # -- the graph views: bindings, coverage, observed telemetry, detectors --------
@@ -2193,7 +2183,7 @@ def test_the_consoles_run_disposition_matches_the_finished_outcomes():
     # the console must render, and a run waiting on a human read as *in flight* for exactly as
     # long as this test held the narrower set -- the binding was doing its job, against the wrong
     # authority.
-    assert members == set(DISPOSITIONS)
+    assert members == set(_FINISHED)
 
 
 def test_the_consoles_finding_order_matches_the_orderings_the_store_offers():
@@ -2912,79 +2902,6 @@ def test_the_dismissal_tally_is_reachable_and_not_shadowed_by_the_finding_route(
     assert response.json() == {"counts": {"wont_fix": 2}, "total": 2}
 
 
-def test_a_repeated_filter_parameter_reaches_the_reader_as_a_set():
-    """M15 Task 4's seam, and `CI-W520` is why it has a test of its own.
-
-    The rail passed, the route passed, and the wiring between them was the defect. Here the
-    equivalent seam is the query string: `?vendor_id=a&vendor_id=b` has to arrive as two values.
-    `request.query_params.get` returns only the first, so a route left on the scalar accessor
-    would narrow to one integration while the rail showed two pressed -- and every isolated test
-    on either side would still be green.
-    """
-    seen: dict[str, Any] = {}
-
-    def reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
-        seen.update(kwargs)
-        return {"items": [], "total": 0, "next_offset": None}
-
-    client = TestClient(
-        _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), call_sites_reader=reader)
-    )
-    client.get("/api/repositories/r1/call-sites?vendor_id=stripe&vendor_id=twilio")
-
-    assert seen["vendor_ids"] == ["stripe", "twilio"]
-
-
-def test_no_filter_parameter_is_an_empty_set_rather_than_a_none():
-    """An absent filter is "do not narrow", spelled the same way an emptied rail spells it.
-
-    Two spellings of unfiltered -- `None` and `[]` -- would each need handling at every layer
-    below, and the one that got forgotten would be the one that silently matched nothing.
-    """
-    seen: dict[str, Any] = {}
-
-    def reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
-        seen.update(kwargs)
-        return {"items": [], "total": 0, "next_offset": None}
-
-    client = TestClient(
-        _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), call_sites_reader=reader)
-    )
-    client.get("/api/repositories/r1/call-sites")
-
-    assert seen["vendor_ids"] == []
-    assert seen["operation_ids"] == []
-    assert seen["loop_depths"] == []
-
-
-def test_an_unparseable_loop_depth_narrows_to_nothing_rather_than_widening():
-    """The one direction a filter must never fail in.
-
-    Dropping the unreadable value would return *more* rows than the URL asks for -- a reader
-    who typed a depth wrong would be shown call sites at every other depth and have no way to
-    tell. `loop_depth` is `NOT NULL` and never negative, so an unmatchable value is what goes
-    down instead and the honest empty page comes back.
-    """
-    seen: dict[str, Any] = {}
-
-    def reader(repo_id: str, **kwargs: Any) -> dict[str, Any]:
-        seen.update(kwargs)
-        return {"items": [], "total": 0, "next_offset": None}
-
-    client = TestClient(
-        _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), call_sites_reader=reader)
-    )
-    client.get("/api/repositories/r1/call-sites?loop_depth=2&loop_depth=abc")
-
-    assert seen["loop_depths"] == [2, -1]
-# -- source policy ----------------------------------------------------------------
-#
-# Owner re-ruling 2026-08-19, scoping the threat-model rule at the top of `app.py`: bounded,
-# index-captured windows are served unless the deployment switches them off. `source_served`
-# is always present so a console can tell policy from absence -- a row with no snippet on a
-# serving deployment was indexed before capture existed, a different nothing from withheld.
-
-
 def _source_policy_client(serve_source: bool) -> TestClient:
     def reader(repo_id, **_kw):
         return {
@@ -3079,16 +2996,3 @@ def test_the_tickets_route_forwards_the_lane_filter():
 
     assert len(everything["tickets"]) == 2
     assert [t["finding_id"] for t in automatic["tickets"]] == ["f2"]
-
-
-def test_the_consoles_binding_statuses_match_the_stores_in_order():
-    # `web/src/api/types.ts` restates `BINDING_STATUSES` because the console cannot import
-    # Python, and nothing in TypeScript knows the list is a restatement. Same shape and same
-    # reason as `RunDisposition` above -- and this one is ordered, so the assertion is on the
-    # list rather than the set: the order is the rail's option order, most-wanting-attention
-    # first, and a member inserted in the middle silently reorders a control a reader scans.
-    source = _web_source("src/api/types.ts")
-    match = re.search(r"export const BINDING_STATUSES = \[([^\]]+)\]", source)
-    assert match is not None, "web/src/api/types.ts no longer declares BINDING_STATUSES"
-    declared = re.findall(r'"([^"]+)"', match.group(1))
-    assert declared == list(BINDING_STATUSES)

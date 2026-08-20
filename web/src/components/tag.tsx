@@ -168,55 +168,6 @@ export function AdapterTierTag({ tier }: { tier: string }) {
 }
 
 /**
- * What each binding status means, and why `unchecked` is the member that earns the other two.
- *
- * The owner's question was *why do we not show safe APIs*. This is the answer, and the reason it
- * can be given honestly is `intake_attempt`: a vendor with no successful intake has never had its
- * specification read, so its calls are unexamined rather than fine. Without that third member,
- * `clean` would be an all-clear the console never earned.
- */
-const BINDING_STATUS_MEANING: Record<string, string> = {
-  at_risk:
-    "An open finding names this operation. A vendor change meets a call this codebase makes, at the call sites listed against it.",
-  clean:
-    "The vendor's specification was read and nothing in it binds to this call. A measured answer about this operation, not an absence of one.",
-  unchecked:
-    "No successful intake for this integration, so its specification has never been read. Not the same as clean: nothing here has been examined, and a decline or a failed fetch is not evidence about the call.",
-}
-
-const BINDING_STATUS_LABEL: Record<string, string> = {
-  at_risk: "at risk",
-  clean: "clean",
-  unchecked: "not checked",
-}
-
-/**
- * A binding status onto the ramp, following the owner's re-ruling above.
- *
- * **`at_risk` is `serious` rather than `critical`, and that is the honest half.** It means an open
- * finding names this operation — of *any* severity — so wearing the same tone as `breaking` would
- * claim a grade the status does not carry. The severity tag beside it is what ranks the finding.
- *
- * **`unchecked` is toned at all, which is the point of the member.** It is not a milder `clean`:
- * nothing about these calls has been examined, and the one way this feature could fail its reader
- * is by being skimmed past as though it were. A warning tone and the word *not checked* both say
- * so, which is the rule that a tone never travels without its word.
- */
-export const BINDING_STATUS_TONE: Record<string, TagTone> = {
-  at_risk: "serious",
-  unchecked: "warning",
-  clean: "good",
-}
-
-export function BindingStatusTag({ status }: { status: string }) {
-  return (
-    <Tag tone={BINDING_STATUS_TONE[status] ?? "neutral"} title={BINDING_STATUS_MEANING[status]}>
-      {BINDING_STATUS_LABEL[status] ?? status}
-    </Tag>
-  )
-}
-
-/**
  * Where a change unit's finding count sits — not a severity, and not a score.
  *
  * A count is a count; this exists so a table can render one in the tag register beside its

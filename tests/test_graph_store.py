@@ -1726,7 +1726,7 @@ def test_severity_by_vendor_crosses_both_columns_without_either_filter(store):
         _change(vendor_id="twilio", severity="breaking", operation_id="GetCalls")
     )
 
-    crossed = store.vendor_changes_page(vendor_ids=["stripe"])["by_vendor_severity"]
+    crossed = store.vendor_changes_page(vendor_id="stripe")["by_vendor_severity"]
 
     assert crossed == {
         "stripe": {"breaking": 1, "warning": 1},
@@ -1801,109 +1801,3 @@ def test_changes_by_day_emits_no_row_for_a_day_nothing_was_detected(store):
     days = [row["day"] for row in store.changes_by_day_and_vendor()]
 
     assert days == ["2026-08-01", "2026-08-05"]
-
-
-def test_selecting_two_integrations_returns_their_union(store):
-    """M15 Task 4. A codebase with forty integrations is not filterable one at a time.
-
-    The union is the whole claim: a rail that let a reader press two options and returned the
-    intersection, or only the last one pressed, would look identical on screen -- pressed
-    options and a shorter table -- and be wrong.
-    """
-    store.upsert_call_site(_site(vendor_id="stripe", path="src/a.ts"))
-    store.upsert_call_site(_site(vendor_id="twilio", path="src/b.ts"))
-    store.upsert_call_site(_site(vendor_id="openai", path="src/c.ts"))
-
-    page = store.call_sites_page("r1", vendor_ids=["stripe", "twilio"])
-
-    assert page["total"] == 2
-    assert {row["vendor_id"] for row in page["items"]} == {"stripe", "twilio"}
-
-
-def test_an_empty_selection_is_the_whole_set_rather_than_none_of_it(store):
-    """Deselecting every option means "stop narrowing", not "match nothing".
-
-    The distinction has no `null` to carry it once a filter is a list, so it is stated here: an
-    empty list reads as absent. A rail whose last deselection emptied the table would strand a
-    reader with no visible way back.
-    """
-    store.upsert_call_site(_site(vendor_id="stripe"))
-    store.upsert_call_site(_site(vendor_id="twilio", path="src/b.ts"))
-
-    assert store.call_sites_page("r1", vendor_ids=[])["total"] == 2
-
-
-def test_a_facet_under_multi_select_still_ignores_its_own_filter(store):
-    """The rail's existing rule, which multi-select is the case that could quietly break it.
-
-    A facet narrowed by its own selection collapses to the options already pressed, and a reader
-    who has pressed two of forty integrations would lose the other thirty-eight -- with no way
-    back, because the options that would clear the filter are the ones that vanished.
-    """
-    store.upsert_call_site(_site(vendor_id="stripe", path="src/a.ts"))
-    store.upsert_call_site(_site(vendor_id="twilio", path="src/b.ts"))
-    store.upsert_call_site(_site(vendor_id="openai", path="src/c.ts"))
-
-    page = store.call_sites_page("r1", vendor_ids=["stripe", "twilio"])
-
-    assert page["by_vendor"] == {"stripe": 1, "twilio": 1, "openai": 1}
-
-
-def test_two_facets_narrow_each_other_while_each_ignores_itself(store):
-    """The other half of the rule: a facet ignores *its own* filter, not every filter.
-
-    A facet ignoring all of them would report counts describing a set the reader is not looking
-    at, which is the same lie in the other direction.
-    """
-    store.upsert_call_site(_site(vendor_id="stripe", operation_id="PostCharges", path="src/a.ts"))
-    store.upsert_call_site(_site(vendor_id="stripe", operation_id="GetBalance", path="src/b.ts"))
-    store.upsert_call_site(_site(vendor_id="twilio", operation_id="GetCalls", path="src/c.ts"))
-
-    page = store.call_sites_page("r1", operation_ids=["PostCharges"])
-
-    # The vendor facet honours the operation filter and ignores nothing of its own.
-    assert page["by_vendor"] == {"stripe": 1}
-    # The operation facet ignores the operation filter, so every operation is still offered.
-    assert page["by_operation"] == {"PostCharges": 1, "GetBalance": 1, "GetCalls": 1}
-
-
-def test_loop_depth_is_offered_as_a_facet_of_its_own(store):
-    """Static evidence, and the one facet a reader uses to find quadratic call shapes.
-
-    `schema.sql` is explicit that a depth is proof of shape rather than of volume, so this is a
-    facet over what the code says -- which is exactly what makes it worth filtering by.
-    """
-    store.upsert_call_site(_site(path="src/a.ts", loop_depth=0))
-    store.upsert_call_site(_site(path="src/b.ts", loop_depth=2))
-    store.upsert_call_site(_site(path="src/c.ts", loop_depth=2))
-
-    page = store.call_sites_page("r1", loop_depths=[2])
-
-    assert page["total"] == 2
-    assert page["by_loop_depth"] == {0: 1, 2: 2}
-
-
-def test_a_bare_string_where_a_list_belongs_is_refused(store):
-    """A string is a sequence of characters, and `= ANY('stripe')` matches nothing.
-
-    That failure is silent -- an empty page, which reads as "no call site matches" rather than
-    as a caller error -- so it is refused at the call rather than diagnosed later. This is the
-    one guard here, and it exists because the wrong answer is indistinguishable from a real one.
-    """
-    with pytest.raises(TypeError):
-        store.call_sites_page("r1", vendor_ids="stripe")
-
-
-def test_changes_take_a_union_of_severities(store):
-    """The same widening on the changes feed, where the pair a reviewer wants is
-    breaking-and-deprecation -- two of five, and not expressible one at a time."""
-    store.upsert_vendor_change(_change(severity="breaking"))
-    store.upsert_vendor_change(_change(severity="deprecation", operation_id="GetBalance"))
-    store.upsert_vendor_change(_change(severity="info", operation_id="GetCalls"))
-
-    page = store.vendor_changes_page(severities=["breaking", "deprecation"])
-
-    assert page["total"] == 2
-    assert {row["severity"] for row in page["items"]} == {"breaking", "deprecation"}
-    # The severity facet still offers the member the reader did not press.
-    assert page["by_severity"] == {"breaking": 1, "deprecation": 1, "info": 1}
