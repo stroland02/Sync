@@ -268,6 +268,32 @@ def seed_tickets(store: GraphStore, findings: list[dict], run_map: dict[str, str
     print("tickets seeded")
 
 
+# Operation -> API product, the grouping `service_coverage` reads off `call_site.service_id`.
+# Synthetic but sensible: the mapping an adapter would eventually derive from the vendor's own
+# product taxonomy, seeded here so the Services page's product table has rows to draw.
+SERVICE_OF_OPERATION = {
+    "PostPaymentIntents": "Payments", "GetCharges": "Payments",
+    "PostPaymentMethods": "Payments", "PostTokens": "Payments", "PostCustomers": "Payments",
+    "PostPayouts": "Treasury", "GetBalance": "Treasury",
+    "GetAccounts": "Connect", "GetAccountsAccount": "Connect", "PostAccounts": "Connect",
+    "PostAccountsAccount": "Connect", "PostAccountLinks": "Connect",
+    "PostAccountSessions": "Connect",
+    "PostFiles": "Files", "PostFileLinks": "Files",
+    "claude-3-opus-20240229": "Messages",
+    "gpt-4-32k": "Chat Completions",
+}
+
+
+def seed_services(store: GraphStore) -> None:
+    conn = store._connect()
+    for operation, service in SERVICE_OF_OPERATION.items():
+        conn.execute(
+            "UPDATE call_site SET service_id = %s WHERE repo_id = %s AND operation_id = %s",
+            (service, REPO, operation),
+        )
+    print("service groupings seeded")
+
+
 def seed_subscriptions(store: GraphStore) -> None:
     conn = store._connect()
     for vendor, cadence in (("stripe", "hourly"), ("twilio", "daily")):
@@ -308,6 +334,12 @@ def rebuild_pipeline() -> None:
                     "--repo", "https://github.com/stroland02/demo-v1",
                     "--cache", cache, "--limit", "1"],
                    check=True, env=env, encoding="utf-8", errors="replace")
+    # The run indexes its own clone through the adapters, a path that does not capture
+    # snippets (B199 territory: capture lives in index_codebase only). Re-indexing the local
+    # checkout converges on the same call-site ids -- findings keep their rows -- and adds the
+    # windows the drawers render.
+    subprocess.run(["uv", "run", "sync", "index", "--repo", checkout],
+                   check=True, env=env, encoding="utf-8", errors="replace")
 
 
 def main() -> None:
@@ -321,6 +353,7 @@ def main() -> None:
     seed_corpus(store, findings)
     seed_tickets(store, findings, run_map)
     seed_subscriptions(store)
+    seed_services(store)
     print("demo-v1 seeded")
 
 
