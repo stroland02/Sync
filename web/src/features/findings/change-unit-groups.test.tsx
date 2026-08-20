@@ -3,7 +3,7 @@
  *
  * M15 Task 7. The claim is arithmetic: **twenty-four findings are thirteen change units**, and a
  * console listing them flat shows a reader twenty-four problems where there are thirteen. What is
- * under test is the pair of figures a reader compares â€” the unit count and the finding count â€”
+ * under test is the pair of figures a reader compares — the unit count and the finding count —
  * because a grouped view whose parts do not add to the whole is a worse answer than no grouping,
  * and it is the kind of wrong that reads as a rounding artefact.
  *

@@ -262,7 +262,7 @@ export function RepositoryServicesPage() {
         {/* A claim, not an argument, so it stays visible -- caught by
             `repository-services-page.test.tsx` when the sweep moved it into the hover. What a
             screen does not show is exactly the kind of absence a non-hovering reader must be able
-            to see; the *why* is in the ÃƒÂ¢Ã¢â‚¬Å“Ã‹Å“. */}
+            to see; the *why* is in the ⓘ. */}
         <span className="text-meta text-ink-muted">findings are on Findings</span>
         <InfoHint label="About the services list">
           A <em>vendor</em> is the provider Sync watches; a <em>service</em> is one of the APIs it
@@ -285,15 +285,15 @@ export function RepositoryServicesPage() {
           caption="What the index bound in this codebase, per API product. Colour is the vendor that sells it, which is the one thing the bar lengths do not carry."
           rows={grouped
             .map((row) => ({
-              key: `${row.vendor_id} Ãƒâ€šÃ‚Â· ${row.service_id ?? ""}`,
+              key: `${row.vendor_id} · ${row.service_id ?? ""}`,
               value: row.call_sites,
             }))
             .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))}
           unit="call sites"
-          colourKey={(key) => key.split(" Ãƒâ€šÃ‚Â· ")[0]}
+          colourKey={(key) => key.split(" · ")[0]}
           detail={(key) => {
             const row = grouped.find(
-              (candidate) => `${candidate.vendor_id} Ãƒâ€šÃ‚Â· ${candidate.service_id ?? ""}` === key,
+              (candidate) => `${candidate.vendor_id} · ${candidate.service_id ?? ""}` === key,
             )
             if (row === undefined) return ""
             return `${row.operations} op${row.operations === 1 ? "" : "s"}`

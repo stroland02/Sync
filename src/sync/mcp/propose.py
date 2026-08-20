@@ -113,6 +113,11 @@ def run_to_static_verify(
         destination = route_after_patch(state)
         if destination == "abandon":
             return _finish(state, UNVERIFIED)
+        if destination == "report":
+            # The pipeline's own router concluded the run: every attempt said no change is
+            # needed and nothing ever reached the verifier. The preview says it with the word
+            # it already has for a run that correctly changes nothing.
+            return _finish(state, NO_PATCH_WARRANTED)
         if destination == "patch":
             continue
 

@@ -1,7 +1,7 @@
 /**
  * A conserving flow diagram: where work goes, and where it stops.
  *
- * **A Sankey's whole claim is conservation** â€” what enters a node leaves it. That is what makes a
+ * **A Sankey's whole claim is conservation** — what enters a node leaves it. That is what makes a
  * narrowing band mean *attrition* rather than *a smaller number happened to be nearby*. So this
  * component refuses to draw a non-conserving flow rather than rendering one that misleads, and
  * `assertConserves` is exported so a caller can check its own data before building links.
@@ -9,10 +9,10 @@
  * **The unit must not change across the diagram**, which is the trap this was written against.
  * Measured on Sync's own graph: 8,723 vendor changes produced 13 change units which carry 24 open
  * findings. Drawing that as one flow would put three different units on one set of bands and make
- * a widening look like growth â€” a change unit is not a finding, and a finding is not a change. A
+ * a widening look like growth — a change unit is not a finding, and a finding is not a change. A
  * caller with two units has two diagrams, or one diagram and a stated figure beside it.
  *
- * **Colour is `volumeScale`, and it encodes the band's own share** â€” not good or bad. A terminal
+ * **Colour is `volumeScale`, and it encodes the band's own share** — not good or bad. A terminal
  * node is not a failure: *not yet attempted* is the ordinary state of a codebase whose remediation
  * loop has not run, and it is drawn like any other destination.
  */
@@ -24,7 +24,7 @@ import { SERIES_SLOTS, volumeScale } from "@/lib/palette"
 
 export interface FlowNode {
   readonly id: string
-  /** What the reader sees. Short â€” this sits inside the diagram. */
+  /** What the reader sees. Short — this sits inside the diagram. */
   readonly label: string
 }
 
@@ -113,7 +113,7 @@ export function SankeyFlow({
     // because its whole claim is that they do.
     return (
       <p className="max-w-prose text-body text-ink-muted">
-        This flow does not conserve at {broken.join(", ")} â€” what enters those stages does not
+        This flow does not conserve at {broken.join(", ")} — what enters those stages does not
         equal what leaves. Nothing is drawn, because a Sankey whose bands do not add up asserts an
         attrition that was never measured.
       </p>

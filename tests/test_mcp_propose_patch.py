@@ -187,14 +187,17 @@ def test_a_checkout_that_cannot_be_prepared_is_blocked_before_any_patch_is_attem
 
 
 def test_a_remediator_that_produces_nothing_does_not_reach_verification():
-    """An empty diff and a crashed remediator leave the same state, and neither is a patch.
+    """An empty diff is not a patch, and three of them are a conclusion.
 
     Producing nothing spends an attempt rather than ending the run: the remediator is asked
     again until the budget is gone. Verification is never reached, because there is nothing
     to verify -- and a no-op diff that reached it would typecheck clean and look like success.
+    Exhaustion through consistent no-change verdicts follows the pipeline's own router to the
+    word the preview already has for a run that correctly changes nothing; a crashed
+    remediator still ends `unverified`, held by the test below this one's sibling.
     """
     state, adapter, remediator = _run(verdicts=[], diffs=["", "   ", "\n"])
-    assert state["preview_outcome"] == UNVERIFIED
+    assert state["preview_outcome"] == NO_PATCH_WARRANTED
     assert remediator.calls == ["propose"] * 3
     assert adapter.calls == ["prepare"]
     assert state["patch"] is None
@@ -372,5 +375,5 @@ def test_verification_that_never_ran_is_null_rather_than_a_failed_verdict():
     """`{"passed": false}` claims a typecheck happened and rejected the patch."""
     surface = _surface(verdicts=[], diffs=["", "", ""])
     response = surface.propose_patch("f-1")
-    assert response["outcome"] == UNVERIFIED
+    assert response["outcome"] == NO_PATCH_WARRANTED
     assert response["static_verify"] is None

@@ -1,8 +1,8 @@
 /**
  * Findings: what is broken in this workspace.
  *
- * **The console did not have this screen.** Five destinations sat in the rail â€” Overview, API
- * services, Vendors, Signals, Detectors â€” and a finding was reachable only by drilling through one
+ * **The console did not have this screen.** Five destinations sat in the rail — Overview, API
+ * services, Vendors, Signals, Detectors — and a finding was reachable only by drilling through one
  * of them. An operator arriving with the question the product exists to answer, *what is broken
  * here*, had nowhere to go. `GET /api/repositories/{repo_id}/findings` had existed since the
  * transport was written and nothing had ever called it, because the only hook for this payload
@@ -23,8 +23,8 @@
  * detectors ran and found nothing, or nothing has ever indexed this workspace. The empty state
  * says which, from the payload's own `indexed_at`.
  *
- * **The rung is a column.** Every row carries the rung its binding came from â€” `static`,
- * `resolved` or `observed` â€” because a false positive that cannot be attributed to a rung cannot
+ * **The rung is a column.** Every row carries the rung its binding came from — `static`,
+ * `resolved` or `observed` — because a false positive that cannot be attributed to a rung cannot
  * be fixed. It is not hideable and it is not a badge colour.
  *
  * **No severity ordering is invented here.** `severity_order` arrives in the payload because it is
@@ -33,7 +33,7 @@
  *
  * ## Triage header, 2026-08-18
  *
- * The severity narrowing was a URL parameter with no control â€” a reader could arrive at a
+ * The severity narrowing was a URL parameter with no control — a reader could arrive at a
  * narrowed table but never narrow one. `TriageTabs` is that control: one tab per kind in the
  * payload's own order, counted over the scope rather than the page, with the whole-scope tab
  * first. Its empty states carry the absence-apart-from-zero distinction this file used to make
@@ -75,7 +75,7 @@ export function FindingsPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const [offset, setOffset] = useOffsetParam(OFFSET_KEY)
   // The severity tab changes which rows exist, so the offset measured against the old set is
-  // cleared in the same URL write â€” `use-filter-param`'s own reasoning, previously unapplied here.
+  // cleared in the same URL write — `use-filter-param`'s own reasoning, previously unapplied here.
   const [severity, setSeverity] = useFilterParam("severity", [OFFSET_KEY])
   const [order] = useFilterParam("order")
 
@@ -86,7 +86,7 @@ export function FindingsPage() {
     order: (order ?? undefined) as FindingOrder | undefined,
   })
   // For the triage header's `checks`: an empty tab must say which detectors stood behind the
-  // zero, and the findings payload does not carry their names â€” the detector roll-up does.
+  // zero, and the findings payload does not carry their names — the detector roll-up does.
   const detectors = useDetectors(repoId)
 
   if (repoId === undefined) return <UnknownRoute />
@@ -167,7 +167,7 @@ function FindingsBody({
   onSeverity: (next: string | null) => void
 }) {
   // The tab vocabulary is the payload's own `severity_order`, most severe first, with any kind
-  // the counts hold beyond it appended rather than dropped â€” a row whose kind the tabs omit is
+  // the counts hold beyond it appended rather than dropped — a row whose kind the tabs omit is
   // unreachable by exactly the reader triaging it. A kind at zero keeps its tab: the counts are
   // computed without the severity narrowing, so zero is a measured answer, not an absence.
   // M15 Task 7: the change leads, because one vendor change breaking eleven call sites is one
@@ -198,7 +198,7 @@ function FindingsBody({
 
   // Absence apart from zero, per tab now rather than per page: an unindexed workspace has not
   // been checked at all, an indexed one names the detectors that stood behind its zeros. The
-  // roll-up failing to answer is stated as its own fact â€” claiming "checked" on its behalf
+  // roll-up failing to answer is stated as its own fact — claiming "checked" on its behalf
   // would put a sentence on screen nothing computed.
   const checks: TriageChecks =
     page.indexed_at === null
@@ -214,7 +214,7 @@ function FindingsBody({
         : detectorNames.length === 0
           ? {
               kind: "unchecked",
-              why: `${repoId} was indexed and the detector roll-up lists nothing for it â€” no detector has reported over this workspace yet.`,
+              why: `${repoId} was indexed and the detector roll-up lists nothing for it — no detector has reported over this workspace yet.`,
             }
           : {
               kind: "checked",
@@ -233,7 +233,7 @@ function FindingsBody({
     >
       <MetricPanel
         label="Errors and incidents"
-        // Explanation moves behind the â“˜ (owner direction 2026-08-18); the scope stays in the
+        // Explanation moves behind the ⓘ (owner direction 2026-08-18); the scope stays in the
         // unit string, because a count that does not say what it counted over is the
         // claim-about-everything this console refuses, and a tooltip is a disclosure.
         hint={

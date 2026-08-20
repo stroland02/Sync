@@ -1,6 +1,6 @@
 /**
  * The donut's derivation rules. Scope is `.claude/rules/console-dev-loop.md`'s: classification,
- * derivation and structural invariants â€” never class names, never a snapshot.
+ * derivation and structural invariants — never class names, never a snapshot.
  *
  * Four properties, and each one is a claim the chart makes about the data rather than a styling
  * choice: the centre total is the sum of the arcs, colour is fixed by sorted key rather than by

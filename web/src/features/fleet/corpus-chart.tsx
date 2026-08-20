@@ -11,8 +11,8 @@
  * Disposition is the only `migration_outcome` dimension charted: `strategy` (read
  * from `sync.core.PatchStrategy`, a two-value literal) and `tier` (read from
  * `sync.remediate.corpus._TIERS`, which only ever writes 0 or 2) each carry two
- * classes, and `terminal_status` carries three (`sync.remediate.nodes` writes
- * exactly `"retried"`, `"opened"`, `"abandoned"`) — all three are far under the
+ * classes, and `terminal_status` carries the handful `sync.remediate.nodes` records
+ * (`tests/test_corpus_writer.py` holds the census) — all far under the
  * class-count ceiling a table would need instead. Strategy and tier stay tables
  * because a two-segment bar states nothing a two-row table doesn't, not because
  * they failed a count; disposition earns the chart because a stacked bar is the
@@ -33,10 +33,10 @@ import {
 /**
  * Disposition -> series slot, keyed on the value itself rather than where it lands in the
  * sorted tally, so a colour is the segment's identity and not its alphabetical rank.
- * `sync.remediate.nodes` writes exactly three `terminal_status` literals — "retried"
- * (nodes.py:217), "opened" (nodes.py:571), "abandoned" (nodes.py:653) — and
- * `sync.dashboard.fleet._grouped` synthesises "null" for a row whose column was never
- * written; check this table against those four call sites before changing it.
+ * The vocabulary is what `sync.remediate.nodes` records (`tests/test_corpus_writer.py`'s
+ * census is the authority) plus the "null" `sync.dashboard.fleet._grouped` synthesises for
+ * a row whose column was never written; check this table against that census before
+ * changing it.
  *
  * "opened" and "abandoned" are the pair an operator most needs to tell apart at a glance —
  * a repair that landed versus one Sync gave up on — so they sit five slots apart in the
@@ -48,7 +48,10 @@ const DISPOSITION_SLOT: Record<string, number> = {
   opened: 0, // slot 1, aqua — the disposition that closes the loop
   retried: 1, // slot 2, orange — still in motion, not yet opened or abandoned
   null: 2, // slot 3, blue — never written on purpose; a data gap, not an outcome
+  no_change: 3, // slot 4, green-adjacent identity — examined, and nothing needed to move
   abandoned: 4, // slot 5, magenta — held far from "opened" on purpose, see above
+  halted: 5, // slot 6 — verified with nowhere to deliver (a forge-less assembly)
+  external_cause: 7, // slot 8 — ended by a condition outside the repository
 }
 
 // A disposition outside the vocabulary above — none exist today — lands here instead of

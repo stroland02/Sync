@@ -2,7 +2,7 @@
  * Which columns a table shows, chosen by the reader and remembered.
  *
  * **M15 Task 1.** A wide screen makes room for columns; it does not decide which ones matter. The
- * call-sites payload carries fifteen recorded fields and no reader wants all fifteen at once â€”
+ * call-sites payload carries fifteen recorded fields and no reader wants all fifteen at once —
  * one is auditing provenance, another is hunting loops, and the useful set differs per question.
  *
  * ## What this is careful about
@@ -39,7 +39,7 @@ export interface ColumnSpec {
   readonly id: string
   readonly label: string
   /**
-   * `false` where the column is the screen's claim rather than a detail of it â€” a provenance
+   * `false` where the column is the screen's claim rather than a detail of it — a provenance
    * rung, a scope, an absence marker. Defaults to hideable.
    */
   readonly hideable?: boolean

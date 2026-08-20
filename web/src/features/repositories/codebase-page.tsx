@@ -52,7 +52,6 @@
  * `codebase-page.test.tsx` holds the absence so a later tidy cannot restore it quietly.
  */
 
-import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
 import { Link, useParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
@@ -60,7 +59,7 @@ import { MapPreviews } from "@/features/index-graph/map-previews"
 import { PipelineStrip } from "@/features/repositories/pipeline-strip"
 import { WorkflowGrid } from "@/features/repositories/workflow-grid"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
-import { useRepositoryGraph, useRepositoryCoverage } from "@/api/queries"
+import { useRepositoryGraph } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ControlBar } from "@/layouts/control-bar"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -123,9 +122,6 @@ export function CodebasePage() {
           other. Their analytics moved with them: topology to the integration map's page, the
           technical census to the file tree's, which is what keeps this screen scannable. */}
       <MapsRegion repoId={repoId} />
-      {/* Good news as a number (W541, owner-picked from the scrapped build): how much of the
-          API surface is verified clean, beside how much is at risk. */}
-      <ApiSurfaceRegion repoId={repoId} />
       <WorkflowGrid repoId={repoId} />
     </section>
   )
@@ -154,12 +150,3 @@ function PageHeaderRegion({ repoId }: { repoId: string }) {
   )
 }
 
-/**
- * The API surface panel's own read: binding-status counts off the coverage payload, kept out
- * of the page body so a coverage failure costs this panel and not the maps beside it.
- */
-function ApiSurfaceRegion({ repoId }: { repoId: string }) {
-  const query = useRepositoryCoverage(repoId)
-  if (!query.isSuccess || query.data.repo_id !== repoId) return null
-  return <ApiSurfacePanel counts={query.data.by_binding_status ?? {}} />
-}

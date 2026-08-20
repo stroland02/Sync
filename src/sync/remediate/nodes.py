@@ -200,6 +200,13 @@ def _attempted_strategy(exc: Exception, remediator) -> str | None:
     return carried if carried else getattr(remediator, "strategy", None)
 
 
+# One spelling for the verdict, because two things route on it: the retry loop reads it as
+# feedback asking the next attempt to confirm or correct, and `route_after_patch` reads it to
+# send an exhausted run to `report` rather than `abandon` -- a run that finished and found
+# nothing to do is not a run that tried and could not finish.
+NO_CHANGE = "the remediator produced no change"
+
+
 def _close_previous_attempt(state: RunState, record) -> None:
     """Write the row for the attempt this one is replacing.
 
@@ -256,8 +263,8 @@ def make_patch(remediator, record=None):
                 # The remediator returned a `Patch`, so the tier that produced this
                 # nothing is known even though the diff is empty.
                 "attempt_strategy": proposed.strategy,
-                "diagnostics": "the remediator produced no change",
-                "feedback": "the remediator produced no change",
+                "diagnostics": NO_CHANGE,
+                "feedback": NO_CHANGE,
                 "abandon_reason_code": "patch_attempts_exhausted",
             }
 
@@ -284,6 +291,17 @@ def route_after_patch(state: RunState) -> str:
     if state.get("patch") is not None:
         return "static_verify"
     if state.get("static_attempts", 0) >= MAX_STATIC_ATTEMPTS:
+        # Exhausted through consistent no-change verdicts is a conclusion, not a failure:
+        # every attempt got the previous verdict as feedback and stood by it. `report` is
+        # where a run that finished with nothing to do already ends.
+        #
+        # **Only when no patch ever reached the verifier.** A codemod that applied its one
+        # edit, had the compiler reject it, and then re-emitted empty diffs is a failed
+        # repair, not a clean verdict -- `verify_ok` is set the moment any attempt is
+        # verified and stays unset on a run where nothing ever was, which is exactly the
+        # line between the two.
+        if state.get("diagnostics") == NO_CHANGE and state.get("verify_ok") is None:
+            return "report"
         return "abandon"
     return "patch"
 
@@ -699,6 +717,23 @@ def make_report(halt_reason: str | None = None, record=None):
     def report(state: RunState) -> RunState:
         change = state["change"]
         gap = state.get("verify_gap", "")
+        if state.get("diagnostics") == NO_CHANGE:
+            # The exhausted-by-verdict arrival from `route_after_patch`. Attempts were made,
+            # so each earns its row; the last is still open and closes here as `no_change` --
+            # its own status, because `abandoned` would corrupt the which-kinds-are-not-
+            # mechanically-safe signal with runs where there was nothing to make safe.
+            if record is not None:
+                record(state, terminal_status="no_change")
+            attempts = state.get("static_attempts", 0)
+            reason = (
+                f"{attempts} attempt(s) each concluded no change is needed for "
+                f"{change.kind} on {change.operation_id}: the call site does not touch what "
+                "changed. The finding stands; nothing was modified."
+            )
+            return {
+                "outcome": "reported", "report_reason": reason, "pr_url": None,
+                "abandon_reason_code": None,
+            }
         if halt_reason and state.get("verify_ok"):
             if record is not None:
                 record(state, terminal_status="halted")

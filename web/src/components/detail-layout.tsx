@@ -2,7 +2,7 @@
  * A list with its selected row's detail beside it, rather than over it.
  *
  * **M15 Task 2, and a correction of Task 1's own predecessor.** `CI-W514` shipped the call-site
- * detail as a modal `Sheet`, citing Nango's row â†’ drawer convention. Nango's note does say drawer;
+ * detail as a modal `Sheet`, citing Nango's row → drawer convention. Nango's note does say drawer;
  * **Supabase's note says which drawer**, and the modal is the wrong one here:
  * `apps/design-system/.../modality.mdx` puts dialogs on short focused tasks and sheets on longer
  * forms, and their own list-detail (`UserPanel`) is not modal at all. It is a panel beside the
@@ -18,7 +18,7 @@
  * knows, and a panel that ignored it would train them to distrust Back on the rest of the console.
  *
  * The parameter is **absent** when nothing is selected rather than present and empty, so a screen
- * with no selection has one canonical URL â€” Supabase's `clearOnDefault`, which is the same rule
+ * with no selection has one canonical URL — Supabase's `clearOnDefault`, which is the same rule
  * `use-filter-param.ts` already applies to facets.
  *
  * ## What this deliberately does not do
@@ -70,8 +70,8 @@ export function useSelectionParam(
 /**
  * Move the selection with the arrow keys while the panel is open.
  *
- * Bound at the document because the reader's focus is wherever they left it â€” usually the row
- * they clicked â€” and a handler on the panel would only fire while the panel itself had focus,
+ * Bound at the document because the reader's focus is wherever they left it — usually the row
+ * they clicked — and a handler on the panel would only fire while the panel itself had focus,
  * which is precisely when they are not looking at the list.
  */
 export function useSelectionKeys(

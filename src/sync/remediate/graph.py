@@ -90,6 +90,7 @@ def build_graph(store, adapter, remediator, forge, checkpointer, catalogue=None,
             "static_verify": "static_verify",
             "patch": "patch",
             "abandon": "abandon",
+            "report": "report",
             "external_cause": "external_cause",
         },
     )

@@ -1,14 +1,14 @@
 /**
  * The API products one repository calls, and the duplication this screen stopped being.
  *
- * Until 2026-08-19 this page rendered the union of two answers keyed by `vendor_id` â€” the same
- * identifier the Vendors screen lists â€” so the owner's report was that the two screens showed the
+ * Until 2026-08-19 this page rendered the union of two answers keyed by `vendor_id` — the same
+ * identifier the Vendors screen lists — so the owner's report was that the two screens showed the
  * same data under two headings. A vendor is the provider Sync watches; a service is one of the APIs
  * it sells, and `call_site.service_id` is the layer that makes them different lists.
  *
  * The tests that went with that change are named rather than silently dropped: seven asserted the
  * union's per-answer columns, and the union is what was wrong. What replaced them asserts the new
- * distinction, and one of them asserts the *absence* of the old one â€” a findings column returning
+ * distinction, and one of them asserts the *absence* of the old one — a findings column returning
  * here would restore the duplication with every other test still green.
  *
  * Scope is `.claude/rules/console-dev-loop.md`'s: classification, derivation and structural
@@ -219,7 +219,7 @@ describe("the API products screen", () => {
     renderAt("org/one")
 
     // B147: the route cannot match an identifier containing a slash, and every identifier has
-    // one. The generic 404 sentence would be false here â€” the repository exists.
+    // one. The generic 404 sentence would be false here — the repository exists.
     expect(document.body.textContent).toMatch(/could not be asked about this repository/i)
   })
 
