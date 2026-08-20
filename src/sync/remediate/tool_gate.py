@@ -157,12 +157,20 @@ def _summary(tool_name: str, tool_input: dict[str, Any]) -> str:
     return f"input={ {key: tool_input.get(key) for key in ('file_path', 'pattern')} !r}"
 
 
-def hooks(identity: str) -> dict[str, list[Callable]]:
+def hooks(
+    identity: str,
+    on_event: Callable[[str, str | None, str], None] | None = None,
+) -> dict[str, list[Callable]]:
     """The gate, bound to the run it is gating.
 
     `identity` is `sync.remediate.agent_patch._identity` -- the finding and the repository -- so
     a refusal in the log says which run it belongs to. A trail that cannot be joined back to a
     finding is not evidence.
+
+    `on_event(kind, tool, summary)` is the same trail, live: `"tool"` for a permitted call and
+    `"refusal"` for one turned away, with the summary the log line already carries. It does not
+    take the identity -- the recorder was constructed knowing its finding -- and `None`, the
+    default, records nowhere and leaves the gate exactly as it was.
 
     Registered against every tool rather than against `Bash`. The shell is where the damage is,
     but a record of only the shell cannot answer what the agent did on a run where it never
@@ -184,6 +192,8 @@ def hooks(identity: str) -> dict[str, list[Callable]]:
         reason = refusal(tool_name, tool_input, hook_input["cwd"])
         if reason is None:
             log.debug("patch agent tool call [%s] tool=%s %s", identity, tool_name, summary)
+            if on_event is not None:
+                on_event("tool", tool_name, summary)
             # Silence, not `"allow"`. Answering `"allow"` would auto-approve calls the CLI's own
             # rules would otherwise still weigh, which widens the surface this exists to narrow.
             return {}
@@ -191,6 +201,8 @@ def hooks(identity: str) -> dict[str, list[Callable]]:
         log.warning(
             "patch agent tool call refused [%s] tool=%s %s", identity, tool_name, summary,
         )
+        if on_event is not None:
+            on_event("refusal", tool_name, summary)
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",

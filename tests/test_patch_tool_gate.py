@@ -247,6 +247,57 @@ def test_a_permitted_call_is_recorded_too(caplog):
     assert "finding=f-42 repo=acme-billing" in recorded
 
 
+def test_a_permitted_call_reaches_the_recorder_as_a_tool_event():
+    """The live feed's half of the trail: what the log line already says, handed to whatever
+    recorder the caller supplied, without the identity -- the recorder was built knowing its
+    finding, and a second spelling of it would be the copy that drifts.
+    """
+    events: list[tuple] = []
+    callback = tool_gate.hooks(
+        "finding=f-42 repo=acme-billing",
+        on_event=lambda kind, tool, summary: events.append((kind, tool, summary)),
+    )["PreToolUse"][0]
+
+    hook_input = _input("Bash", {"command": "npx tsc --noEmit"})
+    asyncio.run(callback(hook_input, hook_input["tool_use_id"], {"signal": None}))
+
+    assert len(events) == 1
+    kind, tool, summary = events[0]
+    assert kind == "tool"
+    assert tool == "Bash"
+    assert "npx tsc --noEmit" in summary
+
+
+def test_a_refusal_reaches_the_recorder_as_a_refusal_event():
+    """The refusal is the row most worth having -- detection was zero before the gate -- and
+    like the log line it carries the command verbatim: the recorder is operator-facing, not
+    model-facing, so the no-echo rule for the agent's own message does not apply to it.
+    """
+    events: list[tuple] = []
+    callback = tool_gate.hooks(
+        "finding=f-42 repo=acme-billing",
+        on_event=lambda kind, tool, summary: events.append((kind, tool, summary)),
+    )["PreToolUse"][0]
+
+    hook_input = _input("Bash", {"command": EXFILTRATION})
+    output = asyncio.run(callback(hook_input, hook_input["tool_use_id"], {"signal": None}))
+
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert len(events) == 1
+    kind, tool, summary = events[0]
+    assert kind == "refusal"
+    assert tool == "Bash"
+    assert EXFILTRATION in summary
+
+
+def test_no_recorder_changes_nothing_about_the_gate():
+    """`on_event=None` is the default and must stay byte-identical to the gate before the feed
+    existed -- every caller that does not record still gets exactly the old behaviour."""
+    assert _call(_input("Bash", {"command": "npx tsc --noEmit"})) == {}
+    denied = _call(_input("Bash", {"command": EXFILTRATION}))
+    assert denied["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 # --- the wiring, without which every test above measures a function nobody calls --------------
 
 

@@ -791,3 +791,43 @@ CREATE UNIQUE INDEX IF NOT EXISTS remediation_ticket_open_idx
 
 CREATE INDEX IF NOT EXISTS remediation_ticket_repo_idx
     ON remediation_ticket (repo_id, requested_at DESC);
+
+-- Grain: one row per recorded event of one patch run -- one thing the agent read, edited, ran,
+-- said, or was refused, in the order the recorder saw it. NOT one row per run and NOT one row
+-- per tool: a run that made forty calls is forty rows, so counting runs by counting rows is
+-- wrong here the way it is on `migration_outcome`.
+--
+-- `seq` is the recorder's own counter, per finding, monotonic across the attempts of one
+-- invocation -- ordering evidence, never a wall clock, because two events inside one second
+-- must still read in the order they happened. The natural key is (finding_id, seq) and the
+-- write is ON CONFLICT DO NOTHING, so a restarted run that replays its recording converges on
+-- the rows already held instead of doubling the feed.
+--
+-- No foreign key to `finding`, deliberately, for the reason `finding_dismissal` has none: a
+-- scan truncates `finding` and rebuilds it, and a FK here would either block that TRUNCATE
+-- outright or cascade away the recorded evidence of every run on every index pass. Finding ids
+-- are stable across re-derivation, so the join still lands after the rebuild.
+--
+-- `summary` is untrusted text stored verbatim -- a path, a command, the agent's own prose --
+-- because it is evidence, exactly as `tool_gate`'s log line carries the refused command whole.
+-- Never file content: the writers record what was asked for, and the diff already carries what
+-- changed. The store truncates at 500 characters on the write so one chatty run cannot bloat
+-- the table. "Shapes not values" does not govern this table; it holds Sync's own run, not a
+-- customer's response data.
+CREATE TABLE IF NOT EXISTS run_activity (
+    id         BIGSERIAL PRIMARY KEY,
+    finding_id TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- 'tool' | 'note' | 'refusal'. A permitted call, the agent's own prose between calls, and a
+    -- call the gate turned away. Named in a comment rather than a CHECK, for the reason
+    -- `severity` is.
+    kind       TEXT NOT NULL,
+    -- NULL on a 'note': prose between tool calls names no tool.
+    tool       TEXT,
+    summary    TEXT NOT NULL,
+
+    -- The natural key, and also the read path: the constraint's btree leads with
+    -- (finding_id, seq), which is exactly how the feed is read, so no separate index.
+    UNIQUE (finding_id, seq)
+);
