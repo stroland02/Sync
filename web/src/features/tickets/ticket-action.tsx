@@ -14,7 +14,7 @@ import { OutcomeTag, Tag } from "@/components/tag"
 import { Absent } from "@/components/status"
 import { Button } from "@/components/ui/button"
 
-const POLL_MS = 15_000
+export const POLL_MS = 15_000
 
 /** The newest ticket standing against one finding, or null. */
 export function newestTicketFor(tickets: readonly Ticket[], findingId: string): Ticket | null {

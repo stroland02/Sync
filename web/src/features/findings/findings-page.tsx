@@ -42,7 +42,8 @@
 
 import { useParams } from "react-router"
 
-import { useChangeUnits, useDetectors, useWorkspaceFindings } from "@/api/queries"
+import { useChangeUnits, useDetectors, useTickets, useWorkspaceFindings } from "@/api/queries"
+import { POLL_MS } from "@/features/tickets/ticket-action"
 import { ChangeUnitGroups } from "@/features/findings/change-unit-groups"
 import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
@@ -256,24 +257,59 @@ function FindingsBody({
         {grouped ? (
           <GroupedFindings repoId={repoId} severity={severity} />
         ) : (
-          <>
-        <FindingsTable repoId={repoId} rows={page.items} />
-        {/* Decision 60: with a filter on, `total` counts the narrowed set while `severity_total`
-            counts the scope, and a bare range under a narrowed table reads as the whole set. */}
-        <FooterBar
-          offset={offset}
-          limit={DEFAULT_LIMIT}
-          shown={page.items.length}
-          total={page.total}
-          nextOffset={page.next_offset}
-          busy={busy}
-          unfilteredTotal={severity !== null ? page.severity_total : undefined}
-          onOffsetChange={onOffset}
-        />
-          </>
+          <FlatFindings
+            repoId={repoId}
+            page={page}
+            offset={offset}
+            onOffset={onOffset}
+            busy={busy}
+            severity={severity}
+          />
         )}
       </MetricPanel>
     </TriageTabs>
+  )
+}
+
+/** The flat list and its own ticket read, mounted only while this is the view on screen. */
+function FlatFindings({
+  repoId,
+  page,
+  offset,
+  onOffset,
+  busy,
+  severity,
+}: {
+  repoId: string
+  page: NonNullable<ReturnType<typeof useWorkspaceFindings>["data"]>
+  offset: number
+  onOffset: (next: number) => void
+  busy: boolean
+  severity: string | null
+}) {
+  // One read for the whole table; the cells classify against it rather than each asking again.
+  const ticketsQuery = useTickets(repoId, null, { refetchIntervalMs: POLL_MS })
+
+  return (
+    <>
+      <FindingsTable
+        repoId={repoId}
+        rows={page.items}
+        tickets={ticketsQuery.isSuccess ? ticketsQuery.data.tickets : null}
+      />
+      {/* Decision 60: with a filter on, `total` counts the narrowed set while `severity_total`
+          counts the scope, and a bare range under a narrowed table reads as the whole set. */}
+      <FooterBar
+        offset={offset}
+        limit={DEFAULT_LIMIT}
+        shown={page.items.length}
+        total={page.total}
+        nextOffset={page.next_offset}
+        busy={busy}
+        unfilteredTotal={severity !== null ? page.severity_total : undefined}
+        onOffsetChange={onOffset}
+      />
+    </>
   )
 }
 
