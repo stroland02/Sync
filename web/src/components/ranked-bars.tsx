@@ -21,6 +21,12 @@
  * `lib/palette.ts`'s, so a vendor is the same colour here as on the map and in every chart. A
  * set that is not integrations takes ink: a bar's length is the measurement, and a hue over it
  * would be a second encoding of the same number.
+ *
+ * **`colourKey` is what lets the identity be coarser than the row.** A ranking of *operations*
+ * has one bar per operation and one integration behind several of them — colouring by the row
+ * would give each its own hue and re-encode the length, colouring by the integration says which
+ * vendor the concentration sits with. That is a second dimension the length does not carry, which
+ * is the only thing that earns a hue here.
  */
 
 import { seriesScale } from "@/lib/palette"
@@ -37,6 +43,8 @@ export function RankedBars({
   rows,
   unit,
   colourByKey = true,
+  colourKey = (key) => key,
+  detail,
   max: cap = 10,
   scale = "linear",
   annotate,
@@ -51,6 +59,21 @@ export function RankedBars({
   unit: string
   /** `false` for a set that is not integrations: length is the measurement, hue would repeat it. */
   colourByKey?: boolean
+  /**
+   * The identity a row's colour encodes, when that is coarser than the row itself.
+   *
+   * Defaults to the row's own key, which is every existing caller. A ranking of operations passes
+   * the vendor, so the eight bars carry three hues rather than eight.
+   */
+  colourKey?: (key: string) => string
+  /**
+   * A second figure for the row, printed beside its count rather than under its bar.
+   *
+   * `annotate` puts a clause on its own line, which is right for a vocabulary a reader has to have
+   * explained and wrong for a number — eight rows of it is eight extra lines of height for eight
+   * short strings. This is the inline form and costs no height at all.
+   */
+  detail?: (key: string) => string
   /** How many rows are drawn before the rest are summarised rather than silently dropped. */
   max?: number
   /**
@@ -86,7 +109,7 @@ export function RankedBars({
   share?: boolean
   className?: string
 }) {
-  const ink = seriesScale(rows.map((row) => row.key))
+  const ink = seriesScale(rows.map((row) => colourKey(row.key)))
   const shown = rows.slice(0, cap)
   const rest = rows.slice(cap)
   const largest = Math.max(...rows.map((row) => row.value), 1)
@@ -127,6 +150,9 @@ export function RankedBars({
             <div className="flex min-w-0 items-baseline justify-between gap-row">
               <span className="min-w-0 truncate font-mono text-meta text-ink">{row.key}</span>
               <span className="shrink-0 font-mono text-meta tabular-nums text-ink-muted">
+                {detail !== undefined && (
+                  <span className="mr-row text-ink-muted">{detail(row.key)}</span>
+                )}
                 {row.value.toLocaleString()}
                 {share && total > 0 && (
                   <span className="ml-row text-ink-muted">
@@ -154,7 +180,7 @@ export function RankedBars({
                   // where a minimum-width stub would read as a very small quantity.
                   width:
                     row.value === 0 ? "0%" : `${Math.max(project(row.value) * 100, 1.5)}%`,
-                  backgroundColor: colourByKey ? ink(row.key) : undefined,
+                  backgroundColor: colourByKey ? ink(colourKey(row.key)) : undefined,
                 }}
               />
             </div>

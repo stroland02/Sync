@@ -79,7 +79,39 @@ def test_the_symbol_map_reproduces_the_generated_sdk_exactly():
 
     assert set(mapping) == set(SDK_GROUND_TRUTH)
     for symbol, (operation_id, http_method, path) in SDK_GROUND_TRUTH.items():
-        assert mapping[symbol] == {"operation_id": operation_id, "http_method": http_method, "path": path}
+        # `service_id` is None throughout because this shape document declares no `tags`, and a
+        # document that names no product must not have one invented for it -- that null is the
+        # not-grouped state `call_site.service_id` carries, not a service named nothing.
+        assert mapping[symbol] == {
+            "operation_id": operation_id,
+            "http_method": http_method,
+            "path": path,
+            "service_id": None,
+        }
+
+
+def test_the_vendors_own_tag_becomes_the_service_the_operation_belongs_to():
+    """A service is the API product a vendor sells, and its `tags` is the vendor's own name for it.
+
+    Read rather than derived, which is the whole reason this source was chosen: inventing a product
+    name from an operation id would put vendor-specific knowledge in a rule we made up, and a wrong
+    grouping is invisible -- it reads as a product the vendor genuinely sells.
+    """
+    spec = _shape_spec()
+    tagged = next(
+        operation
+        for body in spec["paths"].values()
+        for operation in body.values()
+        if isinstance(operation, dict) and operation.get("operationId") == "ListVideoRoomSummary"
+    )
+    tagged["tags"] = ["VideoInsights"]
+
+    mapping = build_symbol_map(spec, domain="insights", version="v1")
+
+    assert mapping["twilio.insights.v1.rooms.list"]["service_id"] == "VideoInsights"
+    # Its neighbour is untagged and stays ungrouped: the tag travels with the operation that
+    # carries it and is never spread across the ones beside it.
+    assert mapping["twilio.insights.v1.rooms.fetch"]["service_id"] is None
 
 
 def test_a_mount_name_overrides_a_path_segment_naming_the_wrong_resource():

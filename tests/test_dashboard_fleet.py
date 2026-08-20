@@ -1,4 +1,4 @@
-"""View-model queries for the fleet screen: every run, the repair record, the repo roll-up.
+﻿"""View-model queries for the fleet screen: every run, the repair record, the repo roll-up.
 
 Follows `tests/test_dashboard_queries.py`'s fixture pattern for the checkpointer side --
 `PostgresSaver.put`'s row shape, and the thread-id convention `sync.cli` writes:
@@ -14,6 +14,7 @@ import pytest
 
 from sync.core import CallSite, Finding, MigrationOutcome, VendorChange
 from sync.dashboard.fleet import (
+    NESTED_FINDINGS_PER_UNIT,
     IN_FLIGHT,
     abandonment_by_change_kind,
     change_units,
@@ -288,6 +289,49 @@ def test_runs_scoped_to_repository(checkpointer_tables, store):
     assert r_map[f2] == "r2"
 
 
+def test_a_run_carries_its_findings_sayable_name(checkpointer_tables, store):
+    """A run row is addressed by a 32-character hex id and read by a person.
+
+    `finding_name` is derived in the payload rather than in the console, because the CLI and a
+    pull-request body name the same finding too -- a third derivation is where the three begin
+    to differ. The id stays the addressable thing; this is what makes the row speakable.
+    """
+    site = store.upsert_call_site(_site(vendor_id="stripe", operation_id="PostCharges"))
+    finding = store.insert_finding(_finding(site))
+    _insert_checkpoint(
+        f"{finding}:run1:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "opened"},
+    )
+
+    row = runs(DSN, store=store)["items"][0]
+
+    assert row["finding_name"].startswith("stripe-postcharges-")
+    # The id is unchanged and still what every link is built from.
+    assert row["finding_id"] == finding
+
+
+def test_a_run_whose_finding_is_gone_is_named_by_nothing_rather_than_by_a_guess(
+    checkpointer_tables, store
+):
+    """The checkpointer outlives `finding`, which every scan truncates and rebuilds.
+
+    A thread whose finding has been patched or retracted has no call site to take a vendor and
+    an operation from. A name invented for it would assert an integration nothing recorded, so
+    the row says it has none -- the run itself is still listed, because it happened.
+    """
+    _insert_checkpoint(
+        f"{FINDING_ID}:run1:0",
+        "1f069000-0000-6000-8000-000000000001",
+        channel_values={"outcome": "abandoned"},
+    )
+
+    row = runs(DSN, store=store)["items"][0]
+
+    assert row["finding_name"] is None
+    assert row["finding_id"] == FINDING_ID
+
+
 def test_runs_recovers_run_id_as_the_second_colon_segment(checkpointer_tables):
     _insert_checkpoint(
         f"{FINDING_ID}:rehearsal-2026-08-05:0",
@@ -340,7 +384,13 @@ def test_runs_is_an_empty_page_when_the_checkpointer_has_no_tables():
 
     page = runs(DSN)
 
-    assert page == {"items": [], "total": 0, "next_offset": None, "by_disposition": {}}
+    # `unfiltered_total` is part of this envelope too: the rail counts every run the deployment
+    # holds, and a database with no checkpoint table holds none. Omitting it here let the
+    # payload gain a key this assertion never checked.
+    assert page == {
+        "items": [], "total": 0, "next_offset": None,
+        "by_disposition": {}, "unfiltered_total": 0,
+    }
 
 
 # --- pagination reaches SQL, not a Python slice -----------------------------
@@ -873,3 +923,62 @@ def test_a_parked_run_is_not_counted_among_the_runs_in_flight(checkpointer_table
     )
 
     assert runs(DSN, outcome=IN_FLIGHT)["items"] == []
+
+
+def test_change_units_joins_the_newest_checkpoint_for_each_unit(store, checkpointer_tables):
+    """The standing a unit reports comes from the newest checkpoint among its own findings.
+
+    Untested until 2026-08-19, when the per-unit checkpointer query became one query for the
+    page: fifty units cost fifty round trips against a second database, on the route the
+    console's Integrations screen reads. The rewrite keys one answer in Python, and this is
+    what holds the two readings equal -- newest wins, and a unit whose findings have no
+    checkpoint keeps the nulls rather than borrowing another unit's standing.
+    """
+    site_a = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=10))
+    site_b = store.upsert_call_site(_site(repo_id="r1", path="src/b.ts", line=20, operation_id="GetBalance"))
+    patched = store.insert_finding(_finding(site_a, claim="c1"))
+    store.insert_finding(_finding(site_b, claim="c2"))
+
+    # Two checkpoints on one finding's thread; the newer one carries the outcome that must win.
+    _insert_checkpoint(f"{patched}:run-1", _version(1),
+                       channel_values={"outcome": "abandoned"},
+                       ts="2026-07-30T12:00:00.000000+00:00")
+    _insert_checkpoint(f"{patched}:run-1", _version(2),
+                       channel_values={"outcome": "opened"},
+                       ts="2026-08-01T12:00:00.000000+00:00")
+
+    units = change_units(store, checkpointer_dsn=DSN, repo_id="r1")["items"]
+    by_op = {u["operation_id"]: u for u in units}
+
+    assert by_op["PostCharges"]["standing"] == "opened"
+    assert by_op["PostCharges"]["last_checkpoint_at"].startswith("2026-08-01")
+    # The other unit's findings have no checkpoint at all, and it must not inherit one.
+    assert by_op["GetBalance"]["standing"] is None
+    assert by_op["GetBalance"]["last_checkpoint_at"] is None
+
+
+def test_a_units_nested_findings_are_bounded_while_its_count_is_not(store):
+    """`limit` bounds units; nothing bounded the findings nested inside them.
+
+    Measured at 10,000 findings: eight units carried **10,000 nested rows** and the response was
+    **4.3 MB** for one page of fifty. The page was unbounded in the dimension that decides its
+    size, on the route the Integrations screen reads.
+
+    `finding_count` is why the cap is safe rather than a loss: it is stated by the payload
+    precisely so a reader never counts the array, and its own comment says the array "would
+    report the page". This makes that true instead of aspirational -- the count stays the
+    workspace's, the array becomes a bounded sample, and the screen says which it is showing.
+    """
+    site = store.upsert_call_site(_site(repo_id="r1", path="src/a.ts", line=1))
+    for n in range(NESTED_FINDINGS_PER_UNIT + 5):
+        store.insert_finding(_finding(site, claim=f"claim-{n}"))
+
+    unit = change_units(store, repo_id="r1")["items"][0]
+
+    # The truth is unbounded; the sample is bounded; the two are different fields on purpose.
+    assert unit["finding_count"] == NESTED_FINDINGS_PER_UNIT + 5
+    assert len(unit["findings"]) == NESTED_FINDINGS_PER_UNIT
+    # The ids are bounded the same way, and for the same reason: one unit''s `finding_ids` was
+    # 92,500 bytes against 8,194 for the rows they identify, and no screen reads the field. The
+    # checkpointer join upstream still sees every id, so a unit''s standing is the whole unit''s.
+    assert len(unit["finding_ids"]) == NESTED_FINDINGS_PER_UNIT

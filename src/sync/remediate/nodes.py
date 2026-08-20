@@ -11,8 +11,8 @@ from typing import Protocol, runtime_checkable
 from sync.core import CallSite, Evidence, Patch, RepoRef, VendorChange
 from sync.remediate import corpus
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
-from sync.remediate.tiered import routing_facts
-from sync.route.matrix import NO_PATCH, route
+from sync.route.disposition import decide_tier
+from sync.route.matrix import NO_PATCH
 
 
 class _OpenedPullRequest(Protocol):
@@ -82,37 +82,6 @@ def _ci_feedback(url: str, branch: str, patch: Patch | None) -> str:
     ])
 
 
-def _decide_tier(
-    change: VendorChange, site: CallSite, catalogue, repo: RepoRef | None = None
-) -> tuple[int | None, str | None]:
-    """The tier the decision table assigns, and the row that assigned it.
-
-    This is the one place the route is determined and `RunState` is the one place it is
-    stored, so the branch out of `prepare` reads a value a node set deliberately. It is
-    decided here, at `locate`, because this is where the table's inputs are established.
-
-    `TieredRemediator` asks the table again inside `propose`, and the two cannot disagree
-    only while they are given the same inputs: both call `sync.route.matrix.route()` over
-    `tiered.routing_facts()`, one pure function. `repo` is one of those inputs. Row 4 turns
-    on whether the argument is a literal, which is read off the clone, so omitting `repo`
-    here would record the row a run holding no clone would have taken -- an upper bound
-    rather than the row that decided, in the column that exists to make "tier 0 was wrong
-    for this change kind" a query. Only this call happens before the branch, which is what
-    lets a tier -1 finding reach `END` without the patch node running at all.
-
-    `(None, None)` means the table had no jurisdiction, which is not tier -1 and must not be
-    treated as one. A deprecation's kind is `deprecation/model-retired`, which no oasdiff
-    catalogue carries; routing those to the report node would switch off the one signal that
-    costs no tokens.
-    """
-    if not catalogue:
-        return None, None
-    rule = catalogue.get(change.kind)
-    if rule is None:
-        return None, None
-    return route(rule, routing_facts(change, site, repo))
-
-
 def make_locate(store, catalogue=None):
     def locate(state: RunState) -> RunState:
         finding = state["finding"]
@@ -125,7 +94,14 @@ def make_locate(store, catalogue=None):
                 "diagnostics": _describe(exc),
                 "abandon_reason_code": "locate_failed",
             }
-        tier, row = _decide_tier(change, site, catalogue, state["repo"])
+        # The clone is passed deliberately. Row 4 turns on whether the argument is written as
+        # a literal, which is read off the checkout, so deciding without it here would record
+        # the row a run holding no clone would have taken -- an upper bound rather than the row
+        # that decided, in the column that exists to make "tier 0 was wrong for this change
+        # kind" a query. `sync.route.disposition` is the same function the tick and the console
+        # call with no clone, and its docstring carries why that is a bound and not a
+        # contradiction.
+        tier, row = decide_tier(change, site, catalogue, state["repo"])
         return {
             "site": site,
             "change": change,

@@ -146,7 +146,7 @@ def _method_name(http_method: str, is_instance: bool) -> str | None:
 
 def build_symbol_map(
     spec: dict[str, Any], sdk_spec: dict[str, Any] | None = None
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, Any]]:
     """Map `stripe.<resource>.<method>` onto operation metadata.
 
     The method name comes from the vendor when `sdk_spec` is supplied. Stripe
@@ -199,6 +199,14 @@ def build_symbol_map(
             operation_id = operation.get("operationId")
             if not operation_id:
                 continue
+            # The product this operation belongs to, in Stripe's own words. `tags` is a list on
+            # the specification and this reads the first: Stripe's document does not use more
+            # than one per operation across the pinned versions this map is built from, and a
+            # symbol table entry holds one flat dict rather than a list-valued field.
+            tags = operation.get("tags")
+            service_id = (
+                tags[0] if isinstance(tags, list) and tags and isinstance(tags[0], str) else None
+            )
             for symbol, languages in _spellings(resource_segment, method_name).items():
                 existing = mapping.get(symbol)
                 if existing is not None:
@@ -212,6 +220,7 @@ def build_symbol_map(
                     "http_method": http_method.lower(),
                     "path": path,
                     "languages": languages,
+                    "service_id": service_id,
                 }
 
     return mapping

@@ -1,12 +1,17 @@
 /**
  * The vendors attached to one repository — the list screen the owner asked for.
  *
- * *"the vendors page that list all the vendors part of that codebase"*, at an equal stage with API
- * services. This is the list; `vendor-page.tsx` remains the detail.
+ * *"the vendors page that list all the vendors part of that codebase"*. This is the list;
+ * `vendor-page.tsx` remains the detail.
  *
- * **The scoped-answer discipline is the substance here.** `/api/overview` echoes the `repo_id` it
- * was computed for precisely so a caller cannot render the fleet's vendors under one repository's
- * name. `codebases-panel.tsx` had that exact defect once — it printed the fleet-wide
+ * **The list is what the index bound, from 2026-08-19.** It was built on `overview.vendors` — a
+ * `GROUP BY` over open findings — so a vendor this codebase calls cleanly was absent from the page
+ * asking which vendors it uses, and the page could not answer its own question without the Errors
+ * & Incidents payload the owner has now ruled off it. Coverage answers it directly.
+ *
+ * **The scoped-answer discipline is the substance here.** The coverage route echoes the `repo_id`
+ * it was computed for precisely so a caller cannot render another repository's vendors under this
+ * one's name. `codebases-panel.tsx` had that exact defect once — it printed the fleet-wide
  * `total_findings` under every card — so this screen asserts the scope it renders, not just the
  * rows.
  *
@@ -28,11 +33,25 @@ afterEach(() => {
 
 const settled = (data: unknown) => ({ isPending: false, isError: false, isSuccess: true, data })
 
-const { useOverview } = vi.hoisted(() => ({ useOverview: vi.fn() }))
+const { useRepositoryCoverage } = vi.hoisted(() => ({ useRepositoryCoverage: vi.fn() }))
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
-  useOverview,
+  useRepositoryCoverage,
 }))
+
+/** The coverage answer, in the scope it was computed for. */
+function coverage(repoId: string, byVendor: Record<string, number>) {
+  useRepositoryCoverage.mockReturnValue(
+    settled({
+      repo_id: repoId,
+      by_vendor: byVendor,
+      last_indexed: {},
+      total_call_sites: Object.values(byVendor).reduce((sum, n) => sum + n, 0),
+      by_service: [],
+      by_operation: [],
+    })
+  )
+}
 
 function renderAt(repoId: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -49,27 +68,20 @@ function renderAt(repoId: string) {
 
 describe("the vendors attached to one repository", () => {
   it("lists one row per vendor the scoped answer returned", () => {
-    useOverview.mockReturnValue(
-      settled({
-        repo_id: "org/one",
-        vendors: [
-          { vendor_id: "stripe", open_finding_count: 4 },
-          { vendor_id: "openai", open_finding_count: 0 },
-        ],
-      })
-    )
+    coverage("org/one", { stripe: 3, openai: 5 })
 
     const { container } = renderAt("org/one")
 
     const rows = container.querySelectorAll("tbody tr")
     expect(rows.length).toBe(2)
-    expect(within(rows[0] as HTMLElement).getByText("stripe")).not.toBeNull()
+    // Busiest first: the ordering is the screen's, not the payload's, because `by_vendor` is an
+    // object and object key order is not a fact a reader should have to trust.
+    expect(within(rows[0] as HTMLElement).getByText("openai")).not.toBeNull()
+    expect(within(rows[1] as HTMLElement).getByText("stripe")).not.toBeNull()
   })
 
   it("links each vendor to its detail, carrying the repository as the scope", () => {
-    useOverview.mockReturnValue(
-      settled({ repo_id: "org/one", vendors: [{ vendor_id: "stripe", open_finding_count: 4 }] })
-    )
+    coverage("org/one", { stripe: 4 })
 
     renderAt("org/one")
 
@@ -79,20 +91,22 @@ describe("the vendors attached to one repository", () => {
     expect(link.getAttribute("href")).toBe("/repositories/org%2Fone/vendors/stripe")
   })
 
-  it("renders a confirmed zero as a number and never as absence", () => {
-    useOverview.mockReturnValue(
-      settled({ repo_id: "org/one", vendors: [{ vendor_id: "openai", open_finding_count: 0 }] })
-    )
+  it("does not answer the Findings screen's question, which is what put it on two screens", () => {
+    coverage("org/one", { stripe: 4 })
 
     const { container } = renderAt("org/one")
 
-    // Zero open findings is an answer about the vendor. It is not the same as not having asked, and
-    // this screen must not render the absence marker for it.
-    expect(container.textContent).toContain("No open findings")
+    // Owner ruling, 2026-08-19: Errors & Incidents belongs on Findings alone. A finding column,
+    // a per-integration findings ranking, or a card fact would each put it back here, and every
+    // other test in this file would stay green.
+    // Non-vacuous: the row rendered, with the column this screen does own.
+    expect(screen.getByRole("columnheader", { name: /call sites/i })).toBeTruthy()
+    expect(screen.queryByRole("columnheader", { name: /open findings/i })).toBeNull()
+    expect(container.textContent).not.toContain("open findings")
   })
 
   it("says no vendor is attached rather than showing an empty table", () => {
-    useOverview.mockReturnValue(settled({ repo_id: "org/one", vendors: [] }))
+    coverage("org/one", {})
 
     const { container } = renderAt("org/one")
 
@@ -101,11 +115,10 @@ describe("the vendors attached to one repository", () => {
   })
 
   it("refuses to render rows under a repository the answer was not computed for", () => {
-    // The defect this exists to stop, which has happened here before: a fleet-wide answer rendered
-    // under one repository's name. `/api/overview` echoes its own scope so the screen can check.
-    useOverview.mockReturnValue(
-      settled({ repo_id: null, vendors: [{ vendor_id: "stripe", open_finding_count: 4 }] })
-    )
+    // The defect this exists to stop, which has happened here before: another scope's answer
+    // rendered under one repository's name. The coverage route echoes its own scope so the screen
+    // can check.
+    coverage("org/other", { stripe: 4 })
 
     const { container } = renderAt("org/one")
 

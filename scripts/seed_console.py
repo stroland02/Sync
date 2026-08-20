@@ -176,9 +176,32 @@ def _require_dev_dsn(dsn: str, label: str) -> None:
 # --- the graph side -----------------------------------------------------------
 
 
+# Which API product each seeded operation belongs to -- the layer that makes the console's
+# Services screen a different list from its Vendors screen rather than the same `vendor_id` under
+# two headings. A vendor is the provider Sync watches; a service is one of the APIs it sells, so
+# two vendors here carry four services between them.
+#
+# **`PostRefunds` is deliberately absent, and that is the third state.** Only a vendor adapter can
+# map an operation onto a product and none supplies that mapping yet, so a real graph is mostly
+# ungrouped -- a fixture in which every operation had a service would show the console a state it
+# will not meet for months and hide the one it meets today.
+_OPERATION_SERVICE: dict[tuple[str, str], str] = {
+    (VENDOR_STRIPE, "PostCharges"): "Payments",
+    (VENDOR_STRIPE, "PostSubscriptions"): "Billing",
+    (VENDOR_TWILIO, "CreateMessage"): "Messaging",
+    (VENDOR_TWILIO, "CreateVerification"): "Verify",
+}
+
+
 def _site(**kw) -> CallSite:
     base = dict(sdk_version="14.0.0", content_hash=f"{MARKER}-hash")
     base.update(kw)
+    # Keyed on the operation rather than passed per call site: a service is a property of the
+    # vendor's operation, so two repositories calling `PostCharges` must not be able to disagree
+    # about which product it belongs to.
+    base.setdefault(
+        "service_id", _OPERATION_SERVICE.get((base.get("vendor_id", ""), base.get("operation_id", "")))
+    )
     return CallSite(**base)
 
 

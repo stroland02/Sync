@@ -22,11 +22,13 @@
 import { useState } from "react"
 import { useParams, Link } from "react-router"
 
-import { useAdapters, useOverview } from "@/api/queries"
+import { useAdapters, useRepositoryCoverage } from "@/api/queries"
 import type { AdapterRow } from "@/api/types"
 import { Badge } from "@/vendor/supabase/ui/badge"
 import { Button } from "@/vendor/supabase/ui/button"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
+import { Skeleton } from "@/components/skeleton"
+import { Absent } from "@/components/status"
 import {
   Table,
   TableBody,
@@ -36,7 +38,6 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { PageTabs, vendorsTabs } from "@/components/page-tabs"
-import { FindingsPerIntegration } from "@/features/vendors/findings-per-integration"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 
@@ -49,17 +50,57 @@ export interface RepositoryVendorsPageProps {
 type ViewMode = "table" | "cards"
 type TierFilter = "all" | AdapterRow["kind"]
 
+/**
+ * How many of one vendor's API products this codebase calls.
+ *
+ * Three answers, and they are three different facts: the coverage route did not answer, it
+ * answered about another repository, or it answered and this vendor has *n* products grouped. A
+ * vendor whose operations no adapter has mapped answers nought grouped, which is work not done
+ * rather than a vendor selling one API -- so it takes the absence marker and not a zero.
+ */
+function ServicesCalled({
+  vendorId,
+  coverage,
+  repoId,
+}: {
+  vendorId: string
+  coverage: ReturnType<typeof useRepositoryCoverage>
+  repoId: string
+}) {
+  if (coverage.isPending) return <Skeleton width="2rem" />
+  if (coverage.isError) return <Absent>the index did not answer</Absent>
+  if (coverage.data.repo_id !== repoId) return <Absent>answered for another repository</Absent>
+  // Hotfix from the UI session (2026-08-19 evening): the running API does not serve
+  // `by_service` yet, and the unguarded read crashed the whole Vendors page. Missing-from-API
+  // is its own nothing — not "no products", which the empty-set branch below claims.
+  if (coverage.data.by_service === undefined) {
+    return <Absent>product grouping not served yet</Absent>
+  }
+  const named = new Set(
+    coverage.data.by_service
+      .filter((row) => row.vendor_id === vendorId && row.service_id !== null)
+      .map((row) => row.service_id),
+  )
+  if (named.size === 0) return <Absent>not grouped into products yet</Absent>
+  return <>{named.size.toLocaleString()}</>
+}
+
+
 export function RepositoryVendorsPage() {
   const { repoId } = useParams<{ repoId: string }>()
-  const overview = useOverview(repoId)
   const adaptersQuery = useAdapters()
+  // How many of its API products this codebase actually calls, from the route the Services screen
+  // reads. A vendor is a provider and a service is one of the APIs it sells; the count is the
+  // relation between the two screens, and it is a count rather than a list because naming the
+  // products here would be the Services screen rendered twice.
+  const coverage = useRepositoryCoverage(repoId ?? "")
 
   const [viewMode, setViewMode] = useState<ViewMode>("table")
   const [tierFilter, setTierFilter] = useState<TierFilter>("all")
 
 
 
-  if (overview.isPending) {
+  if (coverage.isPending) {
     return (
       <section className="flex flex-col gap-8">
         <LoadingState what="the vendors attached to this repository" />
@@ -67,13 +108,13 @@ export function RepositoryVendorsPage() {
     )
   }
 
-  if (overview.isError) {
+  if (coverage.isError) {
     return (
       <section className="flex flex-col gap-8">
         <ErrorState
-          error={overview.error}
+          error={coverage.error}
           what="the vendors attached to this repository"
-          onRetry={() => void overview.refetch()}
+          onRetry={() => void coverage.refetch()}
         />
       </section>
     )
@@ -82,8 +123,17 @@ export function RepositoryVendorsPage() {
   // The answer names the scope it was computed for. Rendering rows from a fleet-wide answer under
   // this repository's heading would be a false claim about this repository, so it is refused rather
   // than shown with a caveat.
-  const scopeMatches = overview.data?.repo_id === repoId
-  const vendors = scopeMatches ? (overview.data?.vendors ?? []) : []
+  //
+  // **The list is what the index bound, not what has an open finding**, from 2026-08-19. It was
+  // built on `overview.vendors` -- a `GROUP BY` over open findings -- so a vendor this codebase
+  // calls cleanly was absent from a page asking which vendors it uses, and the page could not
+  // answer its own question without the Errors & Incidents payload the owner has now ruled off it.
+  const scopeMatches = coverage.data?.repo_id === repoId
+  const vendors = scopeMatches
+    ? Object.entries(coverage.data?.by_vendor ?? {})
+        .map(([vendor_id, call_sites]) => ({ vendor_id, call_sites: Number(call_sites) }))
+        .sort((a, b) => b.call_sites - a.call_sites || a.vendor_id.localeCompare(b.vendor_id))
+    : []
   const adaptersMap = new Map(
     (adaptersQuery.data?.adapters ?? []).map((adapter) => [adapter.vendor_id, adapter])
   )
@@ -108,8 +158,8 @@ export function RepositoryVendorsPage() {
         <EmptyState
           headline="This answer was computed for a different scope."
           detail={
-            `The overview that arrived names its scope as ` +
-            `${overview.data?.repo_id ?? "the whole fleet"}, not ${repoId}. Its vendors are not ` +
+            `The index coverage that arrived names its scope as ` +
+            `${coverage.data?.repo_id ?? "another repository"}, not ${repoId}. Its vendors are not ` +
             `shown here, because a fleet-wide list under one repository's name is a claim about ` +
             `that repository which nothing computed.`
           }
@@ -122,9 +172,6 @@ export function RepositoryVendorsPage() {
         />
       ) : (
         <div className="flex flex-col gap-section">
-          {/* Dashboard I3, above the controls: the table below sorts and pages, so the largest
-              contributor is not reliably on screen there. This ranks the whole set once. */}
-          {repoId !== undefined && <FindingsPerIntegration repoId={repoId} />}
           {/* Controls Bar: Filter tabs & View toggle */}
           <div className="flex flex-wrap items-center justify-between gap-field pb-field border-b border-line">
             <div className="flex items-center gap-field overflow-x-auto">
@@ -191,7 +238,7 @@ export function RepositoryVendorsPage() {
                     <VendorCard
                       vendorId={vendor.vendor_id}
                       adapter={adapter}
-                      openFindingCount={vendor.open_finding_count}
+                      callSites={vendor.call_sites}
                     />
                   </Link>
                 )
@@ -203,7 +250,8 @@ export function RepositoryVendorsPage() {
                 <TableRow>
                   <TableHead>Vendor</TableHead>
                   <TableHead>Adapter Tier</TableHead>
-                  <TableHead>Open findings</TableHead>
+                  <TableHead>Services called</TableHead>
+                  <TableHead>Call sites</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -222,12 +270,15 @@ export function RepositoryVendorsPage() {
                       <TableCell>
                         <Badge>{adapter ? adapter.kind : "none"}</Badge>
                       </TableCell>
-                      <TableCell>
-                        <Badge>
-                          {vendor.open_finding_count === 0
-                            ? "No open findings"
-                            : `${vendor.open_finding_count} open findings`}
-                        </Badge>
+                      <TableCell className="font-mono">
+                        <ServicesCalled
+                          vendorId={vendor.vendor_id}
+                          coverage={coverage}
+                          repoId={repoId ?? ""}
+                        />
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {vendor.call_sites.toLocaleString()}
                       </TableCell>
                     </TableRow>
                   )

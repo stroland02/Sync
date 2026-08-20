@@ -594,6 +594,64 @@ def test_call_site_coverage_pairs_each_vendors_count_with_its_own_timestamp(stor
     assert coverage["twilio"] == (1, datetime(2030, 1, 1, tzinfo=timezone.utc))
 
 
+def test_service_coverage_groups_one_vendors_operations_into_its_products(store):
+    """A vendor is the provider; a service is one of the APIs it sells. Seeded so one provider
+    carries two products, which is the case a per-vendor query cannot answer and the case that
+    makes the console's Services screen a different list from its Vendors screen.
+    """
+    store.upsert_call_site(
+        _site(vendor_id="stripe", operation_id="PostCharges", service_id="Payments",
+              path="src/a.ts", line=1, content_hash="hash-a")
+    )
+    store.upsert_call_site(
+        _site(vendor_id="stripe", operation_id="GetCharge", service_id="Payments",
+              path="src/b.ts", line=2, content_hash="hash-b")
+    )
+    store.upsert_call_site(
+        _site(vendor_id="stripe", operation_id="PostSubscriptions", service_id="Billing",
+              path="src/c.ts", line=3, content_hash="hash-c")
+    )
+
+    rows = {(row["vendor_id"], row["service_id"]): row for row in store.service_coverage("r1")}
+
+    assert rows[("stripe", "Payments")]["sites"] == 2
+    assert rows[("stripe", "Payments")]["operations"] == 2
+    assert rows[("stripe", "Billing")]["sites"] == 1
+
+
+def test_service_coverage_keeps_an_ungrouped_operation_as_a_null_group(store):
+    """No adapter maps an operation onto a product yet, so most real rows are ungrouped. Dropping
+    them would report a vendor as selling no APIs when what it has is no adapter -- the absence of
+    a mapping is the fact, and a query that filters it out cannot report it.
+    """
+    store.upsert_call_site(
+        _site(vendor_id="stripe", operation_id="PostCharges", service_id="Payments",
+              path="src/a.ts", line=1, content_hash="hash-a")
+    )
+    store.upsert_call_site(
+        _site(vendor_id="stripe", operation_id="PostRefunds", path="src/b.ts", line=2,
+              content_hash="hash-b")
+    )
+
+    grouped = {row["service_id"]: row["sites"] for row in store.service_coverage("r1")}
+
+    assert grouped == {"Payments": 1, None: 1}
+
+
+def test_service_coverage_excludes_a_retracted_call_site(store):
+    """The same rule `call_site_coverage` keeps: a call the last pass stopped finding is not part
+    of what the repository currently has, so it contributes to no product's count.
+    """
+    store.upsert_call_site(
+        _site(vendor_id="stripe", operation_id="PostCharges", service_id="Payments",
+              path="src/a.ts", line=1, content_hash="hash-a")
+    )
+    with store._connect().cursor() as cur:
+        cur.execute("UPDATE call_site SET retracted_at = now() WHERE repo_id = 'r1'")
+
+    assert store.service_coverage("r1") == []
+
+
 def test_call_site_coverage_a_vendor_with_no_call_sites_is_absent(store):
     store.upsert_call_site(_site(vendor_id="stripe"))
 

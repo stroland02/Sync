@@ -25,80 +25,10 @@ import { activeWorkspace, rememberedWorkspace } from "@/layouts/active-workspace
 import { AboutPlatformPanel } from "@/features/settings/about-platform-panel"
 import { IntegrationsCataloguePanel } from "@/features/settings/integrations-catalogue-panel"
 import { PagesGuidePanel } from "@/features/settings/pages-guide-panel"
+import { SETTING_GROUPS, type SettingsGroup } from "@/features/settings/groups"
 import { SetupPanel } from "@/features/settings/setup-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/vendor/supabase/ui/select"
 
-export type SettingsGroup =
-  | "setup"
-  | "model"
-  | "pull-requests"
-  | "codebases"
-  | "adapters"
-  | "integrations"
-  | "github-connection"
-  | "pages"
-  | "about"
-
-interface GroupDef {
-  id: SettingsGroup
-  label: string
-  description: string
-}
-
-/**
- * Decision 17's five groups, in decision 17's order.
- *
- * The order is part of the decision rather than a rendering detail: Codebases leads because
- * what this deployment watches precedes what it does when it finds something.
- */
-const SETTING_GROUPS: readonly GroupDef[] = [
-  // Setup leads, amending decision 17's order on the owner's 2026-08-18 direction: the
-  // checklist is what makes every group below it configurable, and a fresh install reads
-  // this screen top-down.
-  {
-    id: "setup",
-    label: "Setup",
-    description: "The full loop's prerequisites, probed — and the git remote it addresses",
-  },
-  // Second, immediately after Setup: it is the one prerequisite the checklist cannot probe its
-  // way past, because a deployment with no model connected writes no patch and the owner's
-  // ruling is that Sync never inherits the installer's credential to hide that.
-  {
-    id: "model",
-    label: "Model",
-    description: "Which model writes the patches, and whose credential pays — yours, never ours",
-  },
-  {
-    id: "codebases",
-    label: "Codebases",
-    description: "Repository context (.sync/context.md) and analysis rules",
-  },
-  {
-    id: "pull-requests",
-    label: "Pull requests",
-    description: "Merge policy, merge methods, and base branch automation",
-  },
-  {
-    id: "adapters",
-    label: "Adapters",
-    description: "Registered signal feeds, adapter inventory, and intake metrics",
-  },
-  {
-    id: "github-connection",
-    label: "Connection",
-    description: "Forge authentication, local CLI status, and permissions",
-  },
-  {
-    id: "pages",
-    label: "Pages",
-    description: "How each screen works — the long form behind every ⓘ",
-  },
-  {
-    id: "about",
-    label: "About",
-    description: "Platform architecture, provenance rungs, adapter tiers, and gates",
-  },
-] as const
 
 
 export interface SettingsPageProps {

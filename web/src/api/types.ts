@@ -31,24 +31,6 @@ export const BINDING_SOURCES = [
 export type BindingSource = (typeof BINDING_SOURCES)[number]
 
 /**
- * Whether a call this codebase makes is known to be at risk, known to be clean, or unexamined.
- *
- * **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it —
- * severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
- * `safe` severity would be Sync putting a judgement about this codebase in a column that
- * otherwise holds only the vendor's own words. This is the honest form of the same question,
- * computed by `sync.graph.store` rather than stored.
- *
- * **`unchecked` is the member that earns the other two.** It means no successful intake attempt
- * for the vendor — the graph has never read its specification — and without it, `clean` would be
- * an all-clear the console never earned. Most-wanting-attention first, matching
- * `BINDING_STATUSES` in the store, which is what `tests/test_api_routes.py` holds the two to.
- */
-export const BINDING_STATUSES = ["at_risk", "unchecked", "clean"] as const
-
-export type BindingStatus = (typeof BINDING_STATUSES)[number]
-
-/**
  * On every payload the API returns.
  *
  * `binding_source` is null when the answer rests on no single binding — either the payload
@@ -528,7 +510,7 @@ export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]
  * by `tests/test_api_routes.py::test_the_consoles_run_disposition_matches_the_finished_outcomes`,
  * since nothing else keeps the two languages agreeing.
  */
-export type RunDisposition = "opened" | "abandoned" | "reported" | "parked"
+export type RunDisposition = "opened" | "abandoned" | "reported"
 
 /**
  * One run the checkpointer holds: the newest checkpoint on one thread.
@@ -549,6 +531,19 @@ export type RunDisposition = "opened" | "abandoned" | "reported" | "parked"
 export interface RunRow {
   thread_id: string
   finding_id: string
+  /**
+   * The finding as something a reviewer can say — `stripe-postcharges-4b1c9e`.
+   *
+   * Derived in the payload (`sync.core.naming.finding_name`), never in the console: the CLI and
+   * a pull-request body name the same finding, and a third derivation is where they diverge.
+   * The id above stays the addressable thing and every link is still built from it.
+   *
+   * `null` when the graph no longer holds the finding this thread names. The checkpointer
+   * outlives `finding`, which a scan truncates and rebuilds, so a run whose finding was patched
+   * or retracted has no call site to take a vendor and operation from — and a name invented for
+   * it would claim an integration nothing recorded.
+   */
+  finding_name: string | null
   /**
    * What the heartbeat table knows about an in-flight run (B194): `alive` — the runner's
    * process ticked inside its window; `expired` — the sweep recorded that heartbeats stopped
@@ -829,6 +824,21 @@ export interface ServiceCoverageRow {
   last_indexed: string
 }
 
+/**
+ * One vendor operation this repository calls, carrying the product it belongs to.
+ *
+ * The grain beneath `ServiceCoverageRow`. Its own aggregate rather than something summed out of
+ * this list, so the two can never disagree in a way neither can reveal.
+ */
+export interface OperationCoverageRow {
+  vendor_id: string
+  /** `null` for the same reason `ServiceCoverageRow.service_id` is: nothing has grouped it yet. */
+  service_id: string | null
+  operation_id: string
+  call_sites: number
+  last_indexed: string
+}
+
 export interface IndexCoverageResponse {
   repo_id: string
   by_vendor: Tally
@@ -836,16 +846,8 @@ export interface IndexCoverageResponse {
   total_call_sites: number
   /** The product question beside the provider question, computed over the same rows. */
   by_service: ServiceCoverageRow[]
-  /**
-   * How much of this codebase's API surface is at risk, clean, or unexamined — counted over
-   * **operations**, not call sites, so one heavily-called operation cannot dominate a figure
-   * meant to describe breadth.
-   *
-   * A status absent here was not counted at nought, and an empty object is a repository with no
-   * call sites at all. Only ApiSurfacePanel fills a missing member with a zero, and only after
-   * establishing that a surface exists — see its own note for why that is honest there.
-   */
-  by_binding_status: Tally
+  /** The operations behind those products, so a product can list its own without a second read. */
+  by_operation: OperationCoverageRow[]
 }
 
 /**
@@ -927,54 +929,6 @@ export interface ObservedTelemetryResponse {
   calls: ItemPage<ObservedCallRow>
   shapes: ItemPage<ObservedShapeRow>
   error_windows: ItemPage<ObservedErrorWindowRow>
-  /**
-   * Traffic per operation, pooled across every unit of work held — correlated rows only.
-   * `requests` counts spans that carried a status (the detector's own denominator rule);
-   * `unstatused` is reported beside it so a rate computed over a shrunken sample can be
-   * discounted. No rate arrives from the transport: a screen that divides shows both counts.
-   */
-  traffic: TrafficRollupRow[]
-  /** The same rollup for traffic nothing could attribute to an operation — never pooled in. */
-  unattributed: TrafficRollupRow[]
-  /**
-   * Requests and errors per hour, bucketed by each unit of work's `first_seen` — a span carries
-   * no timestamp of its own, so a long trace's spans land on the hour its first request did.
-   */
-  series: TrafficBucket[]
-  totals: TrafficTotals
-}
-
-export interface TrafficRollupRow {
-  vendor_id: string
-  operation_id: string
-  server_address: string
-  http_method: string
-  binding_rung: string
-  url_template: string
-  traces: number
-  requests: number
-  errors: number
-  unstatused: number
-  distinct_targets: number
-  max_resend: number
-  first_seen: string
-  last_seen: string
-}
-
-export interface TrafficBucket {
-  bucket: string
-  requests: number
-  errors: number
-}
-
-export interface TrafficTotals {
-  requests: number
-  errors: number
-  unstatused: number
-  unattributed_requests: number
-  operations_observed: number
-  /** How many distinct operations the static index binds — the coverage denominator. */
-  operations_indexed: number
 }
 
 /**
@@ -1274,30 +1228,4 @@ export interface FindingsOverTimeResponse {
   total: number
   /** How many of them are still open, reported beside the series rather than folded into it. */
   still_open: number
-}
-
-/**
- * One remediation request — the console's ticket lane (owner ruling 2026-08-19).
- *
- * `status` is the lifecycle the Solutions funnel draws: `requested` (initiated), `picked_up`
- * (in progress), `done` (complete, with `outcome` saying how — the run's own vocabulary).
- * `source` is which lane asked: `operator` from the Findings page, `watch` from the loop.
- */
-export interface Ticket {
-  id: number
-  finding_id: string
-  repo_id: string
-  source: string
-  status: string
-  requested_at: string
-  picked_up_at: string | null
-  done_at: string | null
-  thread_id: string | null
-  outcome: string | null
-  detail: string | null
-}
-
-export interface TicketsResponse {
-  repo_id: string
-  tickets: Ticket[]
 }

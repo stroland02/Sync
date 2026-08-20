@@ -34,8 +34,7 @@ from typing import Callable, Sequence
 
 from sync.core import Finding
 from sync.graph.store import GraphStore
-from sync.remediate.tiered import routing_facts
-from sync.route.matrix import CODEMOD, NO_PATCH, TEMPLATED, route
+from sync.route.disposition import disposition
 from sync.signals.registry import (
     RegisteredAdapter,
     generated_spec_source,
@@ -142,11 +141,18 @@ def tick(
     def classify(finding: Finding, policy: str) -> tuple[tuple[int, str] | None, str | None]:
         """A (tier, row) worth a pull request, or the reason this finding is notified instead.
 
-        Mechanically safe means the decision table routes it below the agent tier -- a codemod
-        or one constrained templated edit. The facts here are `locate`'s preview facts (no
-        clone), which `nodes.py` proves name a tier at least as expensive as `propose` would
-        settle on -- so a finding marked safe here cannot become an open-ended agent run, and
-        the error direction is a notification that could have been a pull request.
+        Two gates in order, and they answer different questions. The subscription's policy is
+        the operator's standing instruction for this repository and vendor, so it is asked
+        first -- `notify_only` declines a finding the routing table would have taken, and that
+        is the operator's call rather than the table's. What is left is the table's own
+        question, and `sync.route.disposition` is the one place it is answered: the console
+        shows a reader the same verdict this tick acts on, from one derivation rather than two
+        that drift.
+
+        The facts are the no-clone facts, which `disposition` documents as naming a tier at
+        least as expensive as `propose` settles on -- so a finding marked mechanical here
+        cannot become an open-ended agent run, and the error direction is a notification that
+        could have been a pull request.
         """
         nonlocal catalogue
         if policy == "notify_only":
@@ -163,15 +169,10 @@ def tick(
             from sync.cli import load_catalogue
 
             catalogue = load_catalogue()
-        rule = catalogue.get(change.kind)
-        if rule is None:
-            return None, f"the routing table has no jurisdiction over '{change.kind}'"
-        tier, row = route(rule, routing_facts(change, site, repo=None))
-        if tier in (CODEMOD, TEMPLATED):
-            return (tier, row), None
-        if tier == NO_PATCH:
-            return None, f"no patch is warranted (row '{row}')"
-        return None, f"not mechanically safe (row '{row}' routes to the agent tier)"
+        verdict = disposition(change, site, catalogue, repo=None)
+        if verdict.automatic:
+            return (verdict.tier, verdict.routing_row), None
+        return None, verdict.reason
 
     def decide(sub: dict, findings: list[Finding]) -> None:
         nonlocal remaining

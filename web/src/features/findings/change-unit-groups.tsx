@@ -125,6 +125,19 @@ function UnitRow({ repoId, unit }: { repoId: string; unit: ChangeUnitRow }) {
             {/* The same table the flat view renders, so one finding is one object however a
                 reader arrived at it. */}
             <FindingsTable repoId={repoId} rows={unit.findings} />
+            {/* The nested rows are a bounded sample, and a reader must not read them as the
+                whole unit. The payload caps them because `limit` bounds units and nothing
+                bounded these -- eight units carried ten thousand rows and 4.3 MB before it did
+                -- and `finding_count` is the population, computed independently. Silence here
+                would make a truncated list look complete, which is the one thing a count that
+                disagrees with the rows beneath it must never do. */}
+            {unit.finding_count > unit.findings.length && (
+              <p className="text-meta text-ink-muted">
+                Showing {unit.findings.length.toLocaleString()} of{" "}
+                {unit.finding_count.toLocaleString()} findings in this change. The rest are in the
+                flat list, which pages.
+              </p>
+            )}
           </TableCell>
         </TableRow>
       )}
