@@ -237,3 +237,55 @@ def test_the_status_facet_ignores_its_own_filter(store):
     page = store.call_sites_page("r1", binding_statuses=["clean"])
 
     assert page["by_binding_status"] == {"at_risk": 1, "clean": 1}
+
+
+def test_the_rollup_counts_operations_rather_than_call_sites(store):
+    """The dashboard grain, and it is not the table's.
+
+    A reader asking "how much of my API surface is safe" means operations: forty call sites to one
+    operation is one thing to know about, and counting sites would let a single heavily-called
+    operation dominate a figure meant to describe breadth. `graph-grain.md` asks every count to
+    say what one row is, and this one is one operation this codebase calls.
+    """
+    store.upsert_call_site(_site(operation_id="GetBalance", path="src/a.ts"))
+    store.upsert_call_site(_site(operation_id="GetBalance", path="src/b.ts"))
+    store.upsert_call_site(_site(operation_id="GetBalance", path="src/c.ts"))
+    _checked(store, "stripe")
+
+    assert store.binding_status_rollup("r1") == {"clean": 1}
+
+
+def test_the_rollup_separates_the_three_states(store):
+    broken = store.upsert_call_site(_site(operation_id="PostCharges", path="src/a.ts"))
+    store.upsert_call_site(_site(operation_id="GetBalance", path="src/b.ts"))
+    store.upsert_call_site(_site(vendor_id="twilio", operation_id="GetCalls", path="src/c.ts"))
+    store.insert_finding(_finding(broken))
+    _checked(store, "stripe")
+
+    assert store.binding_status_rollup("r1") == {"at_risk": 1, "clean": 1, "unchecked": 1}
+
+
+def test_the_rollup_is_scoped_to_one_repository(store):
+    """A figure computed over the fleet and rendered under a repository's name is a false claim
+    about that repository -- the scoping rule every console level below Codebase inherits."""
+    store.upsert_call_site(_site(repo_id="r1", operation_id="GetBalance", path="src/a.ts"))
+    store.upsert_call_site(_site(repo_id="r2", operation_id="GetCalls", path="src/b.ts"))
+    _checked(store, "stripe")
+
+    assert store.binding_status_rollup("r1") == {"clean": 1}
+
+
+def test_a_repository_with_no_call_sites_rolls_up_to_nothing(store):
+    """Empty rather than three zeroes: a codebase that was never indexed has not had its
+    operations examined and found clean, and three noughts would say it had."""
+    assert store.binding_status_rollup("r1") == {}
+
+
+def test_a_retracted_call_site_leaves_the_rollup(store):
+    """A site the last pass stopped finding is not a place this codebase calls the vendor, so
+    the operation it was the only evidence for is no longer part of the surface."""
+    store.upsert_call_site(_site(operation_id="GetBalance", path="src/a.ts"))
+    _checked(store, "stripe")
+    store.replace_call_sites("r1", [])
+
+    assert store.binding_status_rollup("r1") == {}
