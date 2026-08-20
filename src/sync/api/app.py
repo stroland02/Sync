@@ -641,6 +641,7 @@ def create_app(
             vendor_ids=_values_param(request, "vendor_id"),
             operation_ids=_values_param(request, "operation_id"),
             loop_depths=_int_values_param(request, "loop_depth"),
+            binding_statuses=_values_param(request, "binding_status"),
             path_prefix=request.query_params.get("path_prefix"),
             limit=_limit_param(request),
             offset=_offset_param(request),
