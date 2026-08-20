@@ -510,7 +510,7 @@ export type WorkflowNodeName = (typeof WORKFLOW_NODE_ORDER)[number]
  * by `tests/test_api_routes.py::test_the_consoles_run_disposition_matches_the_finished_outcomes`,
  * since nothing else keeps the two languages agreeing.
  */
-export type RunDisposition = "opened" | "abandoned" | "reported"
+export type RunDisposition = "opened" | "abandoned" | "reported" | "parked"
 
 /**
  * One run the checkpointer holds: the newest checkpoint on one thread.
@@ -848,6 +848,16 @@ export interface IndexCoverageResponse {
   by_service: ServiceCoverageRow[]
   /** The operations behind those products, so a product can list its own without a second read. */
   by_operation: OperationCoverageRow[]
+  /**
+   * How much of this codebase's API surface is at risk, clean, or unexamined — counted over
+   * **operations**, not call sites, so one heavily-called operation cannot dominate a figure
+   * meant to describe breadth.
+   *
+   * A status absent here was not counted at nought, and an empty object is a repository with no
+   * call sites at all. Only ApiSurfacePanel fills a missing member with a zero, and only after
+   * establishing that a surface exists — see its own note for why that is honest there.
+   */
+  by_binding_status: Tally
 }
 
 /**
@@ -1303,3 +1313,21 @@ export interface TicketsResponse {
   repo_id: string
   tickets: Ticket[]
 }
+
+/**
+ * Whether a call this codebase makes is known to be at risk, known to be clean, or unexamined.
+ *
+ * **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it —
+ * severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
+ * `safe` severity would be Sync putting a judgement about this codebase in a column that
+ * otherwise holds only the vendor's own words. This is the honest form of the same question,
+ * computed by `sync.graph.store` rather than stored.
+ *
+ * **`unchecked` is the member that earns the other two.** It means no successful intake attempt
+ * for the vendor — the graph has never read its specification — and without it, `clean` would be
+ * an all-clear the console never earned. Most-wanting-attention first, matching
+ * `BINDING_STATUSES` in the store, which is what `tests/test_api_routes.py` holds the two to.
+ */
+export const BINDING_STATUSES = ["at_risk", "unchecked", "clean"] as const
+
+export type BindingStatus = (typeof BINDING_STATUSES)[number]

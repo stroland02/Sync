@@ -28,22 +28,10 @@ from sync.dashboard.queries import DISPOSITIONS, _FINISHED, _pending_node
 from sync.graph.store import GraphStore
 
 
-NESTED_FINDINGS_PER_UNIT = 20
-"""How many of a change unit's findings travel inside the unit itself.
-
-A sample, never the population -- `finding_count` on the same row is the population and is
-computed independently, which is the whole reason it is stated rather than derived from this
-array. Twenty because the console renders these in a disclosure a reader opens on one unit at a
-time: enough that opening one is useful, few enough that fifty units cannot build a payload out
-of them. The exact number is not load-bearing; that the array is bounded at all is.
-"""
-
-
-def _run_row(thread_id: str, checkpoint: dict, identity: dict | None = None) -> dict:
+def _run_row(thread_id: str, checkpoint: dict, repo_id: str | None = None) -> dict:
     values = checkpoint.get("channel_values") or {}
     versions = checkpoint.get("channel_versions") or {}
     seen = checkpoint.get("versions_seen") or {}
-    known = identity or {}
 
     outcome = values.get("outcome") if values.get("outcome") in DISPOSITIONS else None
     parts = thread_id.split(":")
@@ -52,35 +40,13 @@ def _run_row(thread_id: str, checkpoint: dict, identity: dict | None = None) -> 
     return {
         "thread_id": thread_id,
         "finding_id": finding_id,
-        # The sayable name, derived here rather than in the console for the reason `naming.py`
-        # states: the same finding is named by the CLI and by a pull-request body too, and a
-        # third derivation is where the three start to differ.
-        #
-        # `None` when the graph no longer holds the finding this thread names. The checkpointer
-        # outlives `finding`, which a scan truncates and rebuilds, so a run whose finding has
-        # been patched or retracted has a thread and no call site to name it from -- and a name
-        # invented for it would claim a vendor and an operation nothing recorded.
-        "finding_name": _run_name(finding_id, known),
-        "repo_id": known.get("repo_id") or values.get("repo_id"),
+        "repo_id": repo_id or values.get("repo_id"),
         "run_id": run_id,
         "current_node": None if outcome is not None else _pending_node(versions, seen),
         "outcome": outcome,
         "abandon_reason": values.get("abandon_reason"),
         "last_checkpoint_at": checkpoint.get("ts"),
     }
-
-
-def _run_name(finding_id: str, identity: dict) -> str | None:
-    """This run's finding as something a reviewer can say, or `None` when it cannot be derived.
-
-    An operation is nullable on `call_site` -- not every binding resolves one -- and
-    `finding_name` builds its name from the parts that are present, so a finding with no
-    operation is named for its vendor alone. What it cannot do without is the id, which is
-    where the discriminator comes from.
-    """
-    if not identity.get("vendor_id"):
-        return None
-    return finding_name(identity["vendor_id"], identity.get("operation_id") or "", finding_id)
 
 
 IN_FLIGHT = "in-flight"
@@ -119,14 +85,10 @@ def runs(
     `total` describes the filtered set, because pagination walks that set and no other.
     """
     limit = max(limit, 1)
-    # One map, carrying the repository this narrows on and the vendor and operation each row is
-    # named from. Two queries over the same join would be a second thing to keep in agreement.
-    identities = store.finding_identities() if store is not None else {}
+    repo_map = store.finding_repo_ids() if store is not None else {}
 
     if repo_id is not None:
-        matching_fids = [
-            fid for fid, known in identities.items() if known.get("repo_id") == repo_id
-        ]
+        matching_fids = [fid for fid, r_id in repo_map.items() if r_id == repo_id]
         if not matching_fids:
             return {
                 "items": [], "total": 0, "next_offset": None,
@@ -190,7 +152,7 @@ def runs(
         _run_row(
             row["thread_id"],
             row["checkpoint"],
-            identity=identities.get(row["thread_id"].split(":", 1)[0]),
+            repo_id=repo_map.get(row["thread_id"].split(":", 1)[0]),
         )
         for row in rows
     ]
@@ -375,30 +337,8 @@ def change_units(
     """
     limit = max(limit, 1)
 
-    # Both narrowings are SQL predicates, and that is a latency fix rather than a tidy-up.
-    # They were Python list comprehensions over the whole fleet's open findings, so a
-    # repository-scoped request fetched every repository's rows and then discarded them --
-    # measured at 10,000 findings, the scoped call was *slower than the fleet-wide one*
-    # (310 ms against 199 ms), which is the signature of doing the same work plus the filtering.
-    # The predicates say the same thing; the difference is where the rows stop.
-    narrowing = ""
-    params: list[Any] = []
-    if repo_id is not None:
-        narrowing += " AND call_site.repo_id = %s"
-        params.append(repo_id)
-    # Narrowed before grouping, so a unit reports the findings of the chosen severity it holds
-    # and the sum still equals the flat total for that tab. Filtering the units afterwards would
-    # leave each one counting findings the reader is not being shown, which is a grouped table
-    # whose parts do not add to the figure above it.
-    #
-    # A unit with no finding at this severity is absent rather than present at nought -- the
-    # grouping returns groups that exist, the rule `by_vendor_severity` already follows.
-    if severity is not None:
-        narrowing += " AND finding.severity = %s"
-        params.append(severity)
-
     raw_rows = store._connect().execute(
-        f"""
+        """
         SELECT finding.id AS finding_id,
                finding.severity AS severity,
                finding.binding_rung AS binding_rung,
@@ -422,11 +362,22 @@ def change_units(
           LEFT JOIN vendor_change ON vendor_change.id = finding.vendor_change_id
          WHERE finding.status = 'open'
            AND call_site.retracted_at IS NULL
-           {narrowing}
          ORDER BY finding.created_at DESC
-        """,
-        params,
+        """
     ).fetchall()
+
+    if repo_id is not None:
+        raw_rows = [r for r in raw_rows if r["repo_id"] == repo_id]
+
+    # Narrowed before grouping, so a unit reports the findings of the chosen severity it holds
+    # and the sum still equals the flat total for that tab. Filtering the units afterwards would
+    # leave each one counting findings the reader is not being shown, which is a grouped table
+    # whose parts do not add to the figure above it.
+    #
+    # A unit with no finding at this severity is absent rather than present at nought -- the
+    # grouping returns groups that exist, the rule `by_vendor_severity` already follows.
+    if severity is not None:
+        raw_rows = [r for r in raw_rows if r["severity"] == severity]
 
     if not raw_rows:
         return {"items": [], "total": 0, "next_offset": None}
@@ -473,12 +424,6 @@ def change_units(
             # query: the grouping above has already fetched each finding's call site. One shape
             # rather than a thinner second one, because the copy that did not get a field added
             # later would be the only one missing it.
-            #
-            # **Bounded, and `finding_count` above is what makes that safe.** `limit` bounds
-            # units and nothing bounded this, so the page was unbounded in the dimension that
-            # decides its size: measured at 10,000 findings, eight units carried 10,000 nested
-            # rows and the response was 4.3 MB. The count beside it is the workspace's and stays
-            # exact; this is a sample and the screen says so.
             "findings": [
                 {
                     "name": finding_name(
@@ -496,7 +441,7 @@ def change_units(
                     "finding_id": row["finding_id"],
                     "binding_source": row["binding_rung"],
                 }
-                for row in group_rows[:NESTED_FINDINGS_PER_UNIT]
+                for row in group_rows
             ],
             "repo_ids": repo_ids,
             "standing": None,
@@ -505,73 +450,35 @@ def change_units(
         units.append(unit)
 
     if checkpointer_dsn is not None and units:
-        # One query for every unit on the page, not one per unit. This was a round trip inside
-        # `for u in units`, so a page of fifty units cost fifty queries against a second database
-        # -- an N+1 on the route the console's Integrations screen reads. The checkpointer holds
-        # one newest checkpoint per thread whichever way it is asked; asking once and keying the
-        # answer in Python is the same answer at one round trip.
-        by_finding: dict[str, tuple[str | None, object]] = {}
         try:
             with psycopg.connect(checkpointer_dsn, row_factory=dict_row) as conn:
                 if conn.execute("SELECT to_regclass('checkpoints') AS t").fetchone()["t"] is not None:
-                    wanted = sorted({f_id for u in units for f_id in u["finding_ids"]})
-                    if wanted:
-                        placeholders = ", ".join(["%s"] * len(wanted))
-                        # **The timestamp is a key inside the checkpoint, not a column.**
-                        # `checkpoints` holds (thread_id, checkpoint_ns, checkpoint_id,
-                        # parent_checkpoint_id, type, checkpoint, metadata) and nothing else, so
-                        # the `ts` this query used to select did not exist -- every execution
-                        # raised `UndefinedColumn`, the bare `except psycopg.Error` below caught
-                        # it, and every unit reported `standing: null` forever. `_run_row` reads
-                        # `checkpoint.get("ts")` and is the correct reading; this now matches it.
+                    for u in units:
+                        f_ids = u["finding_ids"]
+                        placeholders = ", ".join(["%s"] * len(f_ids))
                         cp_rows = conn.execute(
                             f"""
-                            SELECT split_part(thread_id, ':', 1) AS finding_id,
-                                   checkpoint,
-                                   checkpoint ->> 'ts' AS checkpoint_ts
-                              FROM (
-                                SELECT DISTINCT ON (thread_id) thread_id, checkpoint_id, checkpoint
+                            SELECT thread_id, checkpoint, ts FROM (
+                                SELECT DISTINCT ON (thread_id) thread_id, checkpoint_id, checkpoint, ts
                                   FROM checkpoints
                                  WHERE checkpoint_ns = ''
                                  ORDER BY thread_id, checkpoint_id DESC
-                              ) AS newest
-                             WHERE split_part(thread_id, ':', 1) IN ({placeholders})
-                             ORDER BY checkpoint ->> 'ts' DESC NULLS LAST
+                            ) AS newest
+                            WHERE split_part(thread_id, ':', 1) IN ({placeholders})
+                            ORDER BY ts DESC
+                            LIMIT 1
                             """,
-                            wanted,
+                            f_ids,
                         ).fetchall()
-                        # Newest first, so the first row seen for a finding is the one that wins --
-                        # the same row the per-unit `ORDER BY ... LIMIT 1` meant to return.
-                        for row in cp_rows:
-                            by_finding.setdefault(
-                                row["finding_id"], (row.get("checkpoint"), row.get("checkpoint_ts"))
-                            )
-                    for u in units:
-                        found = [by_finding[f] for f in u["finding_ids"] if f in by_finding]
-                        if not found:
-                            continue
-                        checkpoint, ts_val = max(
-                            found, key=lambda pair: (pair[1] is not None, pair[1] or "")
-                        )
-                        val = (checkpoint or {}).get("channel_values") or {}
-                        outcome = val.get("outcome") if val.get("outcome") in DISPOSITIONS else None
-                        u["standing"] = outcome or "in_progress"
-                        u["last_checkpoint_at"] = (
-                            ts_val.isoformat() if hasattr(ts_val, "isoformat")
-                            else str(ts_val) if ts_val else None
-                        )
+                        if cp_rows:
+                            latest_cp = cp_rows[0]
+                            val = (latest_cp.get("checkpoint") or {}).get("channel_values") or {}
+                            outcome = val.get("outcome") if val.get("outcome") in DISPOSITIONS else None
+                            u["standing"] = outcome or "in_progress"
+                            ts_val = latest_cp.get("ts")
+                            u["last_checkpoint_at"] = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val) if ts_val else None
         except psycopg.Error:
             pass
-
-    # The ids travel bounded, and this happens *after* the checkpointer join above deliberately:
-    # that join reads every finding of a unit to find the newest checkpoint among them, so the
-    # standing it reports is the whole unit's and not the sample's. Only the wire is trimmed.
-    #
-    # Measured: one unit's `finding_ids` was **92,500 bytes** against 8,194 for the `findings`
-    # array beside it -- eleven times the rows it identifies, for a field no screen reads. The
-    # sample's own ids are on `findings[].finding_id`; `finding_count` remains the population.
-    for unit in units:
-        unit["finding_ids"] = unit["finding_ids"][:NESTED_FINDINGS_PER_UNIT]
 
     total = len(units)
     paged_items = units[offset : offset + limit] if limit > 0 else units

@@ -78,6 +78,15 @@ export function describeChangeUnitStanding(
       return { label: "Reported — no patch attempted", symbol: "—", tone: "text-muted-foreground" }
     case "in_progress":
       return { label: "In progress", symbol: "!", tone: "text-warning-ink" }
+    // M15 Task 8. The exhaustive switch is what caught this: adding `parked` to
+    // `RunDisposition` made this function stop compiling, which is the guard working -- a
+    // disposition the payload can write and no screen can describe would otherwise have
+    // rendered as a blank cell.
+    //
+    // `text-warning-ink` deliberately, not a good or critical tone: nothing has gone wrong and
+    // nothing has succeeded. It is waiting on a person, and that is what wants attention.
+    case "parked":
+      return { label: "Waiting on a review", symbol: "!", tone: "text-warning-ink" }
   }
 }
 

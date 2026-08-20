@@ -26,6 +26,7 @@ describe("attachedVendors", () => {
       by_vendor: { stripe: 3, twilio: 2 },
       last_indexed: { stripe: INDEXED, twilio: INDEXED },
       total_call_sites: 5,
+      by_binding_status: {},
       by_service: [],
       by_operation: [],
     })
@@ -39,6 +40,7 @@ describe("attachedVendors", () => {
       by_vendor: { twilio: 2, stripe: 3 },
       last_indexed: {},
       total_call_sites: 5,
+      by_binding_status: {},
       by_service: [],
       by_operation: [],
     })
@@ -51,6 +53,7 @@ describe("attachedVendors", () => {
       by_vendor: { stripe: 3 },
       last_indexed: {},
       total_call_sites: 3,
+      by_binding_status: {},
       by_service: [],
       by_operation: [],
     })
@@ -65,6 +68,7 @@ describe("attachedVendors", () => {
         by_vendor: {},
         last_indexed: {},
         total_call_sites: 0,
+      by_binding_status: {},
         by_service: [],
         by_operation: [],
       }),

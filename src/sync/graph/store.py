@@ -158,6 +158,58 @@ def _common_directory(lo: str | None, hi: str | None) -> str:
     return lo[: cut + 1] if cut >= 0 else ""
 
 
+# Whether this codebase's calls are known to be at risk, known to be clean, or unexamined.
+#
+# **Owner question, 2026-08-19: "why do we not show safe APIs?"** Severity could not carry it --
+# severity is the *vendor's* published label on a change and `oasdiff` emits no "safe", so a
+# `safe` severity would be Sync inventing a vendor word for a judgement about the customer's
+# codebase. This is the honest form of the same question, and it is computed rather than stored.
+#
+# **`clean` is only honest because `intake_attempt` exists.** That table's own grain comment says
+# it is there to keep *never-asked* apart from *nothing-new*, which is exactly what is needed: a
+# vendor with no successful intake has never had its specification read, and calling its
+# operations clean would be an all-clear the graph never earned -- the shape of claim this
+# product exists to refuse, arriving as reassurance rather than as a score.
+#
+# `declined` and `failed` are not evidence: a decline is an adapter that would not answer and a
+# failure is one that could not. Counting any attempt would turn a week of 403s into an all-clear.
+#
+# Two CTEs rather than correlated subqueries per row, because the facet groups over the whole
+# filtered set: at twelve thousand call sites a per-row `EXISTS` is twelve thousand lookups.
+_BINDING_STATUS_CTES = """
+WITH at_risk AS (
+    SELECT DISTINCT call_site.repo_id, call_site.vendor_id, call_site.operation_id
+      FROM finding
+      JOIN call_site ON call_site.id = finding.call_site_id
+     WHERE finding.status = 'open' AND call_site.retracted_at IS NULL
+), examined AS (
+    SELECT DISTINCT vendor_id FROM intake_attempt WHERE outcome = 'success'
+)
+"""
+
+# The joins the CTEs above need, and the expression that reads them. `at_risk` is keyed by
+# operation rather than by vendor: a vendor with one broken call and forty working ones is the
+# ordinary case, and reporting all forty-one at risk makes the status useless exactly where it
+# matters most.
+_BINDING_STATUS_JOINS = """
+    LEFT JOIN at_risk ON at_risk.repo_id = call_site.repo_id
+                     AND at_risk.vendor_id = call_site.vendor_id
+                     AND at_risk.operation_id = call_site.operation_id
+    LEFT JOIN examined ON examined.vendor_id = call_site.vendor_id
+"""
+
+_BINDING_STATUS_EXPR = """
+    CASE WHEN at_risk.operation_id IS NOT NULL THEN 'at_risk'
+         WHEN examined.vendor_id IS NOT NULL THEN 'clean'
+         ELSE 'unchecked' END
+"""
+
+# The closed set, most-wanting-attention first. Declared so a console can render every member and
+# a caller can validate one, and ordered here rather than at a render site for the reason
+# `SEVERITY_ORDER` is: a rank kept somewhere else drifts the first time the vocabulary widens.
+BINDING_STATUSES = ("at_risk", "unchecked", "clean")
+
+
 def _open_findings_predicate(
     *,
     repo_id: str | None = None,
@@ -666,13 +718,12 @@ class GraphStore:
             """
             INSERT INTO call_site (id, repo_id, path, line, col, vendor_id, operation_id,
                                    symbol, args_keys, response_fields_read, sdk_version, content_hash,
-                                   loop_depth, snippet, snippet_start_line, service_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   loop_depth, snippet, snippet_start_line)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 line = EXCLUDED.line,
                 col = EXCLUDED.col,
                 operation_id = EXCLUDED.operation_id,
-                service_id = EXCLUDED.service_id,
                 args_keys = EXCLUDED.args_keys,
                 response_fields_read = EXCLUDED.response_fields_read,
                 sdk_version = EXCLUDED.sdk_version,
@@ -687,7 +738,7 @@ class GraphStore:
                 site_id, site.repo_id, site.path, site.line, site.col, site.vendor_id,
                 site.operation_id, site.symbol, site.args_keys, site.response_fields_read,
                 site.sdk_version, site.content_hash, site.loop_depth,
-                site.snippet, site.snippet_start_line, site.service_id,
+                site.snippet, site.snippet_start_line,
             ),
         )
         # One event per call site, owner-selected: the finest grain, so the canvas can draw an
@@ -1050,6 +1101,7 @@ class GraphStore:
         vendor_ids: Sequence[str] = (),
         operation_ids: Sequence[str] = (),
         loop_depths: Sequence[int] = (),
+        binding_statuses: Sequence[str] = (),
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -1084,6 +1136,7 @@ class GraphStore:
         vendor_ids = _value_set(vendor_ids, "vendor_ids")
         operation_ids = _value_set(operation_ids, "operation_ids")
         loop_depths = _value_set(loop_depths, "loop_depths")
+        binding_statuses = _value_set(binding_statuses, "binding_statuses")
 
         def predicates(ignoring: str = "") -> tuple[list[str], list[object]]:
             """The WHERE terms, optionally leaving one facet's own filter out.
@@ -1092,20 +1145,25 @@ class GraphStore:
             by anything but the named omission is the defect this rule exists to prevent -- and
             a second hand-maintained copy of the terms is exactly how they would come to differ.
             """
-            where = ["repo_id = %s", "retracted_at IS NULL"]
+            # Qualified, because the binding-status CTEs join two relations that carry the same
+            # column names -- an unqualified `repo_id` is ambiguous the moment they are in scope.
+            where = ["call_site.repo_id = %s", "call_site.retracted_at IS NULL"]
             params: list[object] = [repo_id]
             if vendor_ids and ignoring != "vendor_id":
-                where.append("vendor_id = ANY(%s)")
+                where.append("call_site.vendor_id = ANY(%s)")
                 params.append(list(vendor_ids))
             if operation_ids and ignoring != "operation_id":
-                where.append("operation_id = ANY(%s)")
+                where.append("call_site.operation_id = ANY(%s)")
                 params.append(list(operation_ids))
             if loop_depths and ignoring != "loop_depth":
-                where.append("loop_depth = ANY(%s)")
+                where.append("call_site.loop_depth = ANY(%s)")
                 params.append(list(loop_depths))
             if path_prefix and ignoring != "path":
-                where.append("path LIKE %s")
+                where.append("call_site.path LIKE %s")
                 params.append(f"{path_prefix}%")
+            if binding_statuses and ignoring != "binding_status":
+                where.append(f"({_BINDING_STATUS_EXPR}) = ANY(%s)")
+                params.append(list(binding_statuses))
             return where, params
 
         where, params = predicates()
@@ -1113,24 +1171,38 @@ class GraphStore:
 
         total = int(
             self._connect().execute(
-                f"SELECT count(*) AS n FROM call_site WHERE {clause}", params
+                f"""
+                {_BINDING_STATUS_CTES}
+                SELECT count(*) AS n FROM call_site {_BINDING_STATUS_JOINS} WHERE {clause}
+                """,
+                params,
             ).fetchone()["n"]
         )
         rows = self._connect().execute(
-            f"SELECT * FROM call_site WHERE {clause} ORDER BY path, line, col LIMIT %s OFFSET %s",
+            f"""
+            {_BINDING_STATUS_CTES}
+            SELECT call_site.*, ({_BINDING_STATUS_EXPR}) AS binding_status
+              FROM call_site {_BINDING_STATUS_JOINS}
+             WHERE {clause}
+             ORDER BY call_site.path, call_site.line, call_site.col LIMIT %s OFFSET %s
+            """,
             [*params, limit, offset],
         ).fetchall()
 
         # Each facet, counted over everything the OTHER filters admit.
         def facet(column: str) -> list:
             facet_where, facet_params = predicates(ignoring=column)
+            # `binding_status` is derived rather than stored, so the facet groups by the
+            # expression. Every other facet groups by its own column and reads the same here.
+            grouped = _BINDING_STATUS_EXPR if column == "binding_status" else f"call_site.{column}"
             return self._connect().execute(
                 f"""
-                SELECT {column} AS key, count(*) AS n
-                  FROM call_site
+                {_BINDING_STATUS_CTES}
+                SELECT ({grouped}) AS key, count(*) AS n
+                  FROM call_site {_BINDING_STATUS_JOINS}
                  WHERE {" AND ".join(facet_where)}
-                 GROUP BY {column}
-                 ORDER BY {column}
+                 GROUP BY ({grouped})
+                 ORDER BY ({grouped})
                 """,
                 facet_params,
             ).fetchall()
@@ -1157,12 +1229,51 @@ class GraphStore:
             "by_vendor": {row["key"]: int(row["n"]) for row in vendor_rows},
             "by_operation": {row["key"]: int(row["n"]) for row in facet("operation_id")},
             "by_loop_depth": {int(row["key"]): int(row["n"]) for row in facet("loop_depth")},
+            # Whether each call is known to be at risk, known to be clean, or unexamined. A status
+            # absent here was not counted at nought: the grouping returns groups that exist, and
+            # `unchecked: 0` would claim the question was asked of every call and answered.
+            "by_binding_status": {row["key"]: int(row["n"]) for row in facet("binding_status")},
             "unfiltered_total": sum(int(row["n"]) for row in vendor_rows),
             "vendor_ids": list(vendor_ids),
             "operation_ids": list(operation_ids),
             "loop_depths": list(loop_depths),
+            "binding_statuses": list(binding_statuses),
             "path_prefix": path_prefix,
         }
+
+    def binding_status_rollup(self, repo_id: str) -> dict[str, int]:
+        """How much of one repository's API surface is at risk, clean, or unexamined.
+
+        **Counted over operations, not call sites**, and the difference is the whole reason this
+        exists beside `call_sites_page`'s facet. A reader asking *how much of my API surface is
+        safe* means operations: forty call sites to one operation is one thing to know about, and
+        counting sites would let a single heavily-called operation dominate a figure meant to
+        describe breadth.
+
+        **A status absent from the result was not counted at nought.** An empty dict is a
+        repository with no call sites -- never indexed, or indexed and found to call nothing -- and
+        three zeroes would say its operations had been examined and found clean. The console must
+        render a missing key as absence rather than filling it in.
+
+        Retracted sites are excluded, as everywhere: a site the last pass stopped finding is not a
+        place this codebase calls the vendor, so an operation it was the only evidence for is no
+        longer part of the surface.
+        """
+        rows = self._connect().execute(
+            f"""
+            {_BINDING_STATUS_CTES}
+            SELECT status, count(*) AS n FROM (
+                SELECT DISTINCT call_site.vendor_id, call_site.operation_id,
+                       ({_BINDING_STATUS_EXPR}) AS status
+                  FROM call_site {_BINDING_STATUS_JOINS}
+                 WHERE call_site.repo_id = %s AND call_site.retracted_at IS NULL
+            ) AS per_operation
+             GROUP BY status
+             ORDER BY status
+            """,
+            [repo_id],
+        ).fetchall()
+        return {row["status"]: int(row["n"]) for row in rows}
 
     def api_topology(self, repo_id: str) -> dict:
         """The shape of one repository's API surface, measured from the call sites themselves.
@@ -1434,73 +1545,6 @@ class GraphStore:
             (repo_id,),
         ).fetchall()
         return {row["vendor_id"]: (row["sites"], row["last_indexed"]) for row in rows}
-
-    def service_coverage(self, repo_id: str) -> list[dict]:
-        """The API products one repository calls, per vendor: `Charges` under `stripe`.
-
-        A vendor is the provider; a service is one of the APIs it sells. `call_site_coverage`
-        above answers the provider question and this one answers the product question, and
-        neither summarises the other -- a vendor's call sites are the sum of its services' only
-        once every one of its operations has been mapped onto a product.
-
-        **A row with `service_id` NULL is grouped under NULL rather than dropped**, and that is
-        the whole discipline: only a vendor adapter can map an operation onto a product, none
-        supplies that mapping for every operation, and a query that filtered the ungrouped rows
-        out would report a vendor as having no services when what it has is no tag. The caller
-        renders the NULL group as work not done. `operations` counts distinct operations so a
-        reader can see how much of a vendor's surface each product covers.
-        """
-        rows = self._connect().execute(
-            """
-            SELECT vendor_id,
-                   service_id,
-                   count(*)                     AS sites,
-                   count(DISTINCT operation_id) AS operations,
-                   max(indexed_at)              AS last_indexed
-              FROM call_site
-             WHERE repo_id = %s AND retracted_at IS NULL
-             GROUP BY vendor_id, service_id
-             ORDER BY vendor_id, count(*) DESC, service_id
-            """,
-            (repo_id,),
-        ).fetchall()
-        return [dict(row) for row in rows]
-
-    def operation_coverage(self, repo_id: str) -> list[dict]:
-        """Every vendor operation this repository calls, with the product it belongs to.
-
-        `service_coverage` above is the roll-up and this is the grain beneath it. Both are their
-        own SQL aggregate rather than one being summed out of the other in Python: two numbers
-        that cannot contradict each other are two numbers that can never reveal one of them is
-        wrong, which is the reasoning `severity_rollup` already carries.
-
-        The console printed *"operations not listed"* on the services screen for as long as no
-        query answered this -- absent work stated rather than an empty panel, which was right
-        while it was true.
-
-        **No file count, and it was measured out rather than left out.** This carried
-        `count(DISTINCT path)` for one column, and at 10,000 call sites that single aggregate cost
-        **96 ms of the query's 104 ms** -- the same query without it is 8 ms. It was also the
-        weakest figure on the screen: a file calling three of a product's operations is one file,
-        so the per-operation counts cannot be summed and the column could only ever be rendered as
-        a floor. A thirteenfold cost for a number that had to be qualified is not a trade worth
-        making on a route two screens read.
-        """
-        rows = self._connect().execute(
-            """
-            SELECT vendor_id,
-                   service_id,
-                   operation_id,
-                   count(*)        AS sites,
-                   max(indexed_at) AS last_indexed
-              FROM call_site
-             WHERE repo_id = %s AND retracted_at IS NULL
-             GROUP BY vendor_id, service_id, operation_id
-             ORDER BY vendor_id, count(*) DESC, operation_id
-            """,
-            (repo_id,),
-        ).fetchall()
-        return [dict(row) for row in rows]
 
     def get_call_site(self, call_site_id: str) -> CallSite:
         """One call site by id, retracted or not.
@@ -2707,28 +2751,16 @@ class GraphStore:
             ).fetchall()
         return [MigrationOutcome(**row) for row in rows]
 
-    def finding_identities(self) -> dict[str, dict]:
-        """Map every finding_id to the call-site facts a run row needs about it.
-
-        The repository (B149), and the vendor and operation `sync.core.naming.finding_name`
-        derives a sayable name from. One query rather than two: the runs view needs both, and
-        the second round trip would be over the same join.
-
-        Widened from `finding_repo_ids`, which returned the repository alone. It had exactly one
-        caller, so this replaced it rather than sitting beside it -- two maps over one join is
-        the pair that disagrees the first time only one of them is updated.
-        """
+    def finding_repo_ids(self) -> dict[str, str]:
+        """Map every finding_id to its call_site.repo_id (B149)."""
         rows = self._connect().execute(
             """
-            SELECT finding.id AS finding_id,
-                   call_site.repo_id AS repo_id,
-                   call_site.vendor_id AS vendor_id,
-                   call_site.operation_id AS operation_id
+            SELECT finding.id AS finding_id, call_site.repo_id AS repo_id
               FROM finding
               JOIN call_site ON call_site.id = finding.call_site_id
             """
         ).fetchall()
-        return {row["finding_id"]: dict(row) for row in rows}
+        return {row["finding_id"]: row["repo_id"] for row in rows}
 
     def migration_outcome_rollup_by_kind(self) -> list[dict]:
         """One row per (`change_kind`, `tier`) actually attempted -- a real SQL `GROUP BY` over

@@ -103,6 +103,16 @@ def require_schema(store: GraphStore, dsn: str) -> None:
     )
 
 
+def _ticket_json(ticket: dict) -> dict:
+    """A ticket row with its instants spelled for JSON, in one place for both routes."""
+    rendered = dict(ticket)
+    for key in ("requested_at", "picked_up_at", "done_at"):
+        value = rendered.get(key)
+        if hasattr(value, "isoformat"):
+            rendered[key] = value.isoformat()
+    return rendered
+
+
 def app_factory() -> Starlette:
     """Build the console API app from the environment.
 
@@ -204,6 +214,7 @@ def app_factory() -> Starlette:
         vendor_ids: Sequence[str] = (),
         operation_ids: Sequence[str] = (),
         loop_depths: Sequence[int] = (),
+        binding_statuses: Sequence[str] = (),
         path_prefix: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -213,6 +224,7 @@ def app_factory() -> Starlette:
             vendor_ids=vendor_ids,
             operation_ids=operation_ids,
             loop_depths=loop_depths,
+            binding_statuses=binding_statuses,
             path_prefix=path_prefix,
             limit=limit,
             offset=offset,
@@ -441,6 +453,12 @@ def app_factory() -> Starlette:
         topology_reader=topology_reader,
         catalogue_reader=catalogue_reader,
         call_site_source_reader=store.call_site_source,
+        ticket_writer=lambda finding_id, repo_id: _ticket_json(
+            store.create_ticket(finding_id, repo_id, source="operator")
+        ),
+        tickets_reader=lambda repo_id, *, source=None: [
+            _ticket_json(t) for t in store.tickets(repo_id, source=source)
+        ],
         # Off is the hosted posture; a local single-operator deployment serves its own source.
         serve_source=os.environ.get("SYNC_SERVE_SOURCE", "true").strip().lower()
         not in {"0", "false", "no", "off"},
