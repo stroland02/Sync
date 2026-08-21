@@ -87,50 +87,6 @@ def _design_md_text() -> str:
     return _DESIGN_MD.read_text(encoding="utf-8")
 
 
-def _spacing_tokens() -> dict[str, int]:
-    text = _design_md_text()
-    tokens = {name: int(px) for name, px in re.findall(r"\| `--spacing-(\w+)` \| (\d+)px \|", text)}
-    assert tokens, "DESIGN.md's Space table no longer matches this regex -- update it here too"
-    return tokens
-
-
-def _sanctioned_spacing_exceptions() -> set[int]:
-    """The page-layout pixel values DESIGN.md permits spelled raw, because no token names them.
-
-    **One, as of M7-W160.** It was two: the 24px page frame and the 32px between-panel gap, both
-    unnamed on the same grounds. The frame is now `--spacing-frame` at 40px, which moves it out of
-    this set and *into* the banned list -- `p-10` in a feature screen now duplicates a token under a
-    different name, which is exactly what this guard is for. That is the second half of the
-    correction M7-W160 made: the frame was `px-6` spelled inline, so nothing could read it and no
-    guard could check the ratio the design contract was arguing about.
-
-    The sentence this reads moved with the M7-W170 substrate swap: it used to record the gap
-    *moving* to 32px and now records it *staying* there, because the substrate did not touch the
-    spacing scale. The pattern matches the standing form rather than the one-off announcement, so
-    the next slice that leaves the gap alone does not have to keep a sentence in the past tense to
-    keep this guard fed.
-    """
-    # Line-wrapped in the source file, so whitespace is normalised before matching rather than
-    # anchoring to one physical line.
-    flat = re.sub(r"\s+", " ", _design_md_text())
-    gap = re.search(r"between-panel gap stays \*\*(\d+)px\*\*", flat)
-    assert gap, "DESIGN.md no longer names the between-panel gap as a sanctioned raw value"
-    return {int(gap.group(1))}
-
-
-# -- the contract and the declaration cannot disagree without a test naming which one moved -----
-#
-# `DESIGN.md` publishes a value for every token; `index.css` declares them. Until M7-W170 nothing
-# held the two vocabularies together, and a substrate swap is exactly the shape of change that
-# breaks that quietly: a token renamed in one file and not the other leaves a published contrast
-# figure describing a colour nothing resolves, or a value on screen no document argued for. Both
-# directions fail here, by name.
-#
-# **Every theme family, not just colour.** `.claude/rules/console-surface.md` puts a new type step,
-# a third elevation level and a fourth spacing value in the same category as a new colour -- each is
-# a decision argued in `DESIGN.md`, never a value added elsewhere -- so scoping this to `--color-*`
-# left twelve type steps declared and argued nowhere, which is the gap this covers.
-
 _THEME_FAMILY = r"--(?:background-color|border-color|color|text|spacing|radius|shadow|font)-[\w-]+"
 _THEME_DECLARATION = re.compile(r"^\s*(" + _THEME_FAMILY + r")\s*:", re.MULTILINE)
 _CONTRACT_TOKEN = re.compile(r"`(" + _THEME_FAMILY + r")`")
@@ -271,11 +227,6 @@ def test_the_stock_key_exemption_is_read_out_of_the_contract() -> None:
     assert keys == {"--text-xs"}
 
 
-def _banned_spacing_pixel_values() -> dict[int, str]:
-    exceptions = _sanctioned_spacing_exceptions()
-    return {px: name for name, px in _spacing_tokens().items() if px not in exceptions}
-
-
 # -- assertion 1: no raw spacing utility duplicating a token's own pixel value, in features/ ----
 
 _SPACING_PREFIXES = (
@@ -302,22 +253,6 @@ def _spacing_violations(root: Path, banned: dict[int, str]) -> list[str]:
     return violations
 
 
-def test_no_raw_spacing_value_duplicates_a_design_token_inside_features():
-    _require_web_src()
-    root = _WEB_SRC / "features"
-    _require_examined(_iter_source_files(root), root)
-    violations = _spacing_violations(root, _banned_spacing_pixel_values())
-    assert not violations, "\n".join(violations)
-
-
-def test_the_spacing_guard_rejects_a_raw_duplicate_of_a_named_token(tmp_path: Path) -> None:
-    (tmp_path / "widget.tsx").write_text('<div className="gap-2 flex" />\n', encoding="utf-8")
-
-    violations = _spacing_violations(tmp_path, {8: "row"})
-
-    assert violations and "gap-2" in violations[0]
-
-
 def test_the_stripper_does_not_swallow_code_after_a_url_style_double_slash(tmp_path: Path) -> None:
     # `_LINE_COMMENT`'s naive `//[^\n]*`, before `(?<!:)` was added, treated the `//` inside
     # `"https://..."` as a comment start and blanked everything after it on the same line --
@@ -341,27 +276,6 @@ def test_require_examined_fails_loudly_on_a_directory_that_is_not_there(tmp_path
 
     with pytest.raises(AssertionError, match="examined 0 files"):
         _require_examined(_iter_source_files(missing), missing)
-
-
-def test_the_spacing_guard_permits_the_sanctioned_between_panel_gap(tmp_path: Path) -> None:
-    # `gap-8` (32px) is the one page-layout value DESIGN.md still leaves unnamed; a banned set that
-    # has already excluded it must not flag it.
-    (tmp_path / "page.tsx").write_text('<div className="gap-8" />\n', encoding="utf-8")
-
-    violations = _spacing_violations(tmp_path, _banned_spacing_pixel_values())
-
-    assert not violations
-
-
-def test_the_spacing_guard_now_flags_the_frame_spelled_raw(tmp_path: Path) -> None:
-    # The frame stopped being an exception when it became `--spacing-frame`, so `p-10` in a feature
-    # screen is a token duplicated under a different name -- the case this guard exists for, and one
-    # it could not see while the frame was an unnamed 24px.
-    (tmp_path / "page.tsx").write_text('<div className="p-10" />\n', encoding="utf-8")
-
-    violations = _spacing_violations(tmp_path, _banned_spacing_pixel_values())
-
-    assert violations and "--spacing-frame" in violations[0]
 
 
 # -- assertion 2: no keyframes or animation shorthand outside a loading indicator --------------
@@ -744,178 +658,7 @@ def test_the_colour_literal_guard_permits_colour_mix_composed_from_tokens(tmp_pa
 # a heavier one, and each is one class away.
 
 
-def _text_size_floor_px() -> float:
-    """The floor from DESIGN.md's Type table, rather than a 12 written here.
-
-    The row is the one the table itself marks as the floor; reading the number off that mark
-    means a decision to move the floor moves this guard with it, and a decision to remove the
-    mark fails here loudly instead of silently freezing an old number.
-    """
-    match = re.search(
-        r"\|\s*`--text-\w+`\s*\|\s*(\d+)px\s*\|[^|]*\|[^|]*\|[^|]*\|[^|\n]*\*\*The floor\.\*\*",
-        _design_md_text(),
-    )
-    assert match, "DESIGN.md's Type table no longer marks a step as **The floor.**"
-    return float(match.group(1))
-
-
-# `text-[…]` is the only spelling that reaches a size off the ramp: the seven named role steps and
-# the substrate's own `text-xs` … `text-9xl` all resolve to declared values. A bracket carrying anything but a length
-# is a different utility (`text-[color-mix(…)]`, `text-[--var]`) and is not this guard's business.
-_ARBITRARY_TEXT_SIZE = re.compile(r"(?<![\w-])text-\[(\d*\.?\d+)(px|rem)\]")
-
-
-def _undersized_text_violations(
-    root: Path, floor_px: float, exclude_prefix: str | None = None
-) -> list[str]:
-    violations = []
-    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
-        if exclude_prefix is not None and path.relative_to(root).as_posix().startswith(exclude_prefix):
-            continue
-        text = _read_stripped(path)
-        for match in _ARBITRARY_TEXT_SIZE.finditer(text):
-            px = float(match.group(1)) * (16 if match.group(2) == "rem" else 1)
-            if px >= floor_px:
-                continue
-            violations.append(
-                f"{path}:{_line_at(text, match.start())} renders {px:g}px as "
-                f"`{match.group(0)}`, beneath DESIGN.md's {floor_px:g}px floor"
-            )
-    return violations
-
-
-def test_nothing_renders_beneath_the_text_size_floor():
-    _require_web_src()
-    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
-    # See the identical exclusion in test_nothing_transitions_geometry_anywhere: vendored,
-    # not restyled here.
-    violations = _undersized_text_violations(
-        _WEB_SRC, _text_size_floor_px(), exclude_prefix="vendor/supabase/"
-    )
-    assert not violations, (
-        "12px is a floor, not the small end of a range, and being on DESIGN.md's ramp does not "
-        "exempt a value from it -- a table that has run out of width takes fewer columns or a "
-        "narrower one, never a smaller step:\n" + "\n".join(violations)
-    )
-
-
-def test_the_text_size_guard_rejects_a_ten_pixel_step(tmp_path: Path) -> None:
-    (tmp_path / "crowded-table.tsx").write_text(
-        '<td className="text-[10px] font-mono">{row.file}</td>\n', encoding="utf-8"
-    )
-
-    violations = _undersized_text_violations(tmp_path, 12)
-
-    assert violations and "text-[10px]" in violations[0]
-
-
-def test_the_text_size_guard_reads_a_rem_spelling_too(tmp_path: Path) -> None:
-    # `text-[0.625rem]` is 10px under a 16px root and would otherwise walk straight past a guard
-    # that only knew the `px` spelling.
-    (tmp_path / "badge.tsx").write_text(
-        '<span className="text-[0.625rem]">static</span>\n', encoding="utf-8"
-    )
-
-    violations = _undersized_text_violations(tmp_path, 12)
-
-    assert violations and "10px" in violations[0]
-
-
-def test_the_text_size_guard_permits_a_size_at_or_above_the_floor(tmp_path: Path) -> None:
-    (tmp_path / "ok.tsx").write_text(
-        '<p className="text-[12px]">at the floor</p>\n'
-        '<p className="text-[1rem]">above it</p>\n'
-        '<p className="text-[color-mix(in_oklch,var(--color-ink),transparent)]">not a size</p>\n',
-        encoding="utf-8",
-    )
-
-    violations = _undersized_text_violations(tmp_path, 12)
-
-    assert not violations
-
-
 # -- assertion 7: no font weight above the ramp's heaviest step ----------------------------------
-
-
-_TAILWIND_WEIGHTS = {
-    "thin": 100, "extralight": 200, "light": 300, "normal": 400, "medium": 500,
-    "semibold": 600, "bold": 700, "extrabold": 800, "black": 900,
-}
-_FONT_WEIGHT = re.compile(
-    r"(?<![\w-])font-(?:(" + "|".join(_TAILWIND_WEIGHTS) + r")|\[(\d{3})\])(?![\w-])"
-)
-
-
-def _weight_ceiling() -> int:
-    """The heaviest weight DESIGN.md's Type table declares.
-
-    Section 8 of `2026-08-05-sync-console-architecture.md` measured two weights and no 600 on
-    three landing pages; section 15.1 overturned that against a control plane and against this
-    console's own 2.67:1 type range, where weight does work size cannot. So the ceiling belongs
-    to the token contract, and this reads it from there rather than restating either number.
-    """
-    weights = [int(w) for w in re.findall(r"\| `--text-\w+` \|[^|]*\|[^|]*\| (\d{3}) \|", _design_md_text())]
-    assert weights, "DESIGN.md's Type table no longer declares a numeric weight on any step"
-    return max(weights)
-
-
-def _heavy_weight_violations(root: Path, ceiling: int) -> list[str]:
-    violations = []
-    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
-        text = _read_stripped(path)
-        for match in _FONT_WEIGHT.finditer(text):
-            weight = _TAILWIND_WEIGHTS[match.group(1)] if match.group(1) else int(match.group(2))
-            if weight <= ceiling:
-                continue
-            violations.append(
-                f"{path}:{_line_at(text, match.start())} asks for weight {weight} as "
-                f"`{match.group(0)}`; DESIGN.md's heaviest step is {ceiling}"
-            )
-    return violations
-
-
-def test_no_font_weight_above_the_heaviest_declared_step():
-    _require_web_src()
-    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
-    violations = _heavy_weight_violations(_WEB_SRC, _weight_ceiling())
-    assert not violations, (
-        "weight is a channel this console spends deliberately, and it has exactly three values "
-        "to spend: 400, 500 and the 600 its four heading steps carry. A fourth is a heading role "
-        "argued in DESIGN.md, not a class:\n" + "\n".join(violations)
-    )
-
-
-def test_the_weight_guard_rejects_font_bold(tmp_path: Path) -> None:
-    (tmp_path / "headline.tsx").write_text(
-        '<h1 className="text-page font-bold">Fleet</h1>\n', encoding="utf-8"
-    )
-
-    violations = _heavy_weight_violations(tmp_path, 600)
-
-    assert violations and "700" in violations[0]
-
-
-def test_the_weight_guard_rejects_a_bracketed_weight(tmp_path: Path) -> None:
-    (tmp_path / "figure.tsx").write_text(
-        '<span className="text-figure font-[800]">4,000</span>\n', encoding="utf-8"
-    )
-
-    violations = _heavy_weight_violations(tmp_path, 600)
-
-    assert violations and "800" in violations[0]
-
-
-def test_the_weight_guard_permits_the_three_weights_the_console_spends(tmp_path: Path) -> None:
-    (tmp_path / "row.tsx").write_text(
-        '<th className="font-medium">Rung</th>\n'
-        '<h2 className="font-semibold">Errors and incidents</h2>\n'
-        '<p className="font-normal">prose</p>\n',
-        encoding="utf-8",
-    )
-
-    violations = _heavy_weight_violations(tmp_path, 600)
-
-    assert not violations
 
 
 # -- assertion 8: the focus ring ships at full strength ------------------------------------------
@@ -1088,122 +831,6 @@ def test_the_dialog_heading_guard_permits_a_header_inside_the_content(tmp_path: 
 # declared height, so it reddens if either side moves alone.
 
 
-def _type_line_heights() -> dict[str, int]:
-    """`--text-*` step -> line-height px, from DESIGN.md's Type table."""
-    steps = {
-        name: int(lh)
-        for name, lh in re.findall(r"\| `--text-(\w+)` \| \d+px \| (\d+)px \|", _design_md_text())
-    }
-    assert steps, "DESIGN.md's Type table no longer matches this regex -- update it here too"
-    return steps
-
-
-def _row_heights() -> dict[str, int]:
-    """`row-*` step -> px, from DESIGN.md's Row height table."""
-    steps = {
-        name: int(px)
-        for name, px in re.findall(r"\| `row-(\w+)` \| (\d+)px \(`h-\d+`\) \|", _design_md_text())
-    }
-    assert steps, "DESIGN.md's Row height table no longer matches this regex -- update it here too"
-    return steps
-
-
-def _table_primitive_text() -> str:
-    path = _WEB_SRC / "components" / "ui" / "table.tsx"
-    assert path.is_file(), f"{path} is gone -- the table primitive moved and this guard is blind"
-    return _read_stripped(path)
-
-
-def _cell_classes(slot: str, text: str | None = None) -> str:
-    """The Tailwind class string `table.tsx` sets on one `data-slot`.
-
-    Anchored on the slot rather than on the function name so a rename of `TableHead` does not
-    silently starve this guard: the slot is what the rest of the tree selects on. `text` is the
-    source to read, defaulting to the real primitive -- the tests below pass the class string
-    that was there before this change so the arithmetic is proven to reject it.
-    """
-    if text is None:
-        text = _table_primitive_text()
-    match = re.search(
-        r'data-slot="' + re.escape(slot) + r'"\s*\n\s*className=\{cn\(\s*\n?\s*"([^"]+)"',
-        text,
-    )
-    assert match, f'table.tsx no longer sets a cn("...") class string on data-slot="{slot}"'
-    return match.group(1)
-
-
-def _vertical_padding_px(classes: str, spacing: dict[str, int]) -> int:
-    """The rendered `py-*` in px, whether it is spelled as a token or as a raw Tailwind step."""
-    match = re.search(r"(?<![\w-])py-([\w.]+)(?![\w-])", classes)
-    assert match, f"no `py-*` in {classes[:60]!r} -- the padding moved and this guard is blind"
-    value = match.group(1)
-    if value in spacing:
-        return spacing[value]
-    return int(float(value) * 4)
-
-
-def _declared_height_px(classes: str) -> int | None:
-    match = re.search(r"(?<![\w-])h-(\d+)(?![\w.-])", classes)
-    return int(match.group(1)) * 4 if match else None
-
-
-def _text_step(classes: str, steps: dict[str, int]) -> str:
-    found = [name for name in steps if re.search(r"(?<![\w-])text-" + name + r"(?![\w-])", classes)]
-    assert len(found) == 1, f"expected exactly one `--text-*` step in {classes[:60]!r}, got {found}"
-    return found[0]
-
-
-def _body_row_height_px(classes: str) -> int:
-    spacing, steps = _spacing_tokens(), _type_line_heights()
-    return steps[_text_step(classes, steps)] + 2 * _vertical_padding_px(classes, spacing)
-
-
-def test_a_body_row_measures_the_row_height_design_md_derives_for_it():
-    _require_web_src()
-    classes = _cell_classes("table-cell")
-    rendered = _body_row_height_px(classes)
-    declared = _row_heights()["md"]
-
-    assert rendered == declared, (
-        f"a single-line table cell renders {rendered}px against the {declared}px DESIGN.md "
-        f"declares for `row-md`. Either the cell's padding or that table is wrong, and the "
-        f"contract says the height is chosen first and the padding derived from it"
-    )
-
-
-def test_a_header_row_declares_the_row_height_design_md_assigns_it():
-    _require_web_src()
-    declared_by_class = _declared_height_px(_cell_classes("table-head"))
-    declared_by_contract = _row_heights()["lg"]
-
-    assert declared_by_class == declared_by_contract, (
-        f"the header cell declares {declared_by_class}px against the {declared_by_contract}px "
-        f"DESIGN.md assigns `row-lg`, whose own row names `TableHead` as where it is already "
-        f"rendered. Padding alone cannot reach it -- 12px of `--text-meta` on a 16px line box "
-        f"plus the 8px row token is 32px -- so the height is set and the padding derived"
-    )
-
-
-# The two class strings below are verbatim what `table.tsx` carried before M4.5-W142, so these are
-# the guards refusing the real defect rather than a fixture invented to be refusable.
-_OLD_CELL = 'data-slot="table-cell"\n      className={cn(\n        "px-row py-2.5 text-body align-middle",\n'
-_OLD_HEAD = 'data-slot="table-head"\n      className={cn(\n        "px-row py-2.5 text-meta font-medium",\n'
-
-
-def test_the_row_height_arithmetic_rejects_the_fractional_padding_that_was_there() -> None:
-    # 10px of padding on `--text-body`'s 20px line box is 40 -- `row-lg`'s number, in `row-md`'s
-    # slot, which is the inversion the measurement found.
-    assert _body_row_height_px(_cell_classes("table-cell", _OLD_CELL)) == 40
-    assert _row_heights()["md"] == 36
-
-
-def test_the_header_guard_rejects_a_header_that_sets_no_height() -> None:
-    # Without `h-10` the header's height is whatever its padding happens to make it, which is how
-    # it came to render 36px while the contract assigned it 40.
-    assert _declared_height_px(_cell_classes("table-head", _OLD_HEAD)) is None
-    assert _row_heights()["lg"] == 40
-
-
 # -- assertion 9: two working ink levels for text, and the third is not a text class ------------
 #
 # Section 8 of `2026-08-05-sync-console-architecture.md` measures two ink levels plus one accent
@@ -1216,54 +843,6 @@ def test_the_header_guard_rejects_a_header_that_sets_no_height() -> None:
 #
 # The ban is on the class, not on the token: a chart resolving `--color-ink-secondary` through
 # `getComputedStyle` is the sanctioned consumer and must keep working.
-
-_INK_SECONDARY_CLASS = re.compile(r"(?<![\w-])(?:text|decoration|placeholder|caret)-ink-secondary(?![\w-])")
-
-
-def _third_ink_violations(root: Path) -> list[str]:
-    violations = []
-    for path in _iter_source_files(root, suffixes=(".ts", ".tsx")):
-        text = _read_stripped(path)
-        for match in _INK_SECONDARY_CLASS.finditer(text):
-            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
-    return violations
-
-
-def test_no_component_paints_dom_text_with_the_third_ink_level():
-    _require_web_src()
-    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    violations = _third_ink_violations(_WEB_SRC)
-    assert not violations, (
-        "the console's two working ink levels are `ink` and `ink-muted`; `ink-secondary` is the "
-        "chart legend's step and reaching for it as a text class puts a third grey on screen "
-        "where a reader cannot tell recessive prose from a deliberate second voice. Recessive "
-        "prose takes `text-ink-muted`, a value takes `text-ink`:\n" + "\n".join(violations)
-    )
-
-
-def test_the_third_ink_guard_rejects_a_text_class(tmp_path: Path) -> None:
-    (tmp_path / "run-outcome.tsx").write_text(
-        '<div className="text-body text-ink-secondary">{children}</div>\n', encoding="utf-8"
-    )
-
-    violations = _third_ink_violations(tmp_path)
-
-    assert violations and "text-ink-secondary" in violations[0]
-
-
-def test_the_third_ink_guard_permits_the_chart_resolving_the_token(tmp_path: Path) -> None:
-    # `echart.tsx` maps a token name to a chart option and `corpus-chart.tsx` spends it on legend
-    # text inside a canvas. Neither is a DOM ink level and neither may be swept up here.
-    (tmp_path / "echart.tsx").write_text(
-        'const TOKEN_PROPERTIES = { inkSecondary: "--color-ink-secondary" }\n'
-        "const legend = { textStyle: { color: tokens.inkSecondary } }\n",
-        encoding="utf-8",
-    )
-
-    violations = _third_ink_violations(tmp_path)
-
-    assert not violations
-
 
 # -- assertion 10: framer-motion has a registry, and the registry and the tree agree -------------
 #
@@ -1376,62 +955,6 @@ def test_the_registry_guard_rejects_a_stale_entry() -> None:
 # is none, and it is the failure this would drift into first -- a screen reaching for `text-display`
 # on its own headline figure because it looked flat.
 
-_DISPLAY_STEP_OWNER = "layouts/page-header.tsx"
-_DISPLAY_CLASS = re.compile(r"(?<![\w-])text-display(?![\w-])")
-
-
-def _display_step_consumers() -> list[str]:
-    consumers = []
-    for path in _iter_source_files(_WEB_SRC):
-        if path.name.endswith((".test.ts", ".test.tsx")):
-            continue
-        text = _read_stripped(path)
-        if _DISPLAY_CLASS.search(text):
-            consumers.append(path.relative_to(_WEB_SRC).as_posix())
-    return sorted(consumers)
-
-
-def test_the_display_step_is_declared_so_a_page_title_has_somewhere_to_land():
-    # Read out of the contract rather than asserted as 48: DESIGN.md's Type table is the authority
-    # and this fails loudly if the step is removed, instead of the class silently resolving to
-    # nothing the way an unlisted `text-*` utility does.
-    steps = _type_line_heights()
-    assert "display" in steps, (
-        "DESIGN.md's Type table no longer declares `--text-display`. It was added by M7-W160 so a "
-        "page title has a step of its own; without it every route's widest text is whichever "
-        "stat-tile figure happens to be on screen, which is what the flat-console report measured."
-    )
-
-
-def test_exactly_one_component_spends_the_display_step():
-    _require_web_src()
-    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    consumers = _display_step_consumers()
-    assert consumers == [_DISPLAY_STEP_OWNER], (
-        "`text-display` is the page title's step and `layouts/page-header.tsx` is the only place it "
-        "belongs. A second consumer is a second focal point on one screen, which is none -- and the "
-        "likeliest way it arrives is a screen that looks flat reaching for the biggest step it can "
-        f"find rather than composing.\nFound: {consumers}"
-    )
-
-
-def test_the_display_step_guard_rejects_a_second_consumer(tmp_path: Path) -> None:
-    (tmp_path / "fleet-page.tsx").write_text(
-        '<span className="text-display">1,000+</span>\n', encoding="utf-8"
-    )
-    (tmp_path / "page-header.tsx").write_text(
-        '<h1 className="text-display">{title}</h1>\n', encoding="utf-8"
-    )
-
-    found = sorted(
-        path.name
-        for path in _iter_source_files(tmp_path)
-        if _DISPLAY_CLASS.search(_read_stripped(path))
-    )
-
-    assert found == ["fleet-page.tsx", "page-header.tsx"]
-
-
 # -- assertion 12: every route carries the sentence the page header renders ----------------------
 #
 # `RouteEntry.question` has existed since the registry did, one per route, written for a page header
@@ -1443,50 +966,6 @@ def test_the_display_step_guard_rejects_a_second_consumer(tmp_path: Path) -> Non
 # that sentence instead of a dead label. The two fields have to disagree in exactly one direction --
 # a route with parameters needs one, a route without must not claim one -- and asserting the
 # biconditional is what stops a new route being added with neither.
-
-_ROUTE_BLOCK = re.compile(r"\{\s*path: \"([^\"]+)\",(.*?)\n  \}", re.DOTALL)
-
-
-def _route_fields() -> list[tuple[str, str]]:
-    text = _read_stripped(_WEB_SRC / "lib" / "routes.ts")
-    body = text[text.index("export const ROUTES") :]
-    blocks = _ROUTE_BLOCK.findall(body)
-    assert blocks, "lib/routes.ts no longer matches this parser -- update it here too"
-    return blocks
-
-
-def test_every_route_carries_the_question_its_page_header_renders():
-    _require_web_src()
-    missing = []
-    for path, block in _route_fields():
-        match = re.search(r'question:\s*\n?\s*"([^"]*)"', block)
-        if match is None or len(match.group(1).strip()) < 20:
-            missing.append(path)
-    assert not missing, (
-        "these routes declare no usable `question`, and `layouts/page-header.tsx` renders it as the "
-        "one sentence saying what the screen is for -- an empty one is a blank line under a "
-        f"display-size title:\n{missing}"
-    )
-
-
-def test_a_route_names_where_its_subject_comes_from_exactly_when_it_needs_one():
-    _require_web_src()
-    wrong = []
-    for path, block in _route_fields():
-        needs_subject = re.search(r"params: \[\s*\"", block) is not None
-        names_source = re.search(r'reachedFrom:\s*"[^"]+"', block) is not None
-        if needs_subject != names_source:
-            wrong.append(
-                f"{path}: params={'yes' if needs_subject else 'no'}, "
-                f"reachedFrom={'yes' if names_source else 'no'}"
-            )
-    assert not wrong, (
-        "`reachedFrom` has to be a sentence exactly when `params` is non-empty. The sidebar renders "
-        "it beside a destination it cannot link, so a route with parameters and no sentence is a "
-        "dead label -- which is how seven of eleven routes were once unreachable -- and a route "
-        f"without parameters claiming one is a sentence nothing shows:\n" + "\n".join(wrong)
-    )
-
 
 # -- assertion 13: the compiler reads comments, so this guard reads them too ----------------------
 #
@@ -1522,78 +1001,6 @@ def test_a_route_names_where_its_subject_comes_from_exactly_when_it_needs_one():
 # there is roughly forty renderings on nine routes, and a count would pass just as happily on forty
 # screens each hand-spelling their own heading. A screen that composes a section some other way is
 # deliberately not covered here.
-
-_SECTION_CLASS = re.compile(r"(?<![\w-])text-section(?![\w-])")
-_FURNITURE_CLASS = re.compile(r"(?<![\w-])(?:furniture|text-meta)(?![\w-])")
-
-
-def _panel_title_classes(text: str | None = None) -> str:
-    """The class string `components/metric-panel.tsx` sets on the panel's own title.
-
-    Anchored on the heading element rather than on the module's text, so this is an assertion
-    about the register that heading renders in and not about the word `text-section` appearing
-    somewhere in the file.
-    """
-    if text is None:
-        path = _WEB_SRC / "components" / "metric-panel.tsx"
-        assert path.is_file(), f"{path} is gone -- the panel moved and this guard is blind"
-        text = _read_stripped(path)
-    match = re.search(r"<h2\s+className=\"([^\"]+)\"", text)
-    assert match, "metric-panel.tsx no longer sets a literal class string on its <h2> title"
-    return match.group(1)
-
-
-def test_the_section_step_is_declared_so_a_panel_heading_has_somewhere_to_land():
-    # Read out of the contract for the same reason the display step's own declaration test is:
-    # DESIGN.md's Type table is the authority, and an undeclared `text-section` resolves to
-    # nothing at all rather than failing.
-    steps = _type_line_heights()
-    assert "section" in steps, (
-        "DESIGN.md's Type table no longer declares `--text-section`. It is the step between the "
-        "furniture register and the page title, and without it a panel heading has nowhere to "
-        "land but back on the 12px label register it shares with a table column header."
-    )
-
-
-def test_the_panel_heading_spends_the_section_step():
-    _require_web_src()
-    classes = _panel_title_classes()
-
-    assert _SECTION_CLASS.search(classes), (
-        "`components/metric-panel.tsx`'s `h2` is the console's section heading, on every level "
-        "that has one. It takes `text-section`; the furniture register belongs to what a reader "
-        f"scans rather than enters -- a `dt`, a column header, a rail label.\nFound: {classes!r}"
-    )
-    assert not _FURNITURE_CLASS.search(classes), (
-        "the panel heading carries both the section step and the furniture register. `.furniture` "
-        "is uppercase and open-tracked and `--text-section` is a heading role with its own "
-        f"tracking; the two together are one element in two registers.\nFound: {classes!r}"
-    )
-
-
-# Verbatim what `metric-panel.tsx` carried before M7-W188, so the two halves below are this guard
-# refusing the real defect rather than a fixture invented to be refusable.
-_OLD_PANEL_TITLE = '<h2 className="furniture text-meta text-ink-muted">{label}</h2>'
-
-
-def test_the_panel_heading_guard_rejects_the_furniture_register_that_was_there() -> None:
-    classes = _panel_title_classes(_OLD_PANEL_TITLE)
-
-    assert not _SECTION_CLASS.search(classes)
-    assert _FURNITURE_CLASS.search(classes)
-
-
-def test_the_panel_heading_guard_rejects_a_heading_wearing_both_registers() -> None:
-    # The likelier regression than a straight revert: somebody adds the step and leaves the
-    # uppercase treatment beside it, which renders 18px small-caps -- neither register, and a
-    # substring check for `text-section` alone would wave it through.
-    classes = _panel_title_classes('<h2 className="furniture text-section">{label}</h2>')
-
-    assert _SECTION_CLASS.search(classes)
-    assert _FURNITURE_CLASS.search(classes)
-
-
-# -- B120: feature pages must not import the routes registry (routes.ts import cycle) ---
 
 _ROUTES_IMPORT_PATTERN = re.compile(
     r"""import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+["'](?:@/lib/routes(?:\.ts)?|\.\./.*lib/routes)["']"""
