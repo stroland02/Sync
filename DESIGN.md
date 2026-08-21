@@ -1086,8 +1086,40 @@ decision — argue it in this table or declare the token.
   and its two `sidebar-primary` entries.** Every one of them is declared upstream and none has a
   consumer in this tree. An abstraction added for an anticipated caller is debt with no asset behind
   it; the day a component needs one, it arrives with the component.
-- **A light mode.** Retired 2026-08-05 on explicit instruction, and the substrate's light values are
-  vendored but un-imported rather than deleted, so reversing that instruction is an import rather
-  than a rewrite. Not a placeholder for a toggle — the theme resolver, its storage key and its
+- **A light mode.** Retired 2026-08-05 on explicit instruction. Reversing it means regenerating from
+  `web/scripts/theme-contrast.mjs` rather than importing a block already in the tree: `theme.css`
+  declares one selector, `[data-theme='dark'], .dark`, and carries no light values at all. Not a placeholder for a toggle — the theme resolver, its storage key and its
   `prefers-color-scheme` listener are deleted, and a component that branches on
   `prefers-color-scheme` again would be a regression against a recorded decision.
+
+---
+
+## The four bands
+
+Every screen renders through `layouts/screen-frame.tsx`: **identity → controls → content → status**.
+Twenty screens carried eight different opening structures before it, so a reader re-learned the
+layout on every navigation.
+
+**They are a reading order across four elements, not one parent.** Identity is the chassis banner
+and status is a `<footer>` beside `<main>`, because `app-frame.test.tsx` pins `banner.parentElement`
+to the element that also holds `main` — the sidebar has to stay outside that column. A screen
+therefore publishes its status through a portal rather than rendering it inline.
+
+| Band | Owner | Absent when |
+|---|---|---|
+| identity | chassis | never — it derives from the address and renders before any query answers |
+| controls | screen | **omitted entirely** when there is nothing to narrow: no element, no rule, no reserved height |
+| content | screen | never |
+| status | screen, via portal | never — a screen with nothing to count publishes `none` and says why |
+
+**Status is a row of typed segments rather than one count.** Four screens make a single number false:
+`RunsPage` counts runs at workspace scope beside corpus attempts at deployment scope, `MetricsPage`
+has five independent fetches and no instant at which it is loaded, `SolutionsPage` holds three scopes
+in one content region, `DetectorsPage` has four countable regions.
+
+The segment vocabulary is closed — `records` · `listing` · `figure` · `note` · `none` — and `none`
+carries a reason, because a blank band renders "nothing here pages" and "has not answered yet" as
+the same nothing.
+
+**`data-band`, never `data-slot`.** The shadcn primitives stamp `data-slot` on 26 files' worth of
+elements, so a test helper querying it binds to a `CardHeader` before it binds to a band.

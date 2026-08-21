@@ -50,7 +50,9 @@ import {
 import { RelativeTime } from "@/components/relative-time"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { FooterBar } from "@/layouts/footer-bar"
+import { describeRecordWindow } from "@/lib/record-window"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useFilterListParam } from "@/lib/use-filter-list-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -212,7 +214,44 @@ export function IntegrationChangesPage() {
     if (severityFacet !== null) groups.push(severityFacet)
   }
 
+  // The screen states what it is showing whether or not the query has answered: a band that
+  // appears only on success renders "not asked yet" and "asked and empty" as the same nothing.
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Changes",
+          text: describeRecordWindow(
+            offset,
+            query.data.items.length,
+            { count: query.data.total, boundReached: false },
+            "change",
+            "changes"
+          ),
+          paging: {
+            offset,
+            limit: LIMIT,
+            shown: query.data.items.length,
+            total: query.data.total,
+            unfilteredTotal:
+              vendorIds.length > 0 || severities.length > 0 ? query.data.unfiltered_total : undefined,
+            nextOffset: query.data.next_offset,
+            busy: query.isFetching,
+            onOffsetChange: setOffset,
+          },
+        },
+        {
+          kind: "note",
+          text:
+            "Rows sourced from oasdiff are at-least-once rather than converged: that tool returns " +
+            "a different answer between runs over identical bytes, so a count over them is not a " +
+            "measurement of how much a vendor changed. Every other source converges.",
+        },
+      ]
+    : [{ kind: "none", why: query.isError ? "the changes did not answer" : "asking for the changes" }]
+
   return (
+    <ScreenFrame status={status}>
     <section className="flex min-w-0 flex-col gap-8">
       <div className="flex flex-col gap-field">
         <Breadcrumbs trail={[{ label: "Vendors" }]} />
@@ -329,24 +368,6 @@ export function IntegrationChangesPage() {
                 ))}
               </TableBody>
             </Table>
-            <FooterBar
-              offset={offset}
-              limit={LIMIT}
-              shown={query.data.items.length}
-              total={query.data.total}
-              nextOffset={query.data.next_offset}
-              busy={query.isFetching}
-              unfilteredTotal={
-                vendorIds.length > 0 || severities.length > 0 ? query.data.unfiltered_total : undefined
-              }
-              onOffsetChange={setOffset}
-            />
-            <p className="max-w-prose text-meta text-muted-foreground">
-              Rows whose source is <span className="font-mono">oasdiff</span> are at-least-once
-              rather than converged: that tool returns a different answer between runs over
-              identical bytes, so a count over them is not a measurement of how much a vendor
-              changed. Every other source converges.
-            </p>
           </MetricPanel>
         </div>
       )}
@@ -357,5 +378,6 @@ export function IntegrationChangesPage() {
           attached, so it belongs under the feed that lists them. */}
       <ChangeUnitsTable repoId={repoId} />
     </section>
+    </ScreenFrame>
   )
 }

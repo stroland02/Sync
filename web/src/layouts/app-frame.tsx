@@ -29,6 +29,7 @@ import { WorkspaceSwitcher } from "@/layouts/workspace-switcher"
 import { ErrorSurface } from "@/components/error-surface"
 import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
+import { StatusTargetProvider, useStatusTarget } from "@/layouts/screen-frame"
 import {
   SIDEBAR_WIDTH,
   railState,
@@ -493,7 +494,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
  */
 function ChassisQualifications() {
   return (
-    <footer className="mt-auto flex flex-col gap-field border-t border-line px-frame py-section">
+    <div className="flex flex-col gap-field px-frame py-section">
       <p className="text-meta text-ink-muted leading-snug">
         Nine graph levels, five pipeline stages. A stage groups the pages that answer it — it is
         not a level itself.
@@ -509,12 +510,13 @@ function ChassisQualifications() {
         repository you do not recognise is one this deployment was configured to watch, not another
         customer's.
       </p>
-    </footer>
+    </div>
   )
 }
 
 export function AppFrame() {
   const { pathname } = useLocation()
+  const { target, footerRef } = useStatusTarget()
   const contentRef = useRef<HTMLElement>(null)
   const arrivedAt = useRef<string | null>(null)
 
@@ -564,6 +566,7 @@ export function AppFrame() {
       >
         <AppSidebar pathname={pathname} />
 
+        <StatusTargetProvider target={target}>
         <div className="flex min-w-0 flex-1 flex-col">
           <ErrorSurface />
 
@@ -604,8 +607,17 @@ export function AppFrame() {
             </div>
           </main>
 
-          <ChassisQualifications />
+          {/* The status band is a sibling of `main`, not a child: `app-frame.test.tsx` pins
+              `banner.parentElement` to be the element that also holds `main`, and the sidebar has
+              to stay outside that column. A screen therefore cannot render its own status inline
+              -- `ScreenFrame` portals into the target below. An unmigrated screen portals nothing
+              and the footer is the chassis sentences alone, exactly as before. */}
+          <footer className="mt-auto flex flex-col border-t border-line">
+            <div ref={footerRef} />
+            <ChassisQualifications />
+          </footer>
         </div>
+        </StatusTargetProvider>
       </SidebarProvider>
     </CommandPaletteProvider>
   )
