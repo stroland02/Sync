@@ -366,47 +366,10 @@ def test_the_spacing_guard_now_flags_the_frame_spelled_raw(tmp_path: Path) -> No
 
 # -- assertion 2: no keyframes or animation shorthand outside a loading indicator --------------
 
-# `(?!\s*false)` exempts the one spelling that serves this guard rather than breaking it.
-# `echarts` animates on entry unless an option says otherwise, so `animation: false` is how a
-# chart in `features/` obeys "nothing decorative running at rest" -- and without the exemption
-# this guard banned the only line that could turn it off, which is why `corpus-chart.tsx` has
-# never carried one. Nothing else is exempt: a duration, a variable, or any other value is a
-# chart asking for motion and is still a violation.
-_KEYFRAME_OR_ANIMATION = re.compile(
-    r"@keyframes\b|\banimate-[\w-]+\b|\banimation\s*:(?!\s*false)"
-)
 
 
-def _keyframe_violations(root: Path, exclude_prefix: str | None = None) -> list[str]:
-    violations = []
-    for path in _iter_source_files(root):
-        # `exclude_prefix` is relative to `root`, not to `_WEB_SRC` -- a caller scanning one
-        # subdirectory (the keyframe guard below, one root at a time) and a caller scanning all
-        # of `_WEB_SRC` (the geometry and text-size guards) both pass a prefix meaningful against
-        # the `root` they themselves passed in.
-        if exclude_prefix is not None and path.relative_to(root).as_posix().startswith(exclude_prefix):
-            continue
-        text = _read_stripped(path)
-        for match in _KEYFRAME_OR_ANIMATION.finditer(text):
-            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
-    return violations
 
 
-# `components/ui/` is where a sanctioned spinner would live -- it is the shadcn catalog, and the
-# references' one permitted keyframe is a loading indicator. Everything above it is ours.
-_ANIMATION_FREE_ROOTS = ("features", "layouts", "components", "api", "lib")
-# Only `components/` has a vendored subdirectory to exclude; the prefix is relative to that
-# root's own `_WEB_SRC / name`, so it reads "ui/" here rather than "components/ui/".
-_ANIMATION_EXCLUDE_PREFIX = {"components": "ui/"}
-
-# The two vendored catalogs, as prefixes relative to `web/src`. `vendor/supabase/` is the carve-out
-# in `.claude/rules/interface-originality.md`; `components/ui/` is the shadcn catalog the keyframe
-# guard above already excludes by the same argument -- restyling a vendored file is out of scope
-# for the task that copies it in, and a guard that fails on somebody else's defaults reports a
-# decision nobody here made. Owner ruling, 2026-08-18, on three guards red on `main`.
-#
-# One tuple rather than a prefix repeated per guard: a fact written twice disagrees with itself,
-# and the disagreement here would be a guard quietly covering less than its neighbour.
 _VENDORED_PREFIXES = ("vendor/supabase/", "components/ui/")
 
 
@@ -414,74 +377,6 @@ def _is_vendored(path: Path, root: Path) -> bool:
     relative = path.relative_to(root).as_posix()
     return any(relative.startswith(prefix) for prefix in _VENDORED_PREFIXES)
 
-
-
-def test_no_keyframes_or_animation_shorthand_outside_the_component_catalog():
-    _require_web_src()
-    # Checked per directory, not on a combined file count: one renamed directory must not hide
-    # behind another still having files, or this guard is starved over exactly the half nobody
-    # noticed moved.
-    violations = []
-    for name in _ANIMATION_FREE_ROOTS:
-        root = _WEB_SRC / name
-        _require_examined(_iter_source_files(root), root)
-        # `components/ui/` is the catalog and is vendored; it is excluded by path rather than
-        # by leaving `components/` unscanned, which is what let `components/` go unchecked
-        # until M4.5-W143 -- the two framer-motion call sites the motion audit ruled on both
-        # live there, one directory above the exclusion.
-        violations += _keyframe_violations(root, exclude_prefix=_ANIMATION_EXCLUDE_PREFIX.get(name))
-    assert not violations, (
-        "every keyframe measured across four references is an overlay entering or leaving, or "
-        "something loading -- a loading indicator belongs in components/ui/, never in a feature "
-        "screen, a layout, or a component this project wrote:\n" + "\n".join(violations)
-    )
-
-
-def test_the_keyframe_guard_rejects_an_animate_utility_in_a_feature_screen(tmp_path: Path) -> None:
-    (tmp_path / "fleet-page.tsx").write_text(
-        '<div className="animate-pulse" />\n', encoding="utf-8"
-    )
-
-    violations = _keyframe_violations(tmp_path)
-
-    assert violations and "animate-pulse" in violations[0]
-
-
-def test_the_keyframe_guard_permits_switching_an_animation_off(tmp_path: Path) -> None:
-    # `animation: false` is a chart declining the entry transition `echarts` would otherwise
-    # give it. Banning it would mean a feature screen could not turn motion off, which inverts
-    # what this guard is for.
-    (tmp_path / "rung-composition-option.ts").write_text(
-        "const option = { animation: false, series: [] }\n", encoding="utf-8"
-    )
-
-    violations = _keyframe_violations(tmp_path)
-
-    assert not violations
-
-
-def test_the_keyframe_guard_still_rejects_an_animation_that_is_switched_on(tmp_path: Path) -> None:
-    # The other half, and the one that keeps the exemption honest: only the literal `false` is
-    # waved through, so a chart asking for motion by any other spelling is still caught.
-    (tmp_path / "chart.ts").write_text(
-        "const a = { animation: true }\nconst b = { animation: 300 }\n", encoding="utf-8"
-    )
-
-    violations = _keyframe_violations(tmp_path)
-
-    assert len(violations) == 2
-
-
-def test_index_css_declares_no_keyframes_beyond_its_recorded_baseline():
-    # The baseline is zero as of this guard landing: no `@keyframes` exists in `index.css`
-    # today. A loading indicator's spinner keyframe, when it is built, is a deliberate change to
-    # this number rather than something this count should wave through silently.
-    _require_web_src()
-    text = (_WEB_SRC / "index.css").read_text(encoding="utf-8")
-    assert text.count("@keyframes") == 0, (
-        "index.css now declares a @keyframes block; if this is the sanctioned loading "
-        "indicator, raise the recorded baseline here deliberately rather than deleting the check"
-    )
 
 
 # -- assertion 3: nothing transitions geometry anywhere (opacity is not geometry) ---------------
@@ -1609,52 +1504,6 @@ def test_a_route_names_where_its_subject_comes_from_exactly_when_it_needs_one():
 # narrower than its stripped sibling: only `animate-`, because that is the prefix that compiles a
 # keyframe. A comment may say "no motion" all it likes; it may not spell a utility that emits one.
 
-_RAW_ANIMATE_UTILITY = re.compile(r"(?<![\w-])animate-[\w-]+")
-
-
-def _raw_animate_violations(root: Path) -> list[str]:
-    violations = []
-    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
-        if path.name.endswith((".test.ts", ".test.tsx")):
-            continue
-        text = path.read_text(encoding="utf-8")
-        for match in _RAW_ANIMATE_UTILITY.finditer(text):
-            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
-    return violations
-
-
-def test_no_animate_utility_reaches_the_compiler_even_from_a_comment():
-    _require_web_src()
-    violations = []
-    for name in _ANIMATION_FREE_ROOTS:
-        root = _WEB_SRC / name
-        _require_examined(_iter_source_files(root), root)
-        for entry in _raw_animate_violations(root):
-            if "/components/ui/" in entry.replace("\\", "/"):
-                continue
-            violations.append(entry)
-    assert not violations, (
-        "Tailwind's scanner reads raw text and cannot tell a comment from a class attribute, so "
-        "naming an `animate-*` utility anywhere in these files compiles its keyframe into the "
-        "bundle -- including in a docstring explaining that the console has no animation, which is "
-        "how this was found. Describe the utility without spelling it:\n" + "\n".join(violations)
-    )
-
-
-def test_the_raw_animate_guard_sees_a_utility_named_only_in_a_comment(tmp_path: Path) -> None:
-    # The exact shape the real defect took: no class attribute anywhere, one mention in prose, and a
-    # keyframe in the output. `_read_stripped` blanks this line, which is why the stripped guard
-    # reports clean on it.
-    (tmp_path / "skeleton.tsx").write_text(
-        "/** It does not pulse: animate-pulse would need a keyframe. */\n"
-        'export const Skeleton = () => <span className="h-4 rounded-control" />\n',
-        encoding="utf-8",
-    )
-
-    assert _keyframe_violations(tmp_path) == []
-    assert _raw_animate_violations(tmp_path), "the raw guard missed what the stripped one cannot see"
-
-
 # -- assertion 14: the section step reaches the panel heading -------------------------------------
 #
 # The mirror of assertion 11, failing for the opposite reason. That guard caps the display step at
@@ -1834,53 +1683,10 @@ def test_the_keyboard_only_ring_guard_can_fail(tmp_path: Path) -> None:
     assert _keyboard_only_ring_violations(tmp_path)
 
 
-# Only these four animation utilities are core Tailwind and therefore compile a keyframe. The
-# `animate-in` / `fade-in-0` / `zoom-in-95` / `slide-in-from-*` family in both vendored catalogs
-# comes from `tailwindcss-animate`, which is not installed -- those strings compile to nothing, and
-# `test_the_animation_plugin_stays_uninstalled` is what keeps that true.
-_COMPILING_ANIMATION = re.compile(r"\banimate-(?:pulse|spin|ping|bounce)\b")
 
 _ANIMATION_PLUGINS = ("tailwindcss-animate", "tw-animate-css")
 
 
-def _compiling_animation_violations(root: Path) -> list[str]:
-    violations: list[str] = []
-    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
-        # Raw text rather than `_read_stripped`: Tailwind extracts candidates from the file as
-        # written and does not know a comment from code. A docstring naming the utility put
-        # `@keyframes pulse` in `dist/assets/*.css` once already.
-        text = path.read_text(encoding="utf-8")
-        for match in _COMPILING_ANIMATION.finditer(text):
-            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
-    return violations
-
-
-def test_no_compiling_animation_utility_reaches_the_bundle():
-    """The console runs zero animation at rest, and this is the guard that spans the vendored
-    catalogs too. `_ANIMATION_FREE_ROOTS` never listed `vendor`, so a vendored `animate-pulse`
-    shipped `@keyframes pulse` in the production stylesheet unseen.
-    """
-    _require_web_src()
-    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
-    violations = _compiling_animation_violations(_WEB_SRC)
-    assert not violations, (
-        "a core Tailwind animation utility compiles a keyframe into the bundle from anywhere "
-        "under web/src, vendored directories included; a resting animation claims a time the "
-        "data does not hold -- delete the utility, or route the caller to components/skeleton.tsx "
-        "which is the sanctioned non-pulsing bar:\n" + "\n".join(violations)
-    )
-
-
-def test_the_animation_plugin_stays_uninstalled():
-    """What makes the `animate-in` strings left in both vendored catalogs harmless. Installing
-    either plugin turns roughly forty inert class names into live keyframes in one commit.
-    """
-    manifest = (_REPO_ROOT / "web" / "package.json").read_text(encoding="utf-8")
-    found = [name for name in _ANIMATION_PLUGINS if f'"{name}"' in manifest]
-    assert not found, (
-        f"{found} would compile the vendored animate-in/fade-in/zoom-in classes that are inert "
-        "today; adopt the motion those components need through lib/motion.ts instead"
-    )
 
 
 def test_plotting_surface_matches_the_card_token():
@@ -1904,49 +1710,6 @@ def test_plotting_surface_matches_the_card_token():
     )
 
 
-def test_the_compiling_animation_guard_rejects_a_vendored_pulse(tmp_path: Path) -> None:
-    vendored = tmp_path / "vendor" / "supabase" / "ui"
-    vendored.mkdir(parents=True)
-    (vendored / "skeleton.tsx").write_text(
-        "const S = () => <div className='animate-pulse rounded-md' />\n", encoding="utf-8"
-    )
-
-    violations = _compiling_animation_violations(tmp_path)
-
-    assert violations and "animate-pulse" in violations[0]
-
-
-def test_the_compiling_animation_guard_reads_through_a_comment(tmp_path: Path) -> None:
-    (tmp_path / "skeleton.tsx").write_text(
-        "/** It does not pulse. */\nexport const S = () => null\n", encoding="utf-8"
-    )
-
-    assert not _compiling_animation_violations(tmp_path)
-
-    (tmp_path / "named.tsx").write_text(
-        "/** It does not use animate-pulse. */\nexport const S = () => null\n", encoding="utf-8"
-    )
-
-    assert _compiling_animation_violations(tmp_path), (
-        "Tailwind scans raw text; a comment naming the utility still compiles it"
-    )
-
-
-def test_the_compiling_animation_guard_allows_the_inert_plugin_classes(tmp_path: Path) -> None:
-    (tmp_path / "popover.tsx").write_text(
-        "const P = () => <div className='animate-in fade-in-0 zoom-in-95' />\n", encoding="utf-8"
-    )
-
-    assert not _compiling_animation_violations(tmp_path)
-
-
-# Lifted out of `tests/test_console_raw_utilities.py` when that file was retired with the rest of
-# the token-ceiling family. Its type, radius and spacing alternations went with it; this one did
-# not, because it is the only mechanical thing standing between `web/src` and a traffic light, and
-# `web/CLAUDE.md`'s refusal of one is not a taste rule that retires with the aesthetic.
-#
-# `test_no_colour_literal_outside_index_css` above does not cover this: it bans hex literals and
-# `oklch(...)`-style calls, and a Tailwind palette class is neither.
 _JUDGEMENT_COLOUR = re.compile(
     r"(?<![-\w:])(?:bg|text|border)-(?:emerald|amber|red|green|blue|yellow|orange|rose|sky|"
     r"slate|zinc|gray|stone|neutral)-\d{2,3}(?:/\d{1,3})?(?![-\w])"
@@ -2000,3 +1763,178 @@ def test_the_judgement_colour_guard_permits_a_declared_status_token(tmp_path: Pa
     )
 
     assert not _judgement_colour_violations(tmp_path)
+
+
+# -- assertion N: every keyframe that can reach the bundle is one somebody chose -----------------
+#
+# This folds four guards that each watched one breadth of the same defect: the `index.css` keyframe
+# baseline, the raw-text `animate-*` scan, the core-utility denylist, and the plugin-absence check.
+# Four scanners over one property left gaps between them, and the bundle carried `@keyframes pulse`
+# through one of those gaps for weeks.
+#
+# The breadth that matters is `_tailwind_scanned_files`. Every predecessor read `web/src`, and
+# Tailwind reads the whole project minus what git ignores -- which is how a line in `web/NOTICE`
+# explaining that a utility had been removed compiled it straight back in, measured in the commit
+# that removed it.
+_KEYFRAME_DECL = re.compile(r"@keyframes\s+([A-Za-z][\w-]*)")
+
+# Core Tailwind ships these four and nothing else. Everything in the `animate-in` / `fade-in-0` /
+# `zoom-in-95` family belongs to `tailwindcss-animate`, which is why it is inert here and why the
+# plugin's absence is part of the assertion rather than a separate rule.
+_CORE_ANIMATE = re.compile(r"\banimate-(pulse|spin|ping|bounce)\b")
+_ANY_ANIMATE = re.compile(r"\banimate-([a-z0-9][\w-]*)\b")
+
+_ANIMATION_PLUGINS = ("tailwindcss-animate", "tw-animate-css")
+
+_TAILWIND_IGNORED_DIRS = {"node_modules", "dist", "dist-ssr", ".git", "coverage"}
+
+
+def _tailwind_scanned_files(web_root: Path) -> list[Path]:
+    """Every file Tailwind's source detection reads: the project minus what git ignores.
+
+    Deliberately not `web/src` and deliberately not filtered by suffix -- the scanner is a text
+    extractor, so a markdown note and a JSON manifest are candidate sources exactly as a `.tsx` is.
+    """
+    found: list[Path] = []
+    for path in sorted(web_root.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(part in _TAILWIND_IGNORED_DIRS for part in path.relative_to(web_root).parts):
+            continue
+        found.append(path)
+    return found
+
+
+def _registered_keyframes(web_src: Path) -> set[str]:
+    text = (web_src / "lib" / "motion.ts").read_text(encoding="utf-8")
+    block = re.search(r"KEYFRAMES[^=]*=\s*\[(.*?)\]", text, re.DOTALL)
+    assert block, "KEYFRAMES not found in lib/motion.ts -- this guard is blind"
+    return set(re.findall(r'name:\s*"([\w-]+)"', block.group(1)))
+
+
+def _animation_plugin_installed(web_root: Path) -> list[str]:
+    manifest = (web_root / "package.json").read_text(encoding="utf-8")
+    return [name for name in _ANIMATION_PLUGINS if f'"{name}"' in manifest]
+
+
+def _unchosen_keyframes(web_root: Path, web_src: Path) -> list[str]:
+    registered = _registered_keyframes(web_src)
+    plugin = _animation_plugin_installed(web_root)
+    unchosen: list[str] = []
+
+    for path in _tailwind_scanned_files(web_root):
+        try:
+            # Raw text, never comment-stripped: the compiler reads comments, and that is not a
+            # theoretical point -- it is how the keyframe reached the bundle both times.
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+
+        for match in _KEYFRAME_DECL.finditer(text):
+            if match.group(1) not in registered:
+                unchosen.append(f"{path}:{_line_at(text, match.start())}: @keyframes {match.group(1)}")
+
+        # A plugin turns the whole `animate-*` surface live at once, so the pattern widens with it.
+        pattern = _ANY_ANIMATE if plugin else _CORE_ANIMATE
+        for match in pattern.finditer(text):
+            if match.group(1) not in registered:
+                unchosen.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+
+    return unchosen
+
+
+def test_every_keyframe_that_can_reach_the_bundle_is_one_somebody_chose():
+    """Motion is not forbidden. Unaccounted motion is.
+
+    `lib/motion.ts`'s `KEYFRAMES` is the registry; this holds it against the three sources that can
+    put a keyframe in `dist` -- a declaration in `index.css`, a core Tailwind utility spelled
+    anywhere the scanner reads, and the wider family an animation plugin would bring to life.
+    """
+    _require_web_src()
+    web_root = _WEB_SRC.parent
+    scanned = _tailwind_scanned_files(web_root)
+    assert scanned, f"scanned no files under {web_root} -- the console tree moved and this is blind"
+
+    unchosen = _unchosen_keyframes(web_root, _WEB_SRC)
+    assert not unchosen, (
+        "a keyframe can reach the built stylesheet without an entry in lib/motion.ts's KEYFRAMES "
+        "-- register it with the trigger that runs it, or delete the utility. Nothing animates at "
+        "rest and nothing animates in proportion to a data value, so if neither `interaction` nor "
+        "`arrival` describes it, it does not get an entry:\n" + "\n".join(unchosen)
+    )
+
+
+def test_every_registered_keyframe_declares_a_permitted_trigger():
+    """The liveness-pulse refusal, and after the blanket motion bans retire it is the only thing
+    holding it. A trigger outside the closed vocabulary is a shape moving with nobody touching it.
+    """
+    _require_web_src()
+    text = (_WEB_SRC / "lib" / "motion.ts").read_text(encoding="utf-8")
+    block = re.search(r"KEYFRAMES[^=]*=\s*\[(.*?)\]", text, re.DOTALL)
+    assert block, "KEYFRAMES not found in lib/motion.ts -- this guard is blind"
+
+    entries = re.findall(r'name:\s*"([\w-]+)"[^}]*?trigger:\s*"([\w-]+)"', block.group(1))
+    assert len(entries) == len(re.findall(r'name:\s*"[\w-]+"', block.group(1))), (
+        "a KEYFRAMES entry names a keyframe without declaring what runs it"
+    )
+    bad = [f"{name} -> {trigger}" for name, trigger in entries if trigger not in {"interaction", "arrival"}]
+    assert not bad, (
+        "a keyframe may be run by an interaction or by something arriving, and by nothing else -- "
+        "motion at rest is a liveness pulse and motion proportional to a value claims the value is "
+        f"arriving now: {bad}"
+    )
+
+
+def test_the_keyframe_registry_catches_a_declaration_nobody_registered(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib").mkdir()
+    (tmp_path / "src" / "lib" / "motion.ts").write_text("export const KEYFRAMES = [\n]\n", encoding="utf-8")
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "src" / "index.css").write_text("@keyframes pulse { to { opacity: 1 } }\n", encoding="utf-8")
+
+    violations = _unchosen_keyframes(tmp_path, tmp_path / "src")
+
+    assert violations and "@keyframes pulse" in violations[0]
+
+
+def test_the_keyframe_registry_reads_through_a_comment_and_past_web_src(tmp_path: Path) -> None:
+    """The two gaps the four predecessors left, proven closed together."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib").mkdir()
+    (tmp_path / "src" / "lib" / "motion.ts").write_text("export const KEYFRAMES = [\n]\n", encoding="utf-8")
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    # A prose file outside src/, naming the utility in order to explain its removal.
+    (tmp_path / "NOTICE").write_text("its animate-spin compiled a keyframe into the bundle\n", encoding="utf-8")
+
+    violations = _unchosen_keyframes(tmp_path, tmp_path / "src")
+
+    assert violations and "animate-spin" in violations[0] and "NOTICE" in violations[0]
+
+
+def test_the_keyframe_registry_permits_a_registered_keyframe(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib").mkdir()
+    (tmp_path / "src" / "lib" / "motion.ts").write_text(
+        'export const KEYFRAMES = [\n  { name: "spin", trigger: "interaction", why: "x" },\n]\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "src" / "spinner.tsx").write_text('<i className="animate-spin" />\n', encoding="utf-8")
+
+    assert not _unchosen_keyframes(tmp_path, tmp_path / "src")
+
+
+def test_the_keyframe_registry_widens_when_an_animation_plugin_is_installed(tmp_path: Path) -> None:
+    """`animate-in` is inert only because nothing compiles it. Installing the plugin makes roughly
+    forty class names across both vendored catalogs live in a single commit."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib").mkdir()
+    (tmp_path / "src" / "lib" / "motion.ts").write_text("export const KEYFRAMES = [\n]\n", encoding="utf-8")
+    (tmp_path / "src" / "popover.tsx").write_text('<div className="animate-in fade-in-0" />\n', encoding="utf-8")
+
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    assert not _unchosen_keyframes(tmp_path, tmp_path / "src"), "inert without the plugin"
+
+    (tmp_path / "package.json").write_text('{"dependencies": {"tailwindcss-animate": "^1"}}', encoding="utf-8")
+    violations = _unchosen_keyframes(tmp_path, tmp_path / "src")
+    assert violations and "animate-in" in violations[0], "live once the plugin is installed"

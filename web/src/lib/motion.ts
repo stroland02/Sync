@@ -52,6 +52,33 @@ export const MOTION_USAGES = [
   "components/states.tsx",
 ] as const
 
+/**
+ * What may cause a keyframe to run. The vocabulary is closed, and the two absent entries are the
+ * point: nothing animates **at rest**, and nothing animates **in proportion to a data value**.
+ *
+ * A shape that moves with nobody touching it is a liveness pulse, and a bar whose motion is driven
+ * by a measured number claims the number is arriving now. `web/CLAUDE.md` refuses both, and after
+ * the blanket motion bans retire this type is the only thing still holding the refusal.
+ */
+export type KeyframeTrigger = "interaction" | "arrival"
+
+/**
+ * Every `@keyframes` allowed to reach the built stylesheet, and what runs it.
+ *
+ * The companion to `MOTION_USAGES`, for the half framer-motion does not cover. Motion is no longer
+ * forbidden — unaccounted motion is. `tests/test_console_design_tokens.py` reads this array and
+ * holds it against three sources at once: keyframes declared in `index.css`, core Tailwind
+ * animation utilities spelled anywhere, and, if an animation plugin is ever installed, the classes
+ * it would bring to life.
+ *
+ * **Empty is the correct state today, and it was not free.** The pulse utility reached
+ * `dist/assets/*.css` twice — once from a vendored skeleton, once from a note explaining its own
+ * removal. Tailwind extracts candidates from raw file text and does not know a comment from code,
+ * which is why no utility is spelled out anywhere in this file: naming one here would register it
+ * by accident. The guard caught a third attempt in this very docstring.
+ */
+export const KEYFRAMES: readonly { name: string; trigger: KeyframeTrigger; why: string }[] = []
+
 export const EASE_STANDARD: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 /** `ErrorSurface` arriving and leaving. */
