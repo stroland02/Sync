@@ -17,8 +17,9 @@ discipline does not — every token still arrives with the arithmetic that produ
 text-bearing pairing is measured rather than assumed.
 
 **Dark-only as of 2026-08-05, and the substrate does not reopen it.** Supabase ships both themes;
-only the dark values are imported. `web/src/vendor/supabase/theme.css` carries the light block
-un-imported, which is where a future owner instruction would start rather than a rewrite.
+only the dark values were imported. `web/src/vendor/supabase/theme.css` declares one selector,
+`[data-theme='dark'], .dark`, and carries no light block — a future owner instruction starts by
+regenerating from `web/scripts/theme-contrast.mjs`, not from a block already sitting in the tree.
 
 ---
 

@@ -1828,3 +1828,109 @@ def test_the_keyboard_only_ring_guard_can_fail(tmp_path: Path) -> None:
     )
 
     assert _keyboard_only_ring_violations(tmp_path)
+
+
+# Only these four animation utilities are core Tailwind and therefore compile a keyframe. The
+# `animate-in` / `fade-in-0` / `zoom-in-95` / `slide-in-from-*` family in both vendored catalogs
+# comes from `tailwindcss-animate`, which is not installed -- those strings compile to nothing, and
+# `test_the_animation_plugin_stays_uninstalled` is what keeps that true.
+_COMPILING_ANIMATION = re.compile(r"\banimate-(?:pulse|spin|ping|bounce)\b")
+
+_ANIMATION_PLUGINS = ("tailwindcss-animate", "tw-animate-css")
+
+
+def _compiling_animation_violations(root: Path) -> list[str]:
+    violations: list[str] = []
+    for path in _iter_source_files(root, suffixes=(".ts", ".tsx", ".css")):
+        # Raw text rather than `_read_stripped`: Tailwind extracts candidates from the file as
+        # written and does not know a comment from code. A docstring naming the utility put
+        # `@keyframes pulse` in `dist/assets/*.css` once already.
+        text = path.read_text(encoding="utf-8")
+        for match in _COMPILING_ANIMATION.finditer(text):
+            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+    return violations
+
+
+def test_no_compiling_animation_utility_reaches_the_bundle():
+    """The console runs zero animation at rest, and this is the guard that spans the vendored
+    catalogs too. `_ANIMATION_FREE_ROOTS` never listed `vendor`, so a vendored `animate-pulse`
+    shipped `@keyframes pulse` in the production stylesheet unseen.
+    """
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC, suffixes=(".ts", ".tsx", ".css")), _WEB_SRC)
+    violations = _compiling_animation_violations(_WEB_SRC)
+    assert not violations, (
+        "a core Tailwind animation utility compiles a keyframe into the bundle from anywhere "
+        "under web/src, vendored directories included; a resting animation claims a time the "
+        "data does not hold -- delete the utility, or route the caller to components/skeleton.tsx "
+        "which is the sanctioned non-pulsing bar:\n" + "\n".join(violations)
+    )
+
+
+def test_the_animation_plugin_stays_uninstalled():
+    """What makes the `animate-in` strings left in both vendored catalogs harmless. Installing
+    either plugin turns roughly forty inert class names into live keyframes in one commit.
+    """
+    manifest = (_REPO_ROOT / "web" / "package.json").read_text(encoding="utf-8")
+    found = [name for name in _ANIMATION_PLUGINS if f'"{name}"' in manifest]
+    assert not found, (
+        f"{found} would compile the vendored animate-in/fade-in/zoom-in classes that are inert "
+        "today; adopt the motion those components need through lib/motion.ts instead"
+    )
+
+
+def test_plotting_surface_matches_the_card_token():
+    """The price of `lib/palette.ts`'s third exemption. `PLOTTING_SURFACE` is a hand transcription
+    of `--color-card`, and every mark-legibility proof in that file is computed against it, so a
+    move of the card token with no matching edit here measures a surface no longer on screen.
+    """
+    _require_web_src()
+    palette = (_WEB_SRC / "lib" / "palette.ts").read_text(encoding="utf-8")
+    design = _DESIGN_MD.read_text(encoding="utf-8")
+
+    stated = re.search(r'PLOTTING_SURFACE = "(#[0-9a-fA-F]{6})"', palette)
+    assert stated, "PLOTTING_SURFACE not found in palette.ts"
+
+    row = re.search(r"`--color-card`[^|]*\|[^|]*\|\s*`(#[0-9a-fA-F]{6})`\s*\|", design)
+    assert row, "DESIGN.md publishes no hex for --color-card"
+
+    assert stated.group(1).lower() == row.group(1).lower(), (
+        f"PLOTTING_SURFACE is {stated.group(1)} in palette.ts but DESIGN.md publishes "
+        f"{row.group(1)} for --color-card; one of them moved without the other"
+    )
+
+
+def test_the_compiling_animation_guard_rejects_a_vendored_pulse(tmp_path: Path) -> None:
+    vendored = tmp_path / "vendor" / "supabase" / "ui"
+    vendored.mkdir(parents=True)
+    (vendored / "skeleton.tsx").write_text(
+        "const S = () => <div className='animate-pulse rounded-md' />\n", encoding="utf-8"
+    )
+
+    violations = _compiling_animation_violations(tmp_path)
+
+    assert violations and "animate-pulse" in violations[0]
+
+
+def test_the_compiling_animation_guard_reads_through_a_comment(tmp_path: Path) -> None:
+    (tmp_path / "skeleton.tsx").write_text(
+        "/** It does not pulse. */\nexport const S = () => null\n", encoding="utf-8"
+    )
+
+    assert not _compiling_animation_violations(tmp_path)
+
+    (tmp_path / "named.tsx").write_text(
+        "/** It does not use animate-pulse. */\nexport const S = () => null\n", encoding="utf-8"
+    )
+
+    assert _compiling_animation_violations(tmp_path), (
+        "Tailwind scans raw text; a comment naming the utility still compiles it"
+    )
+
+
+def test_the_compiling_animation_guard_allows_the_inert_plugin_classes(tmp_path: Path) -> None:
+    (tmp_path / "popover.tsx").write_text(
+        "const P = () => <div className='animate-in fade-in-0 zoom-in-95' />\n", encoding="utf-8"
+    )
+
+    assert not _compiling_animation_violations(tmp_path)

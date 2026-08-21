@@ -21,7 +21,6 @@ Vendored files:
   src/vendor/supabase/ui/shadow-scroll-area.tsx
   src/vendor/supabase/ui/sheet.tsx
   src/vendor/supabase/ui/sidebar.tsx
-  src/vendor/supabase/ui/skeleton.tsx
   src/vendor/supabase/ui/table.tsx
   src/vendor/supabase/ui/tabs.tsx
   src/vendor/supabase/ui/tooltip.tsx
@@ -75,9 +74,18 @@ already has a jsdom stub. Two charting libraries is weight for no gain, so the
 console has one, and it is echarts. A shadcn chart is an echarts decision first if
 it is ever wanted.
 
-`resizable` and `sonner` are kept. Their peer dependencies were declared correctly
-by `M14-W388` and both have named upcoming consumers -- split panes and drawers,
-transient notices.
+`sonner` was added by `M14-W388` and REMOVED alongside `skeleton.tsx`, with `sonner`
+and `next-themes` dropped from package.json. Nothing imported `Toaster`, it was the
+only importer of either package, and its spin utility compiled a keyframe into the
+production stylesheet. The utility is deliberately not spelled here: Tailwind scans
+every non-gitignored file in the project, so naming it in this note put the keyframe
+straight back into the bundle -- measured, in the commit that removed it. It was kept for a named upcoming consumer, which
+`CLAUDE.md` rules out: an abstraction for an anticipated second caller is debt with
+no asset behind it.
+
+`resizable` is kept for now, and is the sole importer of `react-resizable-panels`
+which nothing else reaches. It carries the same speculative justification and
+retires with the rest of the unreachable catalog.
 
 `form` was requested and is absent: `npx shadcn@latest add form` reports success
 and creates nothing, twice, with no error. `toggle` was not requested and is

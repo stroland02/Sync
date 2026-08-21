@@ -18,14 +18,17 @@ is 5.05:1, measured against rendered pixels; a pairing below it is a bug in the 
 
 Three shapes of the contract, each a defect first:
 
-- **The surface ramp is indexed by job, not depth.** Two steps carry depth, two carry interaction
-  state, and no step does both. State is a named step, never an alpha overlay — an alpha composites
-  differently against whichever depth sits under it, so one declaration would mean several colours.
+- **The surface ramp is indexed by job, not depth.** Four steps carry depth and three carry
+  interaction state, and no step does both. **State is a foreground alpha owned by one primitive** —
+  `DESIGN.md` reversed this with the substrate, because an opaque state step was invisible on a card
+  and correct only on the page. What did not relax is the reason the old rule existed: **no `bg-x/10`
+  or `text-y/70` spelled inline in a component**, because an alpha at a call site composites against
+  whichever depth sits under it and one declaration would mean several colours.
 - **Type is assigned by role, not size.** Weight, line height and tracking travel with the step, so
   `text-page` is the whole decision rather than three of them.
-- **Three spacing tokens and exactly two named exceptions**, both page-layout numbers used once per
-  view. A raw Tailwind spacing utility inside `features/` duplicates one of the three under another
-  name — measured at 19 token spellings against 128 raw ones, two landing on the same pixel.
+- **Four spacing tokens and exactly one named exception**, the 32px between-panel gap. A raw Tailwind
+  spacing utility inside `features/` duplicates one of the four under another name — measured at 19
+  token spellings against 128 raw ones, two landing on the same pixel.
 
 Dark-only since 2026-08-05, on the owner's instruction. The theme resolver, its storage key and its
 `prefers-color-scheme` listener are deleted rather than disabled, so a component branching on
