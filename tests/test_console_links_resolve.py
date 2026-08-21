@@ -101,8 +101,14 @@ def test_every_internal_link_starts_at_a_declared_route_root() -> None:
     roots = declared_roots()
     assert roots, "parsed no routes out of routes.ts -- the guard would pass vacuously"
 
+    scanned = source_files()
+    assert scanned, (
+        f"scanned no files under {WEB_SRC} -- the console tree moved and this guard would "
+        "pass on nothing, the failure mode `roots` above is already protected against"
+    )
+
     violations: list[str] = []
-    for path in source_files():
+    for path in scanned:
         text = path.read_text(encoding="utf-8")
         for line_number, line in enumerate(text.splitlines(), start=1):
             # A path named inside a comment is prose about a route, not a request for one. Every

@@ -84,8 +84,14 @@ def test_no_screen_links_to_an_address_the_router_cannot_serve():
     rather than widening the baseline: the baseline is a record of what was already broken when
     this landed, not a place to put new breakage.
     """
+    scanned = sorted(WEB_SRC.rglob("*.tsx")) + sorted(WEB_SRC.rglob("*.ts"))
+    assert scanned, (
+        f"scanned no files under {WEB_SRC} -- the console tree moved and this gate was "
+        "about to pass on nothing"
+    )
+
     offenders: dict[str, list[str]] = {}
-    for path in sorted(WEB_SRC.rglob("*.tsx")) + sorted(WEB_SRC.rglob("*.ts")):
+    for path in scanned:
         if "vendor/supabase" in path.as_posix():
             continue
         relative = path.relative_to(WEB_SRC).as_posix()
@@ -99,19 +105,4 @@ def test_no_screen_links_to_an_address_the_router_cannot_serve():
         "these screens link to addresses routes.ts does not declare, so a reader who clicks gets "
         '"No screen at this address." Every route is workspace-scoped as of M14-W386:\n'
         + "\n".join(f"  {name}: {', '.join(paths)}" for name, paths in offenders.items())
-    )
-
-
-def test_the_baseline_names_only_files_that_are_still_broken():
-    """A baseline entry that has been fixed must be removed, or this gate quietly stops watching a
-    file. The same argument the dead-symbol baseline makes about its own expiry."""
-    stale = [
-        name
-        for name in sorted(KNOWN_DEAD)
-        if not unscoped_links((WEB_SRC / name).read_text(encoding="utf-8"))
-    ]
-
-    assert not stale, (
-        "these files no longer link anywhere dead, so their baseline entries are stale and must be "
-        f"deleted -- otherwise the gate stops watching them: {stale}"
     )

@@ -1065,9 +1065,11 @@ def _ring_alpha_violations(root: Path, *, skip_vendored: bool = False) -> list[s
 def test_no_focus_ring_is_washed_by_an_alpha_modifier():
     _require_web_src()
     _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
-    # `ring-ring/50` is shadcn's own default and arrives with the catalog; excluded by path for
-    # the same reason the geometry guard excludes it.
-    violations = _ring_alpha_violations(_WEB_SRC, skip_vendored=True)
+    # The vendored exclusion is dropped: `components/ui/` is the primitive substrate now, so a
+    # floor that skips it skips the directory every visible control lives in. It costs nothing
+    # today -- the catalog's focus rings were hand-substituted to full strength already, and the
+    # `/n` rings it does carry are `aria-invalid:` and decorative, which this pattern never matched.
+    violations = _ring_alpha_violations(_WEB_SRC, skip_vendored=False)
     assert not violations, (
         "a focus ring at partial strength is a contrast figure nobody computed and nobody can "
         "read off the class name -- render the token, and argue the token in DESIGN.md:\n"
@@ -1172,7 +1174,9 @@ def test_the_dialog_heading_guard_permits_a_header_inside_the_content(tmp_path: 
         encoding="utf-8",
     )
 
-    violations = _dialog_heading_violations(tmp_path)
+    assert not _dialog_heading_violations(tmp_path)
+
+
 # -- assertion 8: the table's rows measure what DESIGN.md says they measure ----------------------
 #
 # `DESIGN.md`'s Row height section states two heights as arithmetic over values it declares
@@ -1934,3 +1938,65 @@ def test_the_compiling_animation_guard_allows_the_inert_plugin_classes(tmp_path:
     )
 
     assert not _compiling_animation_violations(tmp_path)
+
+
+# Lifted out of `tests/test_console_raw_utilities.py` when that file was retired with the rest of
+# the token-ceiling family. Its type, radius and spacing alternations went with it; this one did
+# not, because it is the only mechanical thing standing between `web/src` and a traffic light, and
+# `web/CLAUDE.md`'s refusal of one is not a taste rule that retires with the aesthetic.
+#
+# `test_no_colour_literal_outside_index_css` above does not cover this: it bans hex literals and
+# `oklch(...)`-style calls, and a Tailwind palette class is neither.
+_JUDGEMENT_COLOUR = re.compile(
+    r"(?<![-\w:])(?:bg|text|border)-(?:emerald|amber|red|green|blue|yellow|orange|rose|sky|"
+    r"slate|zinc|gray|stone|neutral)-\d{2,3}(?:/\d{1,3})?(?![-\w])"
+)
+
+
+def _judgement_colour_violations(root: Path) -> list[str]:
+    violations: list[str] = []
+    for path in _iter_source_files(root):
+        if _is_vendored(path, root):
+            continue
+        # Comments blanked, not the scan narrowed to `className=`: a tone string built in a
+        # variable never appears inside a class attribute, and those are the colours this exists
+        # to catch. The retired guard recorded both halves of that decision.
+        text = _read_stripped(path)
+        for match in _JUDGEMENT_COLOUR.finditer(text):
+            violations.append(f"{path}:{_line_at(text, match.start())}: {match.group(0)!r}")
+    return violations
+
+
+def test_no_raw_palette_colour_claims_a_judgement():
+    """A stock Tailwind palette class is a verdict nobody declared and nobody measured.
+
+    `red-500` on a row is the traffic light `web/CLAUDE.md` refuses three times over, arriving as a
+    utility rather than as a component. Status ships from the four declared roles, with an icon and
+    a word beside it; identity ships from the series slots.
+    """
+    _require_web_src()
+    _require_examined(_iter_source_files(_WEB_SRC), _WEB_SRC)
+    violations = _judgement_colour_violations(_WEB_SRC)
+    assert not violations, (
+        "a raw palette colour asserts a judgement the graph has not computed -- spend a status "
+        "token and ship the icon and the word with it, or a series slot if what you mean is "
+        "identity:\n" + "\n".join(violations)
+    )
+
+
+def test_the_judgement_colour_guard_rejects_a_traffic_light(tmp_path: Path) -> None:
+    (tmp_path / "findings-table.tsx").write_text(
+        'const tone = severe ? "text-red-500" : "text-emerald-400"\n', encoding="utf-8"
+    )
+
+    violations = _judgement_colour_violations(tmp_path)
+
+    assert len(violations) == 2, violations
+
+
+def test_the_judgement_colour_guard_permits_a_declared_status_token(tmp_path: Path) -> None:
+    (tmp_path / "status.tsx").write_text(
+        '<span className="text-status-critical bg-surface-subtle border-line" />\n', encoding="utf-8"
+    )
+
+    assert not _judgement_colour_violations(tmp_path)
