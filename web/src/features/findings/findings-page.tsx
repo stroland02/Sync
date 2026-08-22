@@ -38,6 +38,13 @@
  * payload's own order, counted over the scope rather than the page, with the whole-scope tab
  * first. Its empty states carry the absence-apart-from-zero distinction this file used to make
  * page-wide, sharpened per-tab and naming the detectors that stood behind a measured zero.
+ *
+ * ## The band counts two populations, not one
+ *
+ * The grouped view's rows are change units and the flat view's are findings, so a single count
+ * under both would be true of one branch and a lie about the other. Each branch publishes its own
+ * `records` segment naming its population, and the grouped one carries a note because the summary
+ * above that table sums findings over the changes listed rather than over the whole narrowing.
  */
 
 import { useParams } from "react-router"
@@ -58,8 +65,10 @@ import {
 } from "@/components/triage-tabs"
 import { FindingsTable } from "@/features/findings/findings-table"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { FooterBar } from "@/layouts/footer-bar"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { describeRecordWindow } from "@/lib/record-window"
 import { useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
@@ -78,6 +87,12 @@ export function FindingsPage() {
   // cleared in the same URL write â€” `use-filter-param`'s own reasoning, previously unapplied here.
   const [severity, setSeverity] = useFilterParam("severity", [OFFSET_KEY])
   const [order] = useFilterParam("order")
+  // M15 Task 7: the change leads, because one vendor change breaking eleven call sites is one
+  // decision rather than eleven, and a flat list is the console asserting otherwise by its shape.
+  // The parameter spells only the departure from the default, so an unswitched screen's URL is
+  // the URL it had before the toggle existed.
+  const [view, setView] = useFilterParam("findings_view", [OFFSET_KEY])
+  const grouped = view !== "flat"
 
   const query = useWorkspaceFindings(repoId ?? "", {
     limit: DEFAULT_LIMIT,
@@ -88,10 +103,103 @@ export function FindingsPage() {
   // For the triage header's `checks`: an empty tab must say which detectors stood behind the
   // zero, and the findings payload does not carry their names â€” the detector roll-up does.
   const detectors = useDetectors(repoId)
+  // Read here rather than inside the grouped branch so the band can count that branch's own
+  // population; a hook cannot be conditional, so the flat view pays one read it then finds
+  // already answered when the toggle is pressed.
+  const units = useChangeUnits({ repoId, severity })
 
   if (repoId === undefined) return <UnknownRoute />
 
+  // The body renders only once both reads have settled, so the band is built from both: a
+  // segment gated on fewer queries than the rows it describes prints a count for a table that
+  // is not on screen.
+  const settled = query.isSuccess && !detectors.isPending ? query.data : null
+
+  let status: StatusSegment[]
+  if (settled === null) {
+    status = [
+      {
+        kind: "none",
+        why: query.isError
+          ? `the open findings in ${repoId} did not answer`
+          : `asking for the open findings in ${repoId}`,
+      },
+    ]
+  } else if (!grouped) {
+    status = [
+      {
+        kind: "records",
+        label:
+          severity !== null
+            ? `Open findings in ${repoId}, ${severity} only`
+            : `Open findings in ${repoId}`,
+        // Decision 60, on the screen it was written for. `describeRecordWindow` knows nothing of
+        // the filter, so over a narrowed set that fits one page it says "This is all 12 findings"
+        // -- beside a pager stating 75 were excluded. Under a filter the pager's own sentence is
+        // the only honest one, so the window claim is withheld rather than qualified.
+        text:
+          severity !== null
+            ? null
+            : describeRecordWindow(
+                offset,
+                settled.items.length,
+                { count: settled.total, boundReached: false },
+                "finding",
+                "findings",
+              ),
+        paging: {
+          offset,
+          limit: DEFAULT_LIMIT,
+          shown: settled.items.length,
+          total: settled.total,
+          // Decision 60: with a filter on, `total` counts the narrowed set while `severity_total`
+          // counts the scope, and a bare range under a narrowed table reads as the whole set.
+          unfilteredTotal: severity !== null ? settled.severity_total : undefined,
+          nextOffset: settled.next_offset,
+          busy: query.isFetching,
+          onOffsetChange: setOffset,
+        },
+      },
+    ]
+  } else if (units.isSuccess) {
+    status = [
+      {
+        kind: "records",
+        label: `Changes in ${repoId}`,
+        text: describeRecordWindow(
+          0,
+          units.data.items.length,
+          { count: units.data.total, boundReached: false },
+          "change",
+          "changes",
+        ),
+      },
+      {
+        kind: "note",
+        text:
+          "Counted in change units rather than findings: one vendor change breaking several call " +
+          "sites is one row here. The findings figure above the table is summed over the changes " +
+          "listed, not over every change in this narrowing.",
+      },
+    ]
+  } else {
+    status = [
+      {
+        kind: "none",
+        why: units.isError
+          ? `the changes open in ${repoId} did not answer`
+          : `asking for the changes open in ${repoId}`,
+      },
+    ]
+  }
+
   return (
+    <ScreenFrame
+      status={status}
+      controls={
+        settled === null ? undefined : <GroupingToggle grouped={grouped} onChange={setView} />
+      }
+    >
     <section className="flex min-w-0 flex-col gap-8">
       <div className="flex flex-col gap-field">
         {/* Level name only: the scope trail in the top bar already draws the repository, and
@@ -117,7 +225,8 @@ export function FindingsPage() {
       {/* What a human has already ruled on, beside what is still open. The table below lists
           open findings only, so without this a finding somebody deliberately set aside reads
           as one nobody has looked at. It states its own fleet scope, which is why it can sit
-          on a workspace-scoped screen at all. */}
+          on a workspace-scoped screen at all. The status band never folds it into a workspace
+          count: the two scopes do not add. */}
       <DismissedTally />
 
       {query.isPending || detectors.isPending ? (
@@ -135,14 +244,14 @@ export function FindingsPage() {
           detectorNames={
             detectors.isSuccess ? detectors.data.detectors.map((row) => row.detector) : null
           }
-          offset={offset}
-          onOffset={setOffset}
-          busy={query.isFetching}
           severity={severity}
           onSeverity={setSeverity}
+          grouped={grouped}
+          units={units}
         />
       )}
     </section>
+    </ScreenFrame>
   )
 }
 
@@ -150,33 +259,24 @@ function FindingsBody({
   repoId,
   page,
   detectorNames,
-  offset,
-  onOffset,
-  busy,
   severity,
   onSeverity,
+  grouped,
+  units,
 }: {
   repoId: string
   page: NonNullable<ReturnType<typeof useWorkspaceFindings>["data"]>
   /** The detector roll-up's names, or null when that route did not answer. */
   detectorNames: string[] | null
-  offset: number
-  onOffset: (next: number) => void
-  busy: boolean
   severity: string | null
   onSeverity: (next: string | null) => void
+  grouped: boolean
+  units: ReturnType<typeof useChangeUnits>
 }) {
   // The tab vocabulary is the payload's own `severity_order`, most severe first, with any kind
   // the counts hold beyond it appended rather than dropped â€” a row whose kind the tabs omit is
   // unreachable by exactly the reader triaging it. A kind at zero keeps its tab: the counts are
   // computed without the severity narrowing, so zero is a measured answer, not an absence.
-  // M15 Task 7: the change leads, because one vendor change breaking eleven call sites is one
-  // decision rather than eleven, and a flat list is the console asserting otherwise by its shape.
-  // The parameter spells only the departure from the default, so an unswitched screen's URL is
-  // the URL it had before the toggle existed.
-  const [view, setView] = useFilterParam("findings_view", ["findings_offset"])
-  const grouped = view !== "flat"
-
   const kinds = [
     ...page.severity_order,
     ...Object.keys(page.severity_counts).filter((kind) => !page.severity_order.includes(kind)),
@@ -251,26 +351,11 @@ function FindingsBody({
       >
         {/* The severity tab reaches both views, because the grouping narrows before it buckets.
             A tab that stopped applying when the view changed would look active over numbers
-            true of something else. */}
-        <GroupingToggle grouped={grouped} onChange={setView} />
+            true of something else. The toggle between them is in the frame's controls band. */}
         {grouped ? (
-          <GroupedFindings repoId={repoId} severity={severity} />
+          <GroupedFindings repoId={repoId} units={units} />
         ) : (
-          <>
-        <FindingsTable repoId={repoId} rows={page.items} />
-        {/* Decision 60: with a filter on, `total` counts the narrowed set while `severity_total`
-            counts the scope, and a bare range under a narrowed table reads as the whole set. */}
-        <FooterBar
-          offset={offset}
-          limit={DEFAULT_LIMIT}
-          shown={page.items.length}
-          total={page.total}
-          nextOffset={page.next_offset}
-          busy={busy}
-          unfilteredTotal={severity !== null ? page.severity_total : undefined}
-          onOffsetChange={onOffset}
-        />
-          </>
+          <FindingsTable repoId={repoId} rows={page.items} />
         )}
       </MetricPanel>
     </TriageTabs>
@@ -309,10 +394,14 @@ function GroupingToggle({
   )
 }
 
-/** The grouped view and its own read, on its own key. */
-function GroupedFindings({ repoId, severity }: { repoId: string; severity: string | null }) {
-  const units = useChangeUnits({ repoId, severity })
-
+/** The grouped view. Its read is the page's, so the band can count what this table holds. */
+function GroupedFindings({
+  repoId,
+  units,
+}: {
+  repoId: string
+  units: ReturnType<typeof useChangeUnits>
+}) {
   if (units.isPending) return <LoadingState what={`the changes open in ${repoId}`} />
   if (units.isError) {
     return (

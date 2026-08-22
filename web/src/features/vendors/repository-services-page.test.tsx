@@ -223,6 +223,33 @@ describe("the API products screen", () => {
     expect(document.body.textContent).toMatch(/could not be asked about this repository/i)
   })
 
+  /**
+   * The ranked bars key each row `vendor · service`, split that key back on the same separator to
+   * colour by vendor, and rebuild it a third time to look the row up for its operation count. All
+   * three literals were a triple-mojibaked middle dot until CI-W559 and agreed with each other,
+   * which is exactly why nothing caught it: the split worked and the label was unreadable. These
+   * assertions pin the round trip to the character, so a future sweep cannot fix one of the three.
+   */
+  it("keys, splits and rebuilds a bar's identity on the same separator", () => {
+    answered()
+    renderAt("org/one")
+
+    // Construction: the key reaches the bar's accessible name intact.
+    const payments = screen.getByRole("img", { name: "stripe · Payments: 9 call sites" })
+    const billing = screen.getByRole("img", { name: "stripe · Billing: 5 call sites" })
+
+    // The rebuild at `detail`: a key that no longer matches its row returns "" and prints nothing.
+    expect(screen.getByText("2 ops")).toBeTruthy()
+    expect(screen.getByText("1 op")).toBeTruthy()
+
+    // The split at `colourKey`: both bars resolve to the vendor, so they carry one hue. A failed
+    // split leaves two distinct keys in the domain and the ordinal scale gives them two.
+    const hue = (bar: HTMLElement) =>
+      (bar.firstElementChild as HTMLElement).style.backgroundColor
+    expect(hue(payments)).not.toBe("")
+    expect(hue(payments)).toBe(hue(billing))
+  })
+
   it("says nothing is bound here rather than drawing an empty table", () => {
     useRepositoryCoverage.mockReturnValue(
       settled({

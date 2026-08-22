@@ -12,6 +12,13 @@ import { DESTINATIONS, ROUTES } from "@/lib/routes"
 
 /** Screens rendering through `ScreenFrame`. Move a path up as it migrates; never back. */
 const MIGRATED = [
+  "/",
+  "/repositories/:repoId/findings",
+  "/repositories/:repoId/services",
+  "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId",
+  "/repositories/:repoId/findings/:findingId",
+  "/repositories/:repoId/findings/:findingId/workflow",
+  "/repositories/:repoId/findings/:findingId/workflow/pull-request",
   "/repositories/:repoId/integration-changes",
   "/repositories/:repoId",
   "/repositories/:repoId/metrics",
@@ -23,19 +30,12 @@ const MIGRATED = [
 ]
 
 const PENDING = [
-  "/",
   "/settings",
   "/repositories/:repoId/file-tree",
   "/repositories/:repoId/call-sites",
   "/repositories/:repoId/graph",
-  "/repositories/:repoId/findings",
-  "/repositories/:repoId/services",
   "/repositories/:repoId/observed",
   "/repositories/:repoId/vendors/:vendorId",
-  "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId",
-  "/repositories/:repoId/findings/:findingId",
-  "/repositories/:repoId/findings/:findingId/workflow",
-  "/repositories/:repoId/findings/:findingId/workflow/pull-request",
 ]
 
 /** The index route is wired in `App.tsx` rather than the registry, so it is named here as "/". */

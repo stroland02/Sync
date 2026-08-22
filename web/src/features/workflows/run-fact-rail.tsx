@@ -25,8 +25,11 @@
  * nothing for as long as that takes, and a run that has died writes the same nothing, so "how long
  * it has been running" is a figure nothing computed and it is not on this screen.
  *
- * **The three actions render disabled rather than vanishing**, per the owner's rule that an action
- * missing from a screen teaches a reader the product is unpredictable. Each names what it needs.
+ * **The three actions are named in prose rather than drawn as controls, by the owner's ruling of
+ * 2026-08-21.** They were disabled buttons naming routes that do not exist, and a button drawn for
+ * a capability the product does not have reads as a feature merely switched off. Naming them still
+ * satisfies the rule they were built for — an action missing from a screen teaches a reader the
+ * product is unpredictable — because each is named along with what it needs.
  */
 
 import type { ReactNode } from "react"
@@ -36,7 +39,6 @@ import type { WorkflowState } from "@/api/types"
 import { type Fact, FactList } from "@/components/fact-list"
 import { Skeleton } from "@/components/skeleton"
 import { Absent, Formatted } from "@/components/status"
-import { Button } from "@/components/ui/button"
 import { formatSpan, runIdentity } from "@/features/workflows/run-identity"
 import { formatTimestamp } from "@/lib/format"
 
@@ -219,17 +221,12 @@ export function RunFactRail({
 
       <div className="flex flex-col gap-row">
         <p className="furniture text-meta text-ink-muted">Actions</p>
-        <div className="flex flex-col items-start gap-field">
-          {ACTIONS.map((action) => (
-            <Button key={action.label} variant="outline" size="sm" disabled>
-              {action.label}
-            </Button>
-          ))}
-        </div>
         <p className="max-w-prose text-meta text-ink-muted">
-          None of these can act. Sync's API is read-only — no route mutates a run or starts one —
-          so each is shown disabled rather than omitted, because an action that disappears reads as
-          an oversight. Copying the agent prompt needs{" "}
+          Three things a reviewer would reach for on this run: {ACTIONS[0].label.toLowerCase()},{" "}
+          {ACTIONS[1].label.toLowerCase()}, {ACTIONS[2].label.toLowerCase()}. None of these can act.
+          Sync's API is read-only — no route mutates a run or starts one — so each is named here in
+          prose rather than drawn as a control that cannot act, because an action that disappears
+          reads as an oversight. Copying the agent prompt needs{" "}
           {ACTIONS[0].needs}; feedback needs {ACTIONS[1].needs}; restarting needs {ACTIONS[2].needs}.
         </p>
       </div>

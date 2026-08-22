@@ -47,6 +47,8 @@ import { LastIndexed } from "@/components/last-indexed"
 import { RankedBars } from "@/components/ranked-bars"
 import { Absent, Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { formatTimestamp } from "@/lib/format"
 
 
@@ -59,6 +61,10 @@ type CoverageState =
       lastIndexed: Record<string, string>
       byService: readonly ServiceCoverageRow[]
       byOperation: readonly OperationCoverageRow[]
+      /** Every call site the index bound here, whether or not it reached a service row. Carried on
+          the ready variant so the status band's denominator cannot be read out of an answer that
+          arrived for another scope or never arrived at all. */
+      totalCallSites: number
     }
   | { kind: "unrouted" }
   | { kind: "failed"; error: unknown }
@@ -174,9 +180,13 @@ export function RepositoryServicesPage() {
 
   if (coverage.isPending) {
     return (
-      <section className="flex flex-col gap-8">
-        <LoadingState what="the connections this repository has" />
-      </section>
+      <ScreenFrame
+        status={[{ kind: "none", why: "asking which API products this repository calls" }]}
+      >
+        <section className="flex flex-col gap-8">
+          <LoadingState what="the connections this repository has" />
+        </section>
+      </ScreenFrame>
     )
   }
 
@@ -191,6 +201,7 @@ export function RepositoryServicesPage() {
           lastIndexed: coverage.data.last_indexed,
           byService: coverage.data.by_service,
           byOperation: coverage.data.by_operation,
+          totalCallSites: coverage.data.total_call_sites,
         }
       : { kind: "otherScope", scope: coverage.data?.repo_id ?? "another repository" }
 
@@ -212,7 +223,47 @@ export function RepositoryServicesPage() {
       (row) => row.vendor_id === vendorId && row.service_id === serviceId,
     )
 
+  // Read off `coverageState`, never off the arrays above: those default to empty when the answer
+  // 404'd, failed, or arrived for another scope, so summing them would print a counted zero under
+  // a label asserting the count happened. Nothing answered is `none` with the reason; a repository
+  // the index bound nothing in is a listing saying so, and its call sites are a real "0".
+  const status: StatusSegment[] =
+    coverageState.kind === "ready"
+      ? [
+          {
+            kind: "listing",
+            label: "API products",
+            text:
+              byService.length === 0
+                ? `The index bound nothing in ${repoId}.`
+                : `${grouped.length.toLocaleString()} named, ` +
+                  `${ungrouped.length.toLocaleString()} ` +
+                  `${ungrouped.length === 1 ? "vendor" : "vendors"} not grouped into one yet — ` +
+                  `all ${byService.length.toLocaleString()} rows on screen.`,
+          },
+          {
+            kind: "figure",
+            label: "Call sites",
+            value: byService.reduce((sum, row) => sum + row.call_sites, 0).toLocaleString(),
+            scope:
+              `every row on screen, grouped or not, of ` +
+              `${coverageState.totalCallSites.toLocaleString()} indexed in ${repoId}`,
+          },
+        ]
+      : [
+          {
+            kind: "none",
+            why:
+              coverageState.kind === "unrouted"
+                ? "the index could not be asked about this repository"
+                : coverageState.kind === "failed"
+                  ? "the index coverage did not answer"
+                  : `the index coverage answered for ${coverageState.scope}, not ${repoId}`,
+          },
+        ]
+
   return (
+    <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
 
       {/* The breadth question first (owner ruling 2026-08-19): what KINDS of API
@@ -262,7 +313,7 @@ export function RepositoryServicesPage() {
         {/* A claim, not an argument, so it stays visible -- caught by
             `repository-services-page.test.tsx` when the sweep moved it into the hover. What a
             screen does not show is exactly the kind of absence a non-hovering reader must be able
-            to see; the *why* is in the ÃƒÂ¢Ã¢â‚¬Å“Ã‹Å“. */}
+            to see; the *why* is in the ⓘ. */}
         <span className="text-meta text-ink-muted">findings are on Findings</span>
         <InfoHint label="About the services list">
           A <em>vendor</em> is the provider Sync watches; a <em>service</em> is one of the APIs it
@@ -285,15 +336,15 @@ export function RepositoryServicesPage() {
           caption="What the index bound in this codebase, per API product. Colour is the vendor that sells it, which is the one thing the bar lengths do not carry."
           rows={grouped
             .map((row) => ({
-              key: `${row.vendor_id} Ãƒâ€šÃ‚Â· ${row.service_id ?? ""}`,
+              key: `${row.vendor_id} · ${row.service_id ?? ""}`,
               value: row.call_sites,
             }))
             .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))}
           unit="call sites"
-          colourKey={(key) => key.split(" Ãƒâ€šÃ‚Â· ")[0]}
+          colourKey={(key) => key.split(" · ")[0]}
           detail={(key) => {
             const row = grouped.find(
-              (candidate) => `${candidate.vendor_id} Ãƒâ€šÃ‚Â· ${candidate.service_id ?? ""}` === key,
+              (candidate) => `${candidate.vendor_id} · ${candidate.service_id ?? ""}` === key,
             )
             if (row === undefined) return ""
             return `${row.operations} op${row.operations === 1 ? "" : "s"}`
@@ -366,5 +417,6 @@ export function RepositoryServicesPage() {
       )}
 
     </section>
+    </ScreenFrame>
   )
 }

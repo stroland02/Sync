@@ -35,12 +35,23 @@
  * pointer moved with it and now names the codebase list in Settings. Re-placing a referent is
  * permitted where shortening the sentence is not — and leaving it pointing at a list this screen no
  * longer holds would be a true sentence with a dead pointer, which is the quiet half of the defect.
+ * The same permission is what moves all three of them onto the status band as `note` segments,
+ * verbatim: re-placed, not shortened.
  */
 
 import { Navigate, useLocation } from "react-router"
 
-import { useOverview, useRepositories, useRepositoryCoverage } from "@/api/queries"
+import { DEFAULT_LIMIT } from "@/api/client"
+import {
+  useCorpus,
+  useDetectors,
+  useOverview,
+  useRepositories,
+  useRepositoryCoverage,
+  useRuns,
+} from "@/api/queries"
 import { FactTile } from "@/components/fact-tile"
+import { describeBoundedTotal } from "@/features/fleet/cardinality"
 import { CodebaseFactsBand, resolveCodebaseScope } from "@/features/fleet/codebase-facts"
 import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
 import { TotalsBar } from "@/features/fleet/totals-bar"
@@ -51,7 +62,10 @@ import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { scopeFromLocation } from "@/layouts/scope-switchers"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { overviewHref } from "@/lib/hrefs"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 // The screen's stated question, which changed when the codebase listing left it. It described
 // "all code repositories monitored by Sync" while this screen answered that; it now answers what
@@ -125,6 +139,21 @@ function OverviewGraphRegion() {
   )
 }
 
+/** Which absence a figure is in, beside the glyph — a read still in flight is not a failed one. */
+function absentScope(failed: boolean): string {
+  return failed ? "did not answer" : "still asking"
+}
+
+/**
+ * What every figure says when the index holds no codebase at all.
+ *
+ * Not a counted zero. Nothing has been read, so no finding, run, detector or repair attempt could
+ * have been produced — five noughts here would be a clean bill of health for code nobody has
+ * opened, which is what `reports/2026-08-17-gate-3-empty-state.md` measured on an empty graph and
+ * what `fleet-facts.tsx` already refuses in the open-findings note.
+ */
+const NOTHING_INDEXED = "no codebase indexed, so nothing has been searched"
+
 export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
   // One Overview, not two (owner, 2026-08-18): with exactly one codebase in the graph this
   // screen and the codebase screen were both answering as "Overview" from two addresses, and
@@ -137,7 +166,114 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
     return <Navigate replace to={overviewHref(repoIds[0])} />
   }
 
+  return <FleetScreen question={question} />
+}
+
+/**
+ * The screen itself, split from the redirect guard so the band's five reads are unconditional
+ * hooks — the sole-codebase install must not issue them on its way to somewhere else.
+ */
+function FleetScreen({ question }: { question: string }) {
+  // The five reads `FleetFacts` issues below, at the same keys and the same runs offset, so the
+  // band states the figures already on screen rather than opening five more requests for them.
+  const [offset] = useOffsetParam("runs_offset")
+  const repositories = useRepositories()
+  const overview = useOverview()
+  const runs = useRuns({ limit: DEFAULT_LIMIT, offset })
+  const detectors = useDetectors()
+  const corpus = useCorpus()
+
+  const nothingIndexed = repositories.isSuccess && repositories.data.repo_ids.length === 0
+
+  /**
+   * One count, gated on both reads it rests on rather than on its own.
+   *
+   * Every figure here reads two answers: the count, and whether the index holds a codebase at
+   * all — because that is what decides whether the count is a measurement or an absence. Gating
+   * on the count alone would state a nought against an index nobody has confirmed exists.
+   *
+   * `text` is already `null` for an unanswered read and `"0"` for a counted one, and the two never
+   * merge: a repository that was searched and yielded nothing says so.
+   */
+  function figure(
+    label: string,
+    text: string | null,
+    failed: boolean,
+    scope: string,
+  ): StatusSegment {
+    // `Repositories indexed` is exempt: its read succeeded and its answer *is* zero, so the
+    // absence marker here would render a measurement that happened as one that did not --
+    // the same collapse this band exists to refuse, run backwards.
+    if (nothingIndexed && label !== "Repositories indexed") {
+      return { kind: "figure", label, value: null, scope: NOTHING_INDEXED }
+    }
+    if (!repositories.isSuccess || text === null) {
+      return {
+        kind: "figure",
+        label,
+        value: null,
+        scope: absentScope(repositories.isError || failed),
+      }
+    }
+    return { kind: "figure", label, value: text, scope }
+  }
+
+  const status: StatusSegment[] = [
+    figure(
+      "Open findings",
+      overview.isSuccess
+        ? describeBoundedTotal(
+            overview.data.total_findings,
+            overview.data.total_findings_bound_reached,
+          )
+        : null,
+      overview.isError,
+      // The `+` glyph is never the only channel (`cardinality.tsx`), so past the bound the scope
+      // says in words that the system stopped counting and the figure is a floor.
+      overview.isSuccess && overview.data.total_findings_bound_reached
+        ? `at least this many — counting stopped at ${overview.data.total_findings_bound.toLocaleString()}`
+        : "across every vendor, every repository",
+    ),
+    figure(
+      "Runs",
+      runs.isSuccess ? runs.data.total.toLocaleString() : null,
+      runs.isError,
+      "one per checkpoint thread, not one per finding",
+    ),
+    figure(
+      "Repositories indexed",
+      repositories.isSuccess ? repositories.data.repo_ids.length.toLocaleString() : null,
+      repositories.isError,
+      "holding at least one call site",
+    ),
+    figure(
+      "Repair attempts",
+      corpus.isSuccess ? corpus.data.attempts.toLocaleString() : null,
+      corpus.isError,
+      "one row per attempt, not one per finding",
+    ),
+    figure(
+      "Detectors with open findings",
+      detectors.isSuccess ? detectors.data.detectors.length.toLocaleString() : null,
+      detectors.isError,
+      "fleet-wide, and open findings are the only findings the graph reads",
+    ),
+    {
+      kind: "note",
+      text: "A checkpoint age is staleness, not liveness — it says how old the evidence is not whether the run is still going. A change unit collapses findings sharing a vendor change against one repository set; the call-site grain is intact underneath and reachable from every row.",
+    },
+    {
+      kind: "note",
+      text: "A repository the index never indexed has no row — absence is not zero: a repository configured but never indexed has no row in the codebase list in Settings, and the same absence as a repository nobody ever configured.",
+    },
+    {
+      kind: "note",
+      text: "A finding retried three times writes three attempts here and counts once toward the corpus grain.",
+    },
+  ]
+
   return (
+    <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
       {/* "Overview", once. This destination was titled "Repositories", labelled "Codebases" in the
           route registry and sits at the "Fleet" level — three names for one screen, which is its own
@@ -208,19 +344,7 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
           <ScreenLimitsCard />
         </div>
       </div>
-
-      {/* Footnotes holding honesty requirements */}
-      <div className="flex flex-col gap-row text-meta text-muted-foreground max-w-5xl leading-relaxed pt-section border-t border-border">
-        <p>
-          A checkpoint age is staleness, not liveness — it says how old the evidence is not whether the run is still going. A change unit collapses findings sharing a vendor change against one repository set; the call-site grain is intact underneath and reachable from every row.
-        </p>
-        <p>
-          A repository the index never indexed has no row — absence is not zero: a repository configured but never indexed has no row in the codebase list in Settings, and the same absence as a repository nobody ever configured.
-        </p>
-        <p>
-          A finding retried three times writes three attempts here and counts once toward the corpus grain.
-        </p>
-      </div>
     </section>
+    </ScreenFrame>
   )
 }

@@ -64,7 +64,8 @@ interface BundleStage {
   title: string
 }
 
-const BUNDLE_STAGES: BundleStage[] = [
+/** Exported so the status band counts this set rather than restating its size. */
+export const BUNDLE_STAGES: BundleStage[] = [
   {
     name: "static_verify",
     title: "What the compiler said",

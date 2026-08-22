@@ -44,16 +44,23 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 function CountValue({
   pending,
   failed,
+  absent,
   text,
   width,
 }: {
   pending: boolean
   failed: boolean
+  /** Why this figure is not a number, when the read succeeded and the answer is still not one. */
+  absent?: string | null
   text: string
   width: string
 }) {
   if (pending) return <Skeleton width={width} />
   if (failed) return <Absent>the API did not answer</Absent>
+  // The docstring below has argued since 2026-08-17 that a zero over an empty index is absence
+  // rather than a measurement. The note said so while the value still printed `0`, and the status
+  // band saying the opposite six inches down is what made the disagreement visible.
+  if (absent) return <Absent>{absent}</Absent>
   return <>{text}</>
 }
 
@@ -88,6 +95,13 @@ function openFindingsNote(
 }
 
 export function FleetFacts() {
+  // `Repositories indexed` is deliberately not one of these: its read succeeded and its answer is
+  // zero, so it is the one figure here that a number describes correctly.
+  const nothingSearched = (repositories: { isSuccess: boolean; data?: { repo_ids: string[] } }) =>
+    repositories.isSuccess && repositories.data!.repo_ids.length === 0
+      ? "no codebase indexed, so nothing has been searched"
+      : null
+
   // The same offset the runs panel reads, so both share one query rather than issuing two.
   const [offset] = useOffsetParam("runs_offset")
   const overview = useOverview()
@@ -103,6 +117,7 @@ export function FleetFacts() {
         figure
         value={
           <CountValue
+            absent={nothingSearched(repositories)}
             pending={overview.isPending}
             failed={overview.isError}
             width="w-20"
@@ -123,6 +138,7 @@ export function FleetFacts() {
         figure
         value={
           <CountValue
+            absent={nothingSearched(repositories)}
             pending={runs.isPending}
             failed={runs.isError}
             width="w-20"
@@ -149,6 +165,7 @@ export function FleetFacts() {
         figure
         value={
           <CountValue
+            absent={nothingSearched(repositories)}
             pending={corpus.isPending}
             failed={corpus.isError}
             width="w-16"

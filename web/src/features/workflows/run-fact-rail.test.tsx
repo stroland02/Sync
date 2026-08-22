@@ -111,14 +111,28 @@ describe("the run's fact rail", () => {
 })
 
 describe("the rail's actions", () => {
-  it("renders all three, and every one of them is disabled", () => {
+  it("names all three, and draws a control for none of them", () => {
     renderRail(state())
 
+    // Owner ruling, 2026-08-21: these were three disabled buttons naming routes that do not exist.
+    // A control drawn for a capability the product does not have reads as a feature merely switched
+    // off, so the three are named in prose along with what each would need.
     const actions = [/copy the agent prompt/i, /give feedback/i, /restart the run/i]
     expect(actions.length).toBeGreaterThan(0)
+    const text = document.body.textContent ?? ""
     for (const name of actions) {
-      expect(screen.getByRole("button", { name })).toHaveProperty("disabled", true)
+      expect(name.test(text)).toBe(true)
     }
+    expect(screen.queryAllByRole("button")).toHaveLength(0)
+  })
+
+  it("says what each of the three would need, so the gap is a work item", () => {
+    renderRail(state())
+
+    const text = document.body.textContent ?? ""
+    expect(text).toContain("which no checkpoint channel records")
+    expect(text).toContain("a write route that accepts a reviewer's judgement of a run")
+    expect(text).toContain("a route that starts remediation, which would mutate the graph")
   })
 
   it("states why they cannot act rather than hiding them", () => {

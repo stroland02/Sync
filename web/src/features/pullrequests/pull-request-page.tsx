@@ -43,6 +43,12 @@
  * the absence — in that module's own outcome-keyed words — when a run pushed nothing or opened
  * nothing. The rail keeps both rows: the title names the subject, and the rows say which nothing
  * each part is, which is a longer answer than a title can carry.
+ *
+ * ## On `ScreenFrame`
+ *
+ * "Open the pull request" left the rail for the controls band: it is the one destination this
+ * screen offers and the band is where a screen's destinations live, so a reader no longer has to
+ * reach the bottom of a fact list to find the forge. Its qualifying sentence travels with it.
  */
 
 import type { ReactNode } from "react"
@@ -50,8 +56,8 @@ import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { workspacePath } from "@/features/findings/workspace-path"
-import { WORKFLOW_POLL_MS, useWorkflow } from "@/api/queries"
-import type { WorkflowState } from "@/api/types"
+import { WORKFLOW_POLL_MS, usePatch, useWorkflow } from "@/api/queries"
+import type { WorkflowNode, WorkflowState } from "@/api/types"
 import { type Fact, FactList } from "@/components/fact-list"
 import { Pending } from "@/features/findings/pending"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
@@ -63,10 +69,12 @@ import {
   noBranchPhrase,
   noPullRequestPhrase,
 } from "@/features/pullrequests/bundle-facts"
-import { EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
-import { PatchPanel } from "@/features/pullrequests/patch-panel"
+import { BUNDLE_STAGES, EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
+import { PatchPanel, VISIBLE_DIFF_LINES } from "@/features/pullrequests/patch-panel"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { DetailGrid } from "@/layouts/detail-grid"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 
@@ -75,9 +83,13 @@ export interface PullRequestPageProps {
 }
 
 export function PullRequestPage() {
-  // The identifier comes out of the URL, so it is checked before a request is made for it.
+  // Both identifiers come out of the URL, so both are checked before a request is made for them.
+  // `repoId` was carried through unchecked and `workspacePath(undefined)` is `/repositories/`, so
+  // this screen's three workspace links resolved to an address that renders "No screen at this
+  // address" — the exact failure `workspace-path.ts` was written for, on a route whose registry
+  // entry declares `params: ["repoId", "findingId"]`.
   const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
-  if (findingId === undefined) return <UnknownRoute />
+  if (repoId === undefined || findingId === undefined) return <UnknownRoute />
   return <PullRequest repoId={repoId} findingId={findingId} />
 }
 
@@ -117,7 +129,7 @@ function railFacts(
   data: WorkflowState | undefined,
   facts: BundleFacts,
   failure: ReactNode | null,
-  repoId: string | undefined,
+  repoId: string,
   findingId: string,
 ): Fact[] {
   function fact(render: (state: WorkflowState) => ReactNode): ReactNode {
@@ -201,16 +213,41 @@ function railFacts(
   ]
 }
 
+/**
+ * How many of the five this bundle names the run has actually been through.
+ *
+ * `ran` and `due_again` are the two standings that mean the graph executed the node at least once;
+ * `due` does not — `node-standing.ts` words it as a visit the graph still owes. A node the payload
+ * carries no entry for is not reached either, which is why this counts the stages rather than the
+ * nodes.
+ */
+function nodesReached(nodes: WorkflowNode[]): number {
+  return BUNDLE_STAGES.filter((stage) => {
+    const standing = nodes.find((node) => node.name === stage.name)?.standing
+    return standing === "ran" || standing === "due_again"
+  }).length
+}
+
+/** The window `PatchPanel` draws, counted for the band rather than restated by it. */
+function diffWindow(diff: string): string {
+  const total = diff.split("\n").length
+  return `${Math.min(total, VISIBLE_DIFF_LINES).toLocaleString()} of ${total.toLocaleString()}`
+}
+
 function PullRequest({
   repoId,
   findingId,
 }: {
-  repoId: string | undefined
+  repoId: string
   findingId: string
 }) {
   const query = useWorkflow(findingId)
   const data = query.data
   const facts = bundleFacts(data?.nodes ?? [])
+  // The patch panel's own key, so the diff figure reads the answer already on screen rather than
+  // opening a second request for it — and so the figure is gated on the query it counts rather
+  // than on the run's.
+  const patch = usePatch(findingId)
 
   const failure = query.isError ? (
     query.error instanceof NotFoundError ? (
@@ -220,8 +257,90 @@ function PullRequest({
     )
   ) : null
 
+  // Three absences and they are three claims: nothing has answered, the answer failed, and the run
+  // produced no patch at all. The last one is a measurement that happened and found nothing to
+  // window, so it never wears a scope that says a count was taken.
+  const diffScope =
+    patch.data === undefined
+      ? patch.isError
+        ? "did not answer"
+        : "still asking"
+      : patch.data.diff === null
+        ? "no diff on this run — the patch panel says which nothing that is"
+        : "of the patch this run produced; the rest are on the branch named above"
+
+  const status: StatusSegment[] =
+    data === undefined
+      ? [
+          {
+            kind: "none",
+            why: query.isError
+              ? query.error instanceof NotFoundError
+                ? "no run for this finding, so there is nothing here to count"
+                : "the run did not answer"
+              : "asking the checkpointer for this run",
+          },
+        ]
+      : [
+          {
+            kind: "figure",
+            label: "Nodes reached",
+            value: `${nodesReached(data.nodes)} of ${BUNDLE_STAGES.length}`,
+            scope:
+              "the five this bundle names — reached means the graph ran the node, not that it " +
+              "produced evidence",
+          },
+          {
+            kind: "figure",
+            label: "Diff lines shown",
+            value:
+              patch.data === undefined || patch.data.diff === null
+                ? null
+                : diffWindow(patch.data.diff),
+            scope: diffScope,
+          },
+          {
+            kind: "figure",
+            label: "Generation",
+            value: `${data.generation_count.toLocaleString()} of ${data.generation_count.toLocaleString()}`,
+            // The pointer is gated the way the rail's own caveat is: at one generation there is
+            // no earlier one, and naming a list of them sends a reader after something absent.
+            scope:
+              data.generation_count > 1
+                ? "this page is the newest generation the checkpointer holds for this finding; " +
+                  "any earlier one is listed on the codebase overview"
+                : "the only generation the checkpointer holds for this finding",
+          },
+          {
+            kind: "note",
+            text:
+              "Read from the LangGraph checkpointer rather than the graph — two databases — so " +
+              "this route carries no indexed_at and no binding rung: nothing on this screen is " +
+              "dated by an index run or attributed to an evidence rung.",
+          },
+        ]
+
+  // Omitted rather than emptied when the run opened nothing: the frame reserves no height for a
+  // band it is not given.
+  const controls =
+    facts.prUrl !== null ? (
+      <p className="text-body">
+        <a
+          href={facts.prUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline underline-offset-2"
+        >
+          Open the pull request
+        </a>{" "}
+        <span className="text-muted-foreground">
+          — leaves the console for the forge it was opened on.
+        </span>
+      </p>
+    ) : undefined
 
   return (
+    <ScreenFrame controls={controls} status={status}>
     <DetailGrid
       rail={
         <div className="flex min-w-0 flex-col gap-section">
@@ -238,22 +357,6 @@ function PullRequest({
             , which shows all eight nodes; this page shows the five that carry the evidence a pull
             request rests on.
           </p>
-
-          {facts.prUrl !== null && (
-            <p className="text-body">
-              <a
-                href={facts.prUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="underline underline-offset-2"
-              >
-                Open the pull request
-              </a>{" "}
-              <span className="text-muted-foreground">
-                — leaves the console for the forge it was opened on.
-              </span>
-            </p>
-          )}
         </div>
       }
     >
@@ -301,5 +404,6 @@ function PullRequest({
         )}
       </div>
     </DetailGrid>
+    </ScreenFrame>
   )
 }

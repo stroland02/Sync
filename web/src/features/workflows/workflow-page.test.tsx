@@ -144,6 +144,61 @@ describe("two tabs over one run", () => {
   })
 })
 
+describe("the screen's bands", () => {
+  function band(container: HTMLElement, name: "controls" | "status"): HTMLElement | null {
+    return container.querySelector(`[data-band="${name}"]`)
+  }
+
+  it("puts the tab toggle in the controls band, where the screen's narrowing lives", () => {
+    mockWorkflow()
+
+    const { container } = renderScreen("finding-123")
+
+    const controls = band(container, "controls")
+    expect(controls).not.toBeNull()
+    expect(within(controls as HTMLElement).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(
+      ["Activity", "Findings"],
+    )
+  })
+
+  it("counts the graph's nodes and the timeline's entries, and says what the timeline omits", () => {
+    mockWorkflow()
+
+    const { container } = renderScreen("finding-123")
+
+    // One node in `mockState` stamped a checkpoint and the run has no outcome, so the timeline
+    // holds one entry against eight nodes. The seven without a stamp are a stated absence rather
+    // than a shorter list a reader is left to subtract.
+    const text = band(container, "status")?.textContent ?? ""
+    expect(text).toMatch(/Nodes\s*8\b/)
+    expect(text).toMatch(/Timeline entries\s*1\b/)
+    expect(text).toContain(
+      "7 nodes wrote no checkpoint timestamp and have no entry — absence, not zero",
+    )
+  })
+
+  it("says which nothing it is while the run has not answered, rather than a blank strip", () => {
+    vi.mocked(queries.useWorkflow).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      error: null,
+      isSuccess: false,
+      dataUpdatedAt: 0,
+      isFetching: true,
+      refetch: vi.fn(),
+    } as any)
+
+    const { container } = renderScreen("finding-123")
+
+    expect(band(container, "status")?.textContent ?? "").toContain(
+      "asking the checkpointer for this run",
+    )
+    // Nothing to narrow before there is a run, so the band is omitted rather than reserved empty.
+    expect(band(container, "controls")).toBeNull()
+  })
+})
+
 describe("the sentences this screen may not lose", () => {
   it("keeps the Node-by-node intro describing what a standing does and does not say", () => {
     mockWorkflow()

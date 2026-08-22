@@ -37,6 +37,12 @@
  * fact and gates the pull-request link, which would otherwise be a claim the console cannot support.
  * Two consequences: the page polls while a run is in flight, exactly as the Solution Workflow level
  * does, and the level below this one now opens against a warm cache because both read one query key.
+ *
+ * **The status band states that nothing here pages, and counts the one countable set.** A detail
+ * has one subject, so there is no record window to describe; the alternative — a records segment
+ * over `known_changes` — would put paging controls under a shallow list the payload delivers whole.
+ * The figure beside it is that list's length, and it is null only when the read has not answered:
+ * a finding no vendor change names is a counted zero and says `0`.
  */
 
 import type { ReactNode } from "react"
@@ -71,6 +77,8 @@ import { workspacePath } from "@/features/findings/workspace-path"
 import { orAbsent } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { DetailGrid } from "@/layouts/detail-grid"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 /**
@@ -362,7 +370,31 @@ function FindingDetailPage({
     )
   ) : null
 
+  // Gated on `query` alone because `query` alone is what it reads: the shallow list is on the
+  // finding payload, so the run and the dismissal being in flight cannot make this number wrong.
+  const knownChanges = query.isSuccess ? query.data.known_changes.length : null
+  // Which absence, in words. Null here means nothing answered, never a count that came back zero,
+  // so the scope may not assert the measurement happened until it has.
+  const knownChangesScope = query.isSuccess
+    ? "vendor changes naming this call site, shallow"
+    : query.isError
+      ? query.error instanceof NotFoundError
+        ? "this finding is not open"
+        : "the API did not answer"
+      : "still asking"
+
+  const status: StatusSegment[] = [
+    { kind: "none", why: "one subject — nothing here pages" },
+    {
+      kind: "figure",
+      label: "Known changes",
+      value: knownChanges === null ? null : knownChanges.toLocaleString(),
+      scope: knownChangesScope,
+    },
+  ]
+
   return (
+    <ScreenFrame status={status}>
     <DetailGrid
       /* Content left, rail right, which is what `screens/06-finding.png` draws. This screen
          shipped inverted on `M7-W178`'s argument that a detail has one subject so the facts
@@ -522,5 +554,6 @@ function FindingDetailPage({
         )}
       </div>
     </DetailGrid>
+    </ScreenFrame>
   )
 }

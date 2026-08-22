@@ -1,12 +1,12 @@
 /**
  * The reply box, and the fact that it cannot send.
  *
- * This is the point of the Solution Workflow screen and it is also the one control on it that has
+ * This is the point of the Solution Workflow screen and it is also the one turn on it that has
  * no route behind it. Sync's API is read-only — `tests/test_api_routes.py::
- * test_no_route_reaches_past_the_read_surface` holds that behaviourally — so the honest build is a
- * control that renders, refuses, and names the route it is waiting for. These guards hold the
- * refusal: a later change that quietly enables the button, or drops the sentence that explains why
- * it is off, goes red here rather than on somebody's screen.
+ * test_no_route_reaches_past_the_read_surface` holds that behaviourally — so the honest build states
+ * the refusal in prose and names the route it is waiting for. These guards hold the refusal: a later
+ * change that draws a submit control for a route that does not exist, or drops the sentence
+ * explaining why nothing here can be sent, goes red here rather than on somebody's screen.
  */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
@@ -28,22 +28,22 @@ describe("the reply box", () => {
     )
   })
 
-  it("keeps its submit control disabled, because no route accepts it", () => {
+  it("draws no submit control at all, because no route accepts one", () => {
     render(<ReplyBox waitingOn="await_ci" />)
 
-    const submit = screen.getByRole("button", { name: /send reply/i })
-
-    expect(submit).toHaveProperty("disabled", true)
+    // Owner ruling, 2026-08-21: a disabled button naming a route that does not exist draws the
+    // shape of a capability the product does not have, and reads as a feature merely switched off.
+    expect(screen.queryAllByRole("button")).toHaveLength(0)
   })
 
-  it("stays disabled after the field is filled in, which is the whole refusal", () => {
+  it("draws none after the field is filled in either, which is the whole refusal", () => {
     render(<ReplyBox waitingOn="await_ci" />)
 
     fireEvent.change(screen.getByLabelText(/reply to this run/i), {
       target: { value: "anything at all" },
     })
 
-    expect(screen.getByRole("button", { name: /send reply/i })).toHaveProperty("disabled", true)
+    expect(screen.queryAllByRole("button")).toHaveLength(0)
   })
 
   it("names the route it needs, and says that route does not exist", () => {
@@ -54,11 +54,11 @@ describe("the reply box", () => {
     expect(screen.getByText(/nothing typed here is stored, queued or sent/i)).not.toBeNull()
   })
 
-  it("points the disabled control at that explanation, so the refusal is not visual only", () => {
+  it("points the field at that explanation, so the refusal is not visual only", () => {
     render(<ReplyBox waitingOn="await_ci" />)
 
-    const submit = screen.getByRole("button", { name: /send reply/i })
-    const describedBy = submit.getAttribute("aria-describedby")
+    const field = screen.getByLabelText(/reply to this run/i)
+    const describedBy = field.getAttribute("aria-describedby")
 
     expect(describedBy).not.toBeNull()
     const explanation = document.getElementById(describedBy as string)

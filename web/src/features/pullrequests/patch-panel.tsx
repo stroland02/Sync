@@ -29,7 +29,7 @@ import { Pending } from "@/features/findings/pending"
 import { verificationChain } from "@/features/pullrequests/verification-chain"
 
 /** How much of a diff is shown before the reader is told there is more. */
-const VISIBLE_DIFF_LINES = 60
+export const VISIBLE_DIFF_LINES = 60
 
 /**
  * One diff line, keeping its marker.

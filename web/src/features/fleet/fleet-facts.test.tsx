@@ -116,11 +116,14 @@ describe("a tile never renders an empty value", () => {
   })
 })
 
+// These fixtures name an indexed repository because every assertion below is about a FINDINGS
+// figure, and a findings count over an empty index is data that cannot occur -- the tiles render
+// absence there, on the argument this file's own docstring has carried since 2026-08-17.
 describe("a bounded count is never rendered as if it were exact", () => {
   it("carries the + glyph and says in words what it means", () => {
     mockState.overview = settled({ ...BOUNDED, vendors: [] })
     mockState.runs = settled({ total: 0, items: [], next_offset: null })
-    mockState.repositories = settled({ repo_ids: [] })
+    mockState.repositories = settled({ repo_ids: ["org/repo"] })
     mockState.detectors = settled({ detectors: [] })
     mockState.corpus = settled({ attempts: 0 })
 
@@ -135,7 +138,7 @@ describe("a bounded count is never rendered as if it were exact", () => {
   it("shows the plain number when the count did not stop early", () => {
     mockState.overview = settled({ ...OVERVIEW, vendors: [] })
     mockState.runs = settled({ total: 0, items: [], next_offset: null })
-    mockState.repositories = settled({ repo_ids: [] })
+    mockState.repositories = settled({ repo_ids: ["org/repo"] })
     mockState.detectors = settled({ detectors: [] })
     mockState.corpus = settled({ attempts: 0 })
 
@@ -151,7 +154,7 @@ describe("a bounded count is never rendered as if it were exact", () => {
     // `states.tsx` and `fact-tile.tsx` both exist to prevent.
     mockState.overview = settled({ total_findings: 0, total_findings_bound_reached: false, total_findings_bound: 1000, vendors: [] })
     mockState.runs = pending()
-    mockState.repositories = settled({ repo_ids: [] })
+    mockState.repositories = settled({ repo_ids: ["org/repo"] })
     mockState.detectors = settled({ detectors: [] })
     mockState.corpus = settled({ attempts: 0 })
 

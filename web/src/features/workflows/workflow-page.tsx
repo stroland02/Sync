@@ -59,6 +59,15 @@
  * **The reply box cannot send, and says so.** `M10` built resume-on-review-comment; the route that
  * would carry a reviewer's turn into a run does not exist, because the API is read-only.
  * `reply-box.tsx` carries the refusal and names the missing route.
+ *
+ * ## On `ScreenFrame`, by CI-W557
+ *
+ * The tab toggle is the screen's one narrowing control, so it moved into the controls band and now
+ * spans both columns rather than sitting inside the right one. The status band counts the two things
+ * this route can count — the graph's nodes and the timeline entries assembled from them — and both
+ * are gated on the one query that answers for either, so neither can print a figure derived from a
+ * payload that has not arrived. There is no records segment because nothing here pages: the
+ * checkpointer answers with one run whole.
  */
 
 import { FetchedAt } from "@/components/fetched-at"
@@ -66,10 +75,12 @@ import { Link, useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
+import type { WorkflowState } from "@/api/types"
 import { MetricPanel } from "@/components/metric-panel"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
+import { activityEntries, omittedCount } from "@/features/workflows/activity"
 import { ActivityTimeline } from "@/features/workflows/activity-timeline"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { ReplyBox } from "@/features/workflows/reply-box"
@@ -79,6 +90,8 @@ import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcom
 import { SettledOutput } from "@/features/workflows/settled-output"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
 import { DetailGrid } from "@/layouts/detail-grid"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { formatTimestamp } from "@/lib/format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/tabs"
@@ -207,6 +220,71 @@ function Arrival({ repoId, findingId }: { repoId: string; findingId: string }) {
   )
 }
 
+/**
+ * What the band says about the poll, which is a fact about the console rather than the run.
+ *
+ * A refetch that failed does not stop the poll on a live run and does not start one on a finished
+ * run, so the two axes are stated together rather than collapsed into "stale".
+ */
+function pollNote(terminal: boolean, refreshFailed: boolean): string | null {
+  if (refreshFailed) {
+    return terminal
+      ? "Could not refresh, and the run reached a terminal outcome, so nothing is polling in the background — these are the last figures the console read."
+      : `Could not refresh — these are the last figures the console read, and polling continues every ${WORKFLOW_POLL_MS / 1000} seconds.`
+  }
+  // Byte-identical to `FetchedAt`'s `idleReason`, which renders whenever polling is off. One of
+  // the two, not both: a fact written twice will disagree with itself.
+  return terminal ? null : `Re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`
+}
+
+/**
+ * The two things this route can count, both read off the one payload that answers for either.
+ *
+ * A run whose node list is genuinely empty counts `0`; a run nothing has answered for is absent and
+ * the caller renders `none` instead. The same holds for the timeline, whose entry count is the
+ * nodes that stamped a checkpoint plus the outcome — so it is routinely lower than the node count,
+ * and the scope says by how many rather than leaving a reader to subtract.
+ */
+function runStatus(
+  state: WorkflowState,
+  terminal: boolean,
+  refreshFailed: boolean,
+): StatusSegment[] {
+  const omitted = omittedCount(state)
+
+  return [
+    {
+      kind: "figure",
+      label: "Nodes",
+      value: state.nodes.length.toLocaleString(),
+      scope: "the remediation graph's own list, whether or not the run reached each one",
+    },
+    {
+      kind: "figure",
+      label: "Timeline entries",
+      value: activityEntries(state).length.toLocaleString(),
+      // `activityEntries` is the stamped nodes PLUS one closing entry once the run has an
+      // outcome, so nodes minus omitted does not reconcile on any terminal run -- which is most
+      // of them. A scope that explains the gap wrongly is worse than one that does not explain it.
+      scope: [
+        omitted === 0
+          ? "every node wrote a checkpoint timestamp"
+          : omitted === 1
+            ? "one node wrote no checkpoint timestamp and has no entry — absence, not zero"
+            : `${omitted} nodes wrote no checkpoint timestamp and have no entry — absence, not zero`,
+        terminal ? "and the run's outcome adds one entry of its own" : null,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    },
+    // `FetchedAt`'s `idleReason` already states the terminal case in the content column, so the
+    // band carries only what that does not: the poll interval and a failed refresh.
+    ...(pollNote(terminal, refreshFailed) === null
+      ? []
+      : [{ kind: "note" as const, text: pollNote(terminal, refreshFailed)! }]),
+  ]
+}
+
 function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
@@ -222,98 +300,126 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
     )
   ) : null
 
+  // Built for every state the query can be in, not only the answered one: a band that appears on
+  // success alone renders "nothing has been asked yet" and "asked, and this run holds nothing" as
+  // the same blank strip.
+  const status: StatusSegment[] =
+    data === undefined
+      ? [
+          {
+            kind: "none",
+            why: query.isError
+              ? query.error instanceof NotFoundError
+                ? "the checkpointer holds no run for this finding"
+                : "the run did not answer"
+              : "asking the checkpointer for this run",
+          },
+        ]
+      : runStatus(data, terminal, query.isError)
 
   return (
-    <DetailGrid
-      railSide="narrow"
-      rail={<RunFactRail repoId={repoId} findingId={findingId} data={data} failure={failure} />}
-    >
-      <div className="flex min-w-0 flex-col gap-8">
-        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+    /* The toggle is the screen's one narrowing control, so it publishes into the controls band --
+       which puts the tab list outside the pane it switches, and therefore outside `Tabs` in the
+       DOM. Radix carries selection through context rather than nesting, so the root wraps the
+       frame and both bands sit inside it. */
+    <Tabs defaultValue="activity" className="flex min-w-0 flex-col gap-8">
+      <ScreenFrame
+        status={status}
+        controls={
+          data === undefined ? undefined : (
+            <TabsList className="gap-section">
+              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="findings">Findings</TabsTrigger>
+            </TabsList>
+          )
+        }
+      >
+        <DetailGrid
+          railSide="narrow"
+          rail={<RunFactRail repoId={repoId} findingId={findingId} data={data} failure={failure} />}
+        >
+          <div className="flex min-w-0 flex-col gap-8">
+            {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-        {data === undefined &&
-          query.isError &&
-          (query.error instanceof NotFoundError ? (
-            <div className="flex flex-col items-start gap-section">
-              <NotFoundState
-                headline="No remediation run for this finding."
-                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-                identifier={query.error.identifier}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={query.isFetching}
-                onClick={() => void query.refetch()}
-              >
-                {query.isFetching ? "Asking…" : "Check again"}
-              </Button>
-            </div>
-          ) : (
-            <ErrorState error={query.error} what={`the run for finding ${findingId}`} onRetry={() => void query.refetch()} />
-          ))}
-
-        {data !== undefined && (
-          <>
-            {query.isError ? (
-              <StaleBanner
-                fetchedAt={query.dataUpdatedAt}
-                live={!terminal}
-                isFetching={query.isFetching}
-                onRetry={() => void query.refetch()}
-              />
-            ) : (
-              /* The healthy counterpart to `StaleBanner`. That banner only appears once a refetch
-                 has failed, so until now a run being watched and a run whose screen had gone quiet
-                 for a terminal outcome looked identical — both just sat there. This says which. */
-              <FetchedAt
-                at={query.dataUpdatedAt}
-                polling={!terminal}
-                idleReason="This run has reached a terminal outcome, so nothing is being polled."
-              />
-            )}
-
-            <Tabs defaultValue="activity" className="flex min-w-0 flex-col gap-8">
-              <TabsList className="gap-section">
-                <TabsTrigger value="activity">Activity</TabsTrigger>
-                <TabsTrigger value="findings">Findings</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="activity" className="flex min-w-0 flex-col gap-8">
-                <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>
-                  <NodeSequence
-                    nodes={data.nodes}
-                    outcome={data.outcome}
-                    opening={<Arrival repoId={repoId} findingId={findingId} />}
-                    closing={
-                      <RunOutcome
-                        outcome={data.outcome}
-                        abandonReason={data.abandon_reason}
-                        reportReason={data.report_reason}
-                        below={BELOW}
-                        frame="entry"
-                      />
-                    }
+            {data === undefined &&
+              query.isError &&
+              (query.error instanceof NotFoundError ? (
+                <div className="flex flex-col items-start gap-section">
+                  <NotFoundState
+                    headline="No remediation run for this finding."
+                    detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+                    identifier={query.error.identifier}
                   />
-                </MetricPanel>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={query.isFetching}
+                    onClick={() => void query.refetch()}
+                  >
+                    {query.isFetching ? "Asking…" : "Check again"}
+                  </Button>
+                </div>
+              ) : (
+                <ErrorState error={query.error} what={`the run for finding ${findingId}`} onRetry={() => void query.refetch()} />
+              ))}
 
-                <ActivityTimeline state={data} />
+            {data !== undefined && (
+              <>
+                {query.isError ? (
+                  <StaleBanner
+                    fetchedAt={query.dataUpdatedAt}
+                    live={!terminal}
+                    isFetching={query.isFetching}
+                    onRetry={() => void query.refetch()}
+                  />
+                ) : (
+                  /* The healthy counterpart to `StaleBanner`. That banner only appears once a
+                     refetch has failed, so until now a run being watched and a run whose screen had
+                     gone quiet for a terminal outcome looked identical — both just sat there. This
+                     says which. */
+                  <FetchedAt
+                    at={query.dataUpdatedAt}
+                    polling={!terminal}
+                    idleReason="This run has reached a terminal outcome, so nothing is being polled."
+                  />
+                )}
 
-                <ReplyBox waitingOn={data === undefined ? null : runIdentity(data).waitingOn} />
-              </TabsContent>
+                <TabsContent value="activity" className="flex min-w-0 flex-col gap-8">
+                  <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>
+                    <NodeSequence
+                      nodes={data.nodes}
+                      outcome={data.outcome}
+                      opening={<Arrival repoId={repoId} findingId={findingId} />}
+                      closing={
+                        <RunOutcome
+                          outcome={data.outcome}
+                          abandonReason={data.abandon_reason}
+                          reportReason={data.report_reason}
+                          below={BELOW}
+                          frame="entry"
+                        />
+                      }
+                    />
+                  </MetricPanel>
 
-              <TabsContent value="findings" className="flex min-w-0 flex-col gap-8">
-                <SettledOutput repoId={repoId} findingId={findingId} state={data} />
+                  <ActivityTimeline state={data} />
 
-                <SupersededGenerations
-                  generations={data.generations}
-                  currentThreadId={data.thread_id}
-                />
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </div>
-    </DetailGrid>
+                  <ReplyBox waitingOn={data === undefined ? null : runIdentity(data).waitingOn} />
+                </TabsContent>
+
+                <TabsContent value="findings" className="flex min-w-0 flex-col gap-8">
+                  <SettledOutput repoId={repoId} findingId={findingId} state={data} />
+
+                  <SupersededGenerations
+                    generations={data.generations}
+                    currentThreadId={data.thread_id}
+                  />
+                </TabsContent>
+              </>
+            )}
+          </div>
+        </DetailGrid>
+      </ScreenFrame>
+    </Tabs>
   )
 }

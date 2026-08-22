@@ -99,10 +99,12 @@ import {
 } from "@/features/bindings/binding-selection"
 import { joinOrAbsent } from "@/features/bindings/call-site-fields"
 import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
-import { ControlBar } from "@/layouts/control-bar"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { FooterBar } from "@/layouts/footer-bar"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { describeRecordWindow } from "@/lib/record-window"
 import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
@@ -374,8 +376,88 @@ function BindingSurfaceDetail({
     ...(pathPrefix === null ? [] : [{ label: "path", value: pathPrefix }]),
   ]
 
-  return (
+  /**
+   * The two call-site narrowings, handed to the frame's controls band without a `ControlBar`
+   * around them.
+   *
+   * That component is the same flex row with the same `gap-section` the band already applies, so
+   * nesting one inside the other spaced these two controls twice. `undefined` until the query
+   * answers, because the repository chips are built from the payload's own facet: a band rendered
+   * before it arrives would offer a narrowing over options nothing has counted.
+   */
+  const controls = query.isSuccess ? (
     <>
+      <FacetChips
+        legend="Repository"
+        options={query.data.repositories.map((repo) => ({
+          value: repo.repo_id,
+          count: repo.call_site_count,
+        }))}
+        selected={repoId}
+        onSelect={setRepoId}
+        allLabel="Every repository"
+        countScope="Counted over every call site the index holds on this operation, not over the table below — these are the choices available, so they stay the same whichever one is selected and whatever the path filter is set to."
+      />
+      <PrefixFilter
+        legend="Call site path"
+        value={pathPrefix}
+        onSubmit={setPathPrefix}
+        placeholder="src/billing/"
+        note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
+      />
+    </>
+  ) : undefined
+
+  /**
+   * The band counts the call sites and nothing else, though two sets page on this screen.
+   *
+   * `StatusBand` renders one pager, and the call-site table is the set this screen exists to
+   * window — 2,500 rows against a handful of vendor changes. The changes keep their own footer
+   * under their own table, where the pager sits beside the rows it moves.
+   *
+   * Every branch of the one query is answered: a records segment counts nothing until the payload
+   * is here, so a pending or failed read says which silence it is rather than reporting zero.
+   */
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Call sites",
+          text: describeRecordWindow(
+            callSitesOffset,
+            query.data.call_sites.items.length,
+            { count: query.data.call_sites.total, boundReached: false },
+            "call site",
+            "call sites"
+          ),
+          paging: {
+            offset: callSitesOffset,
+            limit: DEFAULT_LIMIT,
+            shown: query.data.call_sites.items.length,
+            total: query.data.call_sites.total,
+            nextOffset: query.data.call_sites.next_offset,
+            busy: query.isFetching,
+            onOffsetChange: setCallSitesOffset,
+          },
+        },
+        {
+          kind: "note",
+          text:
+            "Either this operation has never had a call site here, or it had one that was " +
+            "later retracted — this table cannot tell the two apart.",
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? `the bindings for ${vendorId}/${operationId} did not answer`
+            : `asking for the bindings on ${vendorId}/${operationId}`,
+        },
+      ]
+
+  return (
+    <ScreenFrame controls={controls} status={status}>
       {/* The one place on this screen where a region sits beside another. `lg:` rather than `xl:`
           so both measured viewports get it, and `minmax(0,...)` on the facts column so a long
           repository id shrinks the column instead of widening the grid past the frame. */}
@@ -405,26 +487,6 @@ function BindingSurfaceDetail({
           {/* `aria-label` because this region's heading is in the grid above, beside the facts
               it scopes, rather than inside the section. */}
           <section aria-label="Call sites" className="flex flex-col gap-section">
-            <ControlBar>
-              <FacetChips
-                legend="Repository"
-                options={query.data.repositories.map((repo) => ({
-                  value: repo.repo_id,
-                  count: repo.call_site_count,
-                }))}
-                selected={repoId}
-                onSelect={setRepoId}
-                allLabel="Every repository"
-                countScope="Counted over every call site the index holds on this operation, not over the table below — these are the choices available, so they stay the same whichever one is selected and whatever the path filter is set to."
-              />
-              <PrefixFilter
-                legend="Call site path"
-                value={pathPrefix}
-                onSubmit={setPathPrefix}
-                placeholder="src/billing/"
-                note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
-              />
-            </ControlBar>
             <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
             <SharedDirectoryNote directory={query.data.call_sites_common_directory} />
             {query.data.call_sites.items.length === 0 ? (
@@ -546,21 +608,6 @@ function BindingSurfaceDetail({
               </div>
             )}
             <RungNote data={query.data} filtered={activeFilters.length > 0} />
-            <FooterBar
-              offset={callSitesOffset}
-              limit={DEFAULT_LIMIT}
-              shown={query.data.call_sites.items.length}
-              total={query.data.call_sites.total}
-              nextOffset={query.data.call_sites.next_offset}
-              busy={query.isFetching}
-              onOffsetChange={setCallSitesOffset}
-              left={
-                <p className="max-w-prose text-body text-muted-foreground">
-                  Either this operation has never had a call site here, or it had one that was
-                  later retracted — this table cannot tell the two apart.
-                </p>
-              }
-            />
           </section>
 
           <section className="flex flex-col gap-section">
@@ -636,12 +683,8 @@ function BindingSurfaceDetail({
           />
         </>
       )}
-    </>
+    </ScreenFrame>
   )
-}
-
-export interface BindingSurfacePageProps {
-  readonly question?: string
 }
 
 export function BindingSurfacePage() {
