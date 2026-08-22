@@ -1,7 +1,11 @@
 import { useState } from "react"
 
+import { useRepositories } from "@/api/queries"
 import { CodebasesPanel, type CodebaseFilter } from "@/features/fleet/codebases-panel"
 import { SettingCard } from "@/features/settings/setting-card"
+import { usePanelStatus } from "@/features/settings/panel-status"
+import type { StatusSegment } from "@/layouts/status-band"
+import { describeRecordWindow } from "@/lib/record-window"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/vendor/supabase/ui/badge"
 import { chipSurface } from "@/lib/selectable-surface"
@@ -33,6 +37,46 @@ export interface CodebasesSettingsPanelProps {
 
 export function CodebasesSettingsPanel({ repoId }: CodebasesSettingsPanelProps) {
   const [filter, setFilter] = useState<CodebaseFilter>("ALL")
+  // The list's own read, at the key `CodebasesPanel` uses, so the band counts the set already
+  // fetched rather than opening a second request for it.
+  const repositories = useRepositories()
+
+  const held = repositories.data?.repo_ids.length ?? 0
+  const narrowing = FILTERS.find(([value]) => value === filter)?.[1] ?? null
+  const segments: StatusSegment[] = repositories.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Codebases",
+          // Under a narrowing the window claim is withheld and the narrowing named instead:
+          // membership is decided by each codebase's own scoped finding count, which this panel
+          // never reads, so "this is all N" beside a filtered table counts rows nothing counted.
+          text:
+            filter === "ALL" || narrowing === null
+              ? describeRecordWindow(
+                  0,
+                  held,
+                  { count: held, boundReached: false },
+                  "codebase",
+                  "codebases",
+                )
+              : `Narrowed by “${narrowing}”; the index holds ${held.toLocaleString()} ${
+                  held === 1 ? "codebase" : "codebases"
+                } in all.`,
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: repositories.isError
+            ? "the codebase list did not answer"
+            : "asking which codebases the index holds",
+        },
+      ]
+  if (repoId !== "") {
+    segments.push({ kind: "listing", label: "Context and analysis rules", text: repoId })
+  }
+  usePanelStatus(segments)
 
   return (
     <div className="flex flex-col gap-section">

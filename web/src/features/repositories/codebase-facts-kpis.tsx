@@ -82,7 +82,10 @@ export function CodebaseFactsKpis({ repoId }: { repoId: string }) {
           label: "Files tracked",
           value: facts.total_files.toLocaleString(),
           // Tracked, not present: an ignored build directory is absent by design.
-          note: `git-tracked${facts.binary_files > 0 ? `, ${facts.binary_files.toLocaleString()} of them binary` : ""}`,
+          // Gated on the census that actually ran. Printed unconditionally, this said `git-tracked`
+          // on a checkout where `_tracked_files` fell back to a filesystem walk -- while the file
+          // tree's status band said the opposite about the same numbers, on the same screen.
+          note: `${facts.census === "git ls-files" ? "git-tracked" : `from a ${facts.census ?? "filesystem walk"}, not git-tracked`}${facts.binary_files > 0 ? `, ${facts.binary_files.toLocaleString()} of them binary` : ""}`,
         },
         {
           label: "Lines",

@@ -32,6 +32,11 @@
  * built from the other two tables would imply the calls came from nowhere; and the rows here are
  * one page of each table, so a set of distinct sources read off them is a fact about the page
  * wearing the clothes of a fact about the deployment. Ruling 12.
+ *
+ * **The three footers left with `ScreenFrame`.** One band renders one pager, so `signals-page.tsx`
+ * carries a bar naming which of these three sets it counts and pages; the offsets stay here because
+ * they are this read's parameters. Each panel heading is the word that bar uses for its set, so a
+ * rename here is a rename there.
  */
 
 import { DEFAULT_LIMIT } from "@/api/client"
@@ -41,7 +46,6 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ErrorWindowsTable } from "@/features/telemetry/error-windows-table"
 import { ObservedCallsTable } from "@/features/telemetry/observed-calls-table"
 import { ObservedShapesTable } from "@/features/telemetry/observed-shapes-table"
-import { FooterBar } from "@/layouts/footer-bar"
 import { formatTimestamp } from "@/lib/format"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
@@ -98,9 +102,9 @@ function countMetric(total: number, unit: string) {
 }
 
 export function SignalSourcePanel({ repoId }: { repoId: string }) {
-  const [callsOffset, setCallsOffset] = useOffsetParam("calls_offset")
-  const [shapesOffset, setShapesOffset] = useOffsetParam("shapes_offset")
-  const [errorWindowsOffset, setErrorWindowsOffset] = useOffsetParam("error_windows_offset")
+  const [callsOffset] = useOffsetParam("calls_offset")
+  const [shapesOffset] = useOffsetParam("shapes_offset")
+  const [errorWindowsOffset] = useOffsetParam("error_windows_offset")
   const query = useRepositoryObserved(repoId, {
     callsLimit: DEFAULT_LIMIT,
     callsOffset,
@@ -138,18 +142,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
         {calls.total === 0 ? (
           <EmptyState {...nothingArrived("observed calls", repoId, telemetry_attached_at)} />
         ) : (
-          <>
-            <ObservedCallsTable calls={calls.items} />
-            <FooterBar
-              offset={callsOffset}
-              limit={DEFAULT_LIMIT}
-              shown={calls.items.length}
-              total={calls.total}
-              nextOffset={calls.next_offset}
-              busy={query.isFetching}
-              onOffsetChange={setCallsOffset}
-            />
-          </>
+          <ObservedCallsTable calls={calls.items} />
         )}
       </MetricPanel>
 
@@ -167,18 +160,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
         {shapes.total === 0 ? (
           <EmptyState {...nothingArrived("response shapes", repoId, telemetry_attached_at)} />
         ) : (
-          <>
-            <ObservedShapesTable shapes={shapes.items} />
-            <FooterBar
-              offset={shapesOffset}
-              limit={DEFAULT_LIMIT}
-              shown={shapes.items.length}
-              total={shapes.total}
-              nextOffset={shapes.next_offset}
-              busy={query.isFetching}
-              onOffsetChange={setShapesOffset}
-            />
-          </>
+          <ObservedShapesTable shapes={shapes.items} />
         )}
       </MetricPanel>
 
@@ -199,18 +181,7 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
         {error_windows.total === 0 ? (
           <EmptyState {...nothingArrived("error windows", repoId, telemetry_attached_at)} />
         ) : (
-          <>
-            <ErrorWindowsTable windows={error_windows.items} />
-            <FooterBar
-              offset={errorWindowsOffset}
-              limit={DEFAULT_LIMIT}
-              shown={error_windows.items.length}
-              total={error_windows.total}
-              nextOffset={error_windows.next_offset}
-              busy={query.isFetching}
-              onOffsetChange={setErrorWindowsOffset}
-            />
-          </>
+          <ErrorWindowsTable windows={error_windows.items} />
         )}
       </MetricPanel>
     </div>

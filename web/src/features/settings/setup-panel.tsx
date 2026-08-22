@@ -23,6 +23,9 @@ import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Button } from "@/vendor/supabase/ui/button"
 import { Input } from "@/vendor/supabase/ui/input"
+import { usePanelStatus } from "@/features/settings/panel-status"
+import type { StatusSegment } from "@/layouts/status-band"
+import { describeRecordWindow } from "@/lib/record-window"
 import {
   fetchRepoSettings,
   fetchSetup,
@@ -116,6 +119,37 @@ export function SetupPanel({ repoId }: { repoId: string }) {
     queryKey: ["setup", repoId],
     queryFn: ({ signal }) => fetchSetup(repoId, signal),
   })
+
+  // The prerequisites themselves are counted; their three states are not. `setup.py` refuses a
+  // figure over them, because a count of ready items over six averages "could not check" onto
+  // "checked and missing" — the collapse the whole checklist exists to keep apart.
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Prerequisites",
+          text: describeRecordWindow(
+            0,
+            query.data.items.length,
+            { count: query.data.items.length, boundReached: false },
+            "prerequisite",
+            "prerequisites",
+          ),
+        },
+        {
+          kind: "note",
+          text: "Each item states its own answer and nothing sums them: probed and ready, probed and missing, and a probe that itself did not answer are three different facts.",
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? "the setup checklist did not answer"
+            : "probing what the full loop needs",
+        },
+      ]
+  usePanelStatus(status)
 
   if (query.isPending) return <LoadingState what="the setup checklist" />
   if (query.isError) {

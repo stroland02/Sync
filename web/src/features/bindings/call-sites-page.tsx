@@ -55,9 +55,11 @@ import {
   useSelectionParam,
 } from "@/components/detail-layout"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { FooterBar } from "@/layouts/footer-bar"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { vendorName } from "@/features/vendors/vendor-name"
+import { describeRecordWindow } from "@/lib/record-window"
 import { useFacetParam } from "@/lib/use-facet-param"
 import { useFilterListParam } from "@/lib/use-filter-list-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
@@ -299,7 +301,61 @@ export function CallSitesPage() {
     loopDepths.length > 0 ||
     bindingStatuses.length > 0
 
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: `Call sites in ${repoId}`,
+          // Decision 60. `describeRecordWindow` knows nothing of the rail, so over a narrowing
+          // that fits one page it says "This is all 12 call sites" beside a pager stating 103 were
+          // filtered out. The noun carries the narrowing rather than the sentence being withheld:
+          // a withheld sentence renders the absence marker, which reports a read that answered
+          // and counted as one that never answered.
+          text: describeRecordWindow(
+            offset,
+            query.data.items.length,
+            { count: query.data.total, boundReached: false },
+            narrowed ? "call site matching this narrowing" : "call site",
+            narrowed ? "call sites matching this narrowing" : "call sites",
+          ),
+          paging: {
+            offset,
+            limit: LIMIT,
+            shown: query.data.items.length,
+            total: query.data.total,
+            // The footer bar's two counts, unchanged: `total` is what every facet admits, and
+            // `unfiltered_total` is what the rest of them admit, so the pager says what a
+            // narrowing excluded instead of printing a bare range under a narrowed table.
+            unfilteredTotal: narrowed ? query.data.unfiltered_total : undefined,
+            nextOffset: query.data.next_offset,
+            busy: query.isFetching,
+            onOffsetChange: setOffset,
+          },
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? `the call sites in ${repoId} did not answer`
+            : `asking for the call sites in ${repoId}`,
+        },
+      ]
+
+  // The reader chooses which of the fifteen recorded fields to see. Above the table rather than in
+  // a settings screen: the choice belongs where its effect is. Undefined until the table is on
+  // screen -- the frame reserves no height for controls it is not given, and a column menu over no
+  // rows narrows nothing.
+  const controls = query.isSuccess ? (
+    <ColumnVisibilityMenu
+      columns={CALL_SITE_COLUMNS}
+      isVisible={columns.isVisible}
+      onToggle={columns.toggle}
+    />
+  ) : undefined
+
   return (
+    <ScreenFrame controls={controls} status={status}>
     <section className="flex min-w-0 flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Call sites" }]} />
 
@@ -404,15 +460,6 @@ export function CallSitesPage() {
                   : `call site${query.data.total === 1 ? "" : "s"} in ${repoId}`,
               }}
             >
-              {/* The reader chooses which of the fifteen recorded fields to see. Above the table
-                  rather than in a settings screen: the choice belongs where its effect is. */}
-              <div className="flex justify-end">
-                <ColumnVisibilityMenu
-                  columns={CALL_SITE_COLUMNS}
-                  isVisible={columns.isVisible}
-                  onToggle={columns.toggle}
-                />
-              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -529,16 +576,6 @@ export function CallSitesPage() {
                   ))}
                 </TableBody>
               </Table>
-              <FooterBar
-                offset={offset}
-                limit={LIMIT}
-                shown={query.data.items.length}
-                total={query.data.total}
-                nextOffset={query.data.next_offset}
-                busy={query.isFetching}
-                unfilteredTotal={narrowed ? query.data.unfiltered_total : undefined}
-                onOffsetChange={setOffset}
-              />
               <p className="max-w-prose text-meta text-muted-foreground">
                 Loops is how many loops enclose the call, from the code itself: zero is once per
                 unit of work, one is a page of results becoming one call each, two is quadratic.
@@ -553,5 +590,6 @@ export function CallSitesPage() {
         </div>
       )}
     </section>
+    </ScreenFrame>
   )
 }

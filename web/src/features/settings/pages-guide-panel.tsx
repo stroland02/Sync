@@ -16,6 +16,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { usePanelStatus } from "@/features/settings/panel-status"
 
 interface PageGuide {
   readonly id: string
@@ -102,6 +103,13 @@ const PAGE_GUIDES: readonly PageGuide[] = [
 ]
 
 export function PagesGuidePanel() {
+  usePanelStatus([
+    {
+      kind: "none",
+      why: "reference — how each screen works, in prose. Nothing here is read from the graph, so nothing here counts or pages.",
+    },
+  ])
+
   return (
     <div className="flex flex-col gap-section">
       <div className="flex flex-col gap-field border-b border-line pb-field">

@@ -1,4 +1,5 @@
 import { SettingCard } from "@/features/settings/setting-card"
+import { usePanelStatus } from "@/features/settings/panel-status"
 import { Badge } from "@/vendor/supabase/ui/badge"
 
 export interface GithubConnectionSettingsPanelProps {
@@ -6,6 +7,20 @@ export interface GithubConnectionSettingsPanelProps {
 }
 
 export function GithubConnectionSettingsPanel({ repoId }: GithubConnectionSettingsPanelProps) {
+  // Nothing here is probed, so the band points at the group that does: a reader must not take
+  // the "Authenticated via gh CLI" card below as a live answer about this machine's credential.
+  usePanelStatus([
+    {
+      kind: "listing",
+      label: "Forge connection",
+      text: repoId === "" ? "no codebase selected" : `stated for ${repoId}`,
+    },
+    {
+      kind: "note",
+      text: "These cards state how this deployment is built to reach the forge. The probe of whether that credential stands is in Setup.",
+    },
+  ])
+
   return (
     <div className="flex flex-col gap-section">
       <div className="flex flex-col gap-field pb-field border-b border-line">

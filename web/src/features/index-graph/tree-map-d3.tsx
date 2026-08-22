@@ -36,9 +36,16 @@
  * Colour carries integration identity only (`lib/palette.ts`), the same scale the map and the
  * charts use, so stripe is one colour everywhere. A directory belongs to no single integration
  * and stays ink.
+ *
+ * ## Two chromes over one canvas
+ *
+ * `useTreeMap` holds the whole thing and hands back the canvas plus what a caller needs to drive
+ * and describe it. `TreeMapD3` is the overlay chrome, for the Overview's preview, which has no
+ * band to publish into; the full-screen page drives the same hook, renders `TreeMapControls` in
+ * the chassis controls band and states the figures on the status band instead.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { hierarchy, tree as d3tree, type HierarchyPointNode } from "d3-hierarchy"
 import { select } from "d3-selection"
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom"
@@ -196,15 +203,27 @@ export function autoFold(root: TreeDatum, budget: number): Set<string> {
   return folded
 }
 
-export function TreeMapD3({
-  rows,
-  className,
-  fill = false,
-}: {
-  rows: RepositoryGraphBinding[]
-  className?: string
-  fill?: boolean
-}) {
+/** The canvas, what drives it, and what a status band can say about it. */
+export interface TreeMapController {
+  canvas: ReactNode
+  /** Marks the canvas draws, root included — a folded directory is one of them. */
+  nodeCount: number
+  /** Call sites under the root, which is every row handed in. */
+  callSites: number
+  zoomPercent: number
+  /** The fold is still the window's; false the moment a reader takes it over. */
+  autoFitted: boolean
+  /** Top-level directories. Empty means the tree has no directory anywhere to fold. */
+  foldable: readonly string[]
+  zoomIn: () => void
+  zoomOut: () => void
+  fit: () => void
+  foldAll: () => void
+  expandAll: () => void
+  refitToWindow: () => void
+}
+
+export function useTreeMap(rows: RepositoryGraphBinding[], fill = false): TreeMapController {
   const data = useMemo(() => buildTreeData(rows), [rows])
   // The height this canvas actually got, measured rather than assumed: `fill` hands it the
   // page's height and the card hands it 44rem, and the level of detail below is derived from
@@ -296,23 +315,16 @@ export function TreeMapD3({
     })
   }
 
-  return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-surface border border-line bg-background",
-        fill && "h-full",
-        className
-      )}
+  const canvas = (
+    <svg
+      ref={svgRef}
+      role="group"
+      aria-label={TREE_LABEL}
+      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+      preserveAspectRatio="xMidYMid meet"
+      className={cn("block w-full cursor-grab touch-none select-none", fill ? "h-full" : "h-[44rem]")}
     >
-      <svg
-        ref={svgRef}
-        role="group"
-        aria-label={TREE_LABEL}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        preserveAspectRatio="xMidYMid meet"
-        className={cn("block w-full cursor-grab touch-none select-none", fill ? "h-full" : "h-[44rem]")}
-      >
-        <g transform={transform.toString()}>
+      <g transform={transform.toString()}>
           <g>
             {links.map((link) => (
               <path
@@ -385,52 +397,147 @@ export function TreeMapD3({
               )
             })}
           </g>
-        </g>
-      </svg>
+      </g>
+    </svg>
+  )
+
+  return {
+    canvas,
+    nodeCount: nodes.length,
+    callSites: data.weight,
+    zoomPercent: Math.round(transform.k * 100),
+    autoFitted: manual === null,
+    foldable,
+    zoomIn: () => drive((behaviour, selection) => selection.call(behaviour.scaleBy, 1.5)),
+    zoomOut: () => drive((behaviour, selection) => selection.call(behaviour.scaleBy, 1 / 1.5)),
+    fit: () => drive((behaviour, selection) => selection.call(behaviour.transform, fitTransform)),
+    foldAll: () => setManual(new Set(foldable)),
+    expandAll: () => setManual(new Set()),
+    refitToWindow: () => setManual(null),
+  }
+}
+
+/** The bordered box the canvas is drawn in, without a chrome of its own. */
+export function TreeMapSurface({
+  map,
+  className,
+}: {
+  map: TreeMapController
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        "relative h-full overflow-hidden rounded-surface border border-line bg-background",
+        className
+      )}
+    >
+      {map.canvas}
+    </div>
+  )
+}
+
+/**
+ * Zoom, fit and fold, for a screen that renders them in the chassis controls band.
+ *
+ * The fold cluster draws only where the tree has a directory to fold, which is also the only
+ * state in which `autoFitted` can go false — nothing else sets the fold — so *Fit to window* is
+ * never named by a status band whose button is absent.
+ */
+export function TreeMapControls({ map }: { map: TreeMapController }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-field">
+        <Button variant="outline" size="sm" onClick={map.zoomIn}>
+          Zoom in
+        </Button>
+        <Button variant="outline" size="sm" onClick={map.zoomOut}>
+          Zoom out
+        </Button>
+        <Button variant="outline" size="sm" onClick={map.fit}>
+          Fit
+        </Button>
+      </div>
+
+      {map.foldable.length > 0 && (
+        <div className="flex flex-wrap items-center gap-field">
+          <Button variant="outline" size="sm" onClick={map.foldAll}>
+            Fold all
+          </Button>
+          <Button variant="outline" size="sm" onClick={map.expandAll}>
+            Expand all
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={map.refitToWindow}
+            disabled={map.autoFitted}
+          >
+            Fit to window
+          </Button>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * The canvas with its controls over it, for the Overview's preview.
+ *
+ * The preview has no status band to publish into, so its overlay keeps the figures and the
+ * fitted-detail caveat that the full-screen page moves onto the band.
+ */
+export function TreeMapD3({
+  rows,
+  className,
+  fill = false,
+}: {
+  rows: RepositoryGraphBinding[]
+  className?: string
+  fill?: boolean
+}) {
+  const map = useTreeMap(rows, fill)
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-surface border border-line bg-background",
+        fill && "h-full",
+        className
+      )}
+    >
+      {map.canvas}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
         <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => drive((behaviour, selection) => selection.call(behaviour.scaleBy, 1.5))}
-          >
+          <Button variant="outline" size="sm" onClick={map.zoomIn}>
             Zoom in
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => drive((behaviour, selection) => selection.call(behaviour.scaleBy, 1 / 1.5))}
-          >
+          <Button variant="outline" size="sm" onClick={map.zoomOut}>
             Zoom out
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => drive((behaviour, selection) => selection.call(behaviour.transform, fitTransform))}
-          >
+          <Button variant="outline" size="sm" onClick={map.fit}>
             Fit
           </Button>
           <span className="px-field text-meta text-ink-muted tabular-nums">
-            {nodes.length} nodes over {data.weight} call sites ·{" "}
-            {Math.round(transform.k * 100)}%
-            {manual === null && " · detail fitted to this window"}
+            {map.nodeCount} nodes over {map.callSites} call sites · {map.zoomPercent}%
+            {map.autoFitted && " · detail fitted to this window"}
           </span>
         </div>
 
-        {foldable.length > 0 && (
+        {map.foldable.length > 0 && (
           <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
-            <Button variant="outline" size="sm" onClick={() => setManual(new Set(foldable))}>
+            <Button variant="outline" size="sm" onClick={map.foldAll}>
               Fold all
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setManual(new Set())}>
+            <Button variant="outline" size="sm" onClick={map.expandAll}>
               Expand all
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setManual(null)}
-              disabled={manual === null}
+              onClick={map.refitToWindow}
+              disabled={map.autoFitted}
             >
               Fit to window
             </Button>

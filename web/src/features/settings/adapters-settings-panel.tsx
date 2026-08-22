@@ -2,10 +2,37 @@ import { useAdapters } from "@/api/queries"
 import { ErrorState, LoadingState } from "@/components/states"
 import { AdapterCoverageChart } from "@/features/settings/adapter-coverage-chart"
 import { AdapterTable } from "@/features/settings/adapter-table"
+import { usePanelStatus } from "@/features/settings/panel-status"
 import { StagingEditor } from "@/features/settings/staging-editor"
+import type { StatusSegment } from "@/layouts/status-band"
+import { describeRecordWindow } from "@/lib/record-window"
 
 export function AdaptersSettingsPanel() {
   const query = useAdapters()
+
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Adapters",
+          text: describeRecordWindow(
+            0,
+            query.data.adapters.length,
+            { count: query.data.adapters.length, boundReached: false },
+            "adapter",
+            "adapters",
+          ),
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? "the adapter inventory did not answer"
+            : "asking which adapters this deployment registers",
+        },
+      ]
+  usePanelStatus(status)
 
   return (
     <div className="flex flex-col gap-section">

@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { SettingCard } from "@/features/settings/setting-card"
 import { fetchRepoSettings, updateRepoSettings, type RepoSettingsPayload } from "@/features/settings/api"
+import { usePanelStatus } from "@/features/settings/panel-status"
+import type { StatusSegment } from "@/layouts/status-band"
+import { describeRecordWindow } from "@/lib/record-window"
 import { useRepositories } from "@/api/queries"
 import { Badge } from "@/vendor/supabase/ui/badge"
 import { Button } from "@/vendor/supabase/ui/button"
@@ -46,6 +49,39 @@ export function PullRequestsSettingsPanel({ repoId }: PullRequestsSettingsPanelP
       queryClient.setQueryData(["repo-settings", repoId], data)
     },
   })
+
+  // Two reads, neither gated on the other: a repository list still in flight leaves `text` null,
+  // so the band marks a count that never arrived rather than printing it as a nought.
+  const status: StatusSegment[] = settingsQuery.isSuccess
+    ? [
+        {
+          kind: "listing",
+          label: "Policy in force",
+          text: `${settingsQuery.data.merge_policy} · ${settingsQuery.data.merge_method} · onto ${settingsQuery.data.base_branch}`,
+        },
+        {
+          kind: "records",
+          label: "Repositories",
+          text: reposQuery.isSuccess
+            ? describeRecordWindow(
+                0,
+                repos.length,
+                { count: repos.length, boundReached: false },
+                "repository",
+                "repositories",
+              )
+            : null,
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: settingsQuery.isError
+            ? `the settings for ${repoId} did not answer`
+            : `asking for the settings for ${repoId}`,
+        },
+      ]
+  usePanelStatus(status)
 
   if (settingsQuery.isPending) {
     return <LoadingState what={`settings for ${repoId}`} />

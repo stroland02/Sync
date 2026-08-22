@@ -12,6 +12,11 @@ import { DESTINATIONS, ROUTES } from "@/lib/routes"
 
 /** Screens rendering through `ScreenFrame`. Move a path up as it migrates; never back. */
 const MIGRATED = [
+  "/settings",
+  "/repositories/:repoId/file-tree",
+  "/repositories/:repoId/call-sites",
+  "/repositories/:repoId/graph",
+  "/repositories/:repoId/observed",
   "/",
   "/repositories/:repoId/findings",
   "/repositories/:repoId/services",
@@ -30,11 +35,6 @@ const MIGRATED = [
 ]
 
 const PENDING = [
-  "/settings",
-  "/repositories/:repoId/file-tree",
-  "/repositories/:repoId/call-sites",
-  "/repositories/:repoId/graph",
-  "/repositories/:repoId/observed",
   "/repositories/:repoId/vendors/:vendorId",
 ]
 

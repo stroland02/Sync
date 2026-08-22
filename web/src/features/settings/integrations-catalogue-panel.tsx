@@ -32,7 +32,10 @@ import {
 import { AdapterTierTag } from "@/components/tag"
 import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
+import { usePanelStatus } from "@/features/settings/panel-status"
 import { type CatalogueRow, fetchCatalogue } from "@/features/vendors/catalogue"
+import type { StatusSegment } from "@/layouts/status-band"
+import { describeRecordWindow } from "@/lib/record-window"
 
 const STATE_WORD: Record<CatalogueRow["state"], string> = {
   watched: "in use here",
@@ -53,6 +56,38 @@ export function IntegrationsCataloguePanel({ repoId }: { repoId: string }) {
     queryKey: ["integrations-catalogue", repoId],
     queryFn: ({ signal }) => fetchCatalogue(repoId, signal),
   })
+
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Integrations",
+          text: describeRecordWindow(
+            0,
+            query.data.integrations.length,
+            { count: query.data.total, boundReached: false },
+            "integration",
+            "integrations",
+          ),
+        },
+        {
+          kind: "figure",
+          label: "In use in this codebase",
+          // A state absent from the group-by is a state nothing is in, not a state nobody asked
+          // about: the read succeeded and returned every state that has a row.
+          value: (query.data.by_state.watched ?? 0).toLocaleString(),
+          scope: "bound by an index pass finding the call, never by signing in",
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? "the integrations catalogue did not answer"
+            : "asking what this deployment can watch",
+        },
+      ]
+  usePanelStatus(status)
 
   if (query.isPending) return <LoadingState what="the integrations catalogue" />
   if (query.isError) {

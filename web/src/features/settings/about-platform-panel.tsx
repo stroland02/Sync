@@ -7,9 +7,17 @@
  */
 
 import { SettingCard } from "@/features/settings/setting-card"
+import { usePanelStatus } from "@/features/settings/panel-status"
 import { Badge } from "@/vendor/supabase/ui/badge"
 
 export function AboutPlatformPanel() {
+  usePanelStatus([
+    {
+      kind: "none",
+      why: "reference — the platform's own vocabulary, in prose. Nothing here is read from the graph, so nothing here counts or pages.",
+    },
+  ])
+
   return (
     <div className="flex flex-col gap-section">
       <div className="flex flex-col gap-field pb-field border-b border-line">

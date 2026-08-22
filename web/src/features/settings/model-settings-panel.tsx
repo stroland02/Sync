@@ -34,6 +34,8 @@ import {
 import { InfoHint } from "@/components/info-hint"
 import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
+import { usePanelStatus } from "@/features/settings/panel-status"
+import type { StatusSegment } from "@/layouts/status-band"
 
 interface ModelProvider {
   kind: "unconfigured" | "frontier" | "self-hosted" | "unusable"
@@ -113,6 +115,34 @@ export function ModelSettingsPanel() {
     queryKey: ["setup", "model"],
     queryFn: ({ signal }) => fetchSetup(signal),
   })
+
+  const model = query.data?.model ?? null
+  const status: StatusSegment[] =
+    model === null
+      ? [
+          {
+            kind: "none",
+            why: query.isError
+              ? "the model connection did not answer"
+              : "asking which model is connected",
+          },
+        ]
+      : [
+          { kind: "listing", label: "Model", text: model.detail },
+          {
+            kind: "listing",
+            label: "Credential",
+            // `unusable` is the resolver refusing to answer, so its `has_credential: false` is a
+            // default rather than a probe: "none supplied" there states a measurement nothing made.
+            text:
+              model.kind === "unusable"
+                ? "not determined — the configuration did not resolve"
+                : model.has_credential
+                  ? "one is present in the environment"
+                  : "none supplied",
+          },
+        ]
+  usePanelStatus(status)
 
   if (query.isPending) return <LoadingState what="the model connection" />
   if (query.isError) {

@@ -3,7 +3,7 @@
  *
  * Its own module so a screen that is not Settings can name a group without importing the page --
  * the Overview's stage grid links here, and a second spelling of these labels would disagree with
- * the sidebar the first time one is renamed.
+ * the group control the first time one is renamed.
  */
 
 export type SettingsGroup =
