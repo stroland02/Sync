@@ -45,6 +45,8 @@ import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
 import { PageTabs, solutionsTabs } from "@/components/page-tabs"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { useParams } from "react-router"
 
@@ -155,6 +157,14 @@ function AxisPanel({ axis }: { axis: Axis }) {
   )
 }
 
+/** What the axes that have samples drew them from, or `null` when no axis has one. */
+function describeProvenance(axes: Axis[]): string | null {
+  const sourced = [...new Set(axes.filter((axis) => axis.has_samples).map((axis) => axis.provenance))]
+  // Null rather than the payload's "unmeasured": with no sample behind any axis, nothing answered
+  // what the samples came from, and a word here would name a category that was never found.
+  return sourced.length === 0 ? null : sourced.sort().join(", ")
+}
+
 export function CorpusPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const query = useQuery({
@@ -164,7 +174,47 @@ export function CorpusPage() {
 
   if (repoId === undefined) return <UnknownRoute />
 
+  // The screen states what it is showing whether or not the query has answered: a band that
+  // appears only on success renders "not asked yet" and "asked and empty" as the same nothing.
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "listing",
+          label: "Quality axes",
+          // Two counts, never a ratio: "2 of 5" as a percentage would read as a score of the
+          // product rather than a count of what has run.
+          text: `${query.data.summary.axes_measured_count} of ${query.data.summary.total_axes} measured, all ${query.data.summary.total_axes} on screen.`,
+        },
+        {
+          kind: "figure",
+          label: "Provenance",
+          value: describeProvenance(query.data.axes),
+          scope: "all workspaces",
+        },
+        {
+          kind: "figure",
+          label: "Runs",
+          value: query.data.summary.total_runs.toLocaleString(),
+          scope: "all workspaces",
+        },
+        {
+          kind: "figure",
+          label: "Findings abandoned",
+          value: query.data.summary.findings_abandoned.toLocaleString(),
+          scope: "all workspaces",
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? "the corpus evidence did not answer"
+            : "asking for the corpus evidence",
+        },
+      ]
+
   return (
+    <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Solutions" }]} />
       <PageTabs label="Solutions" tabs={solutionsTabs(repoId)} />
@@ -239,5 +289,6 @@ export function CorpusPage() {
         </>
       )}
     </section>
+    </ScreenFrame>
   )
 }

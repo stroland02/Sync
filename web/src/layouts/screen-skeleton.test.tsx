@@ -11,24 +11,26 @@ import { describe, expect, it } from "vitest"
 import { DESTINATIONS, ROUTES } from "@/lib/routes"
 
 /** Screens rendering through `ScreenFrame`. Move a path up as it migrates; never back. */
-const MIGRATED = ["/repositories/:repoId/integration-changes"]
+const MIGRATED = [
+  "/repositories/:repoId/integration-changes",
+  "/repositories/:repoId",
+  "/repositories/:repoId/metrics",
+  "/repositories/:repoId/corpus",
+  "/repositories/:repoId/solutions",
+  "/repositories/:repoId/runs",
+  "/repositories/:repoId/vendors",
+  "/repositories/:repoId/detectors",
+]
 
 const PENDING = [
   "/",
   "/settings",
-  "/repositories/:repoId",
   "/repositories/:repoId/file-tree",
   "/repositories/:repoId/call-sites",
-  "/repositories/:repoId/metrics",
-  "/repositories/:repoId/corpus",
-  "/repositories/:repoId/solutions",
   "/repositories/:repoId/graph",
-  "/repositories/:repoId/runs",
   "/repositories/:repoId/findings",
   "/repositories/:repoId/services",
-  "/repositories/:repoId/vendors",
   "/repositories/:repoId/observed",
-  "/repositories/:repoId/detectors",
   "/repositories/:repoId/vendors/:vendorId",
   "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId",
   "/repositories/:repoId/findings/:findingId",

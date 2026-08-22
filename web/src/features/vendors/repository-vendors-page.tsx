@@ -40,6 +40,8 @@ import {
 import { PageTabs, vendorsTabs } from "@/components/page-tabs"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 
 
 import { vendorHref } from "@/lib/hrefs"
@@ -96,21 +98,25 @@ export function RepositoryVendorsPage() {
 
   if (coverage.isPending) {
     return (
-      <section className="flex flex-col gap-8">
-        <LoadingState what="the vendors attached to this repository" />
-      </section>
+      <ScreenFrame status={[{ kind: "none", why: "asking which vendors this repository calls" }]}>
+        <section className="flex flex-col gap-8">
+          <LoadingState what="the vendors attached to this repository" />
+        </section>
+      </ScreenFrame>
     )
   }
 
   if (coverage.isError) {
     return (
-      <section className="flex flex-col gap-8">
-        <ErrorState
-          error={coverage.error}
-          what="the vendors attached to this repository"
-          onRetry={() => void coverage.refetch()}
-        />
-      </section>
+      <ScreenFrame status={[{ kind: "none", why: "the index coverage did not answer" }]}>
+        <section className="flex flex-col gap-8">
+          <ErrorState
+            error={coverage.error}
+            what="the vendors attached to this repository"
+            onRetry={() => void coverage.refetch()}
+          />
+        </section>
+      </ScreenFrame>
     )
   }
 
@@ -138,7 +144,58 @@ export function RepositoryVendorsPage() {
     return adapter?.kind === tierFilter
   })
 
+  // A listing only where the answer's scope matches the address: counting an out-of-scope answer's
+  // rows as "0 of 0 attached" would state an emptiness about this repository that nothing computed.
+  const status: StatusSegment[] = [
+    scopeMatches
+      ? {
+          kind: "listing",
+          label: "Vendors",
+          text: `${filteredVendors.length.toLocaleString()} of ${vendors.length.toLocaleString()} attached`,
+        }
+      : { kind: "none", why: "the index coverage answered for another repository" },
+    {
+      kind: "note",
+      text:
+        "This list is what INDEX bound in this repository. A vendor's published rate limits, auth " +
+        "rules and call structures are not shown, because no stage captures them yet — that is " +
+        "work not done rather than a vendor with none.",
+    },
+  ]
+
+  // Undefined rather than an empty band when there is no vendor to narrow: the frame reserves no
+  // height for controls it is not given.
+  const tierControls =
+    scopeMatches && vendors.length > 0 ? (
+      <div className="flex items-center gap-field overflow-x-auto">
+        <Button
+          size="sm"
+          variant={tierFilter === "all" ? "secondary" : "ghost"}
+          onClick={() => setTierFilter("all")}
+          className="text-meta"
+        >
+          All ({vendors.length})
+        </Button>
+        {ADAPTER_TIERS.map((tier) => {
+          const count = vendors.filter((v) => adaptersMap.get(v.vendor_id)?.kind === tier).length
+          if (count === 0 && tierFilter !== tier) return null
+          return (
+            <Button
+              key={tier}
+              size="sm"
+              variant={tierFilter === tier ? "secondary" : "ghost"}
+              onClick={() => setTierFilter(tier)}
+              className="text-meta capitalize"
+            >
+              {tier} ({count})
+            </Button>
+          )
+        })}
+      </div>
+    ) : undefined
+
   return (
+    <ScreenFrame controls={tierControls} status={status}>
     <section className="flex min-w-0 flex-col gap-8">
       <PageTabs label="Vendors" tabs={vendorsTabs(repoId ?? "")} />
 
@@ -166,34 +223,8 @@ export function RepositoryVendorsPage() {
         />
       ) : (
         <div className="flex flex-col gap-section">
-          {/* Controls Bar: Filter tabs & View toggle */}
+          {/* Controls Bar: View toggle. The tier facet moved to the frame's controls band. */}
           <div className="flex flex-wrap items-center justify-between gap-field pb-field border-b border-line">
-            <div className="flex items-center gap-field overflow-x-auto">
-              <Button
-                size="sm"
-                variant={tierFilter === "all" ? "secondary" : "ghost"}
-                onClick={() => setTierFilter("all")}
-                className="text-meta"
-              >
-                All ({vendors.length})
-              </Button>
-              {ADAPTER_TIERS.map((tier) => {
-                const count = vendors.filter((v) => adaptersMap.get(v.vendor_id)?.kind === tier).length
-                if (count === 0 && tierFilter !== tier) return null
-                return (
-                  <Button
-                    key={tier}
-                    size="sm"
-                    variant={tierFilter === tier ? "secondary" : "ghost"}
-                    onClick={() => setTierFilter(tier)}
-                    className="text-meta capitalize"
-                  >
-                    {tier} ({count})
-                  </Button>
-                )
-              })}
-            </div>
-
             <div className="flex items-center gap-field">
               <Button
                 size="sm"
@@ -283,11 +314,7 @@ export function RepositoryVendorsPage() {
         </div>
       )}
 
-      <p className="text-meta text-muted-foreground max-w-5xl leading-relaxed">
-        This list is what INDEX bound in this repository. A vendor&apos;s published rate limits, auth
-        rules and call structures are not shown, because no stage captures them yet — that is work
-        not done rather than a vendor with none.
-      </p>
     </section>
+    </ScreenFrame>
   )
 }

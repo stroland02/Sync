@@ -65,13 +65,23 @@ export function TrendsKpis() {
         },
         {
           label: "Days with activity",
-          value: figure(changes, () => {
+          // Both queries, because the set below unions both. Gated on `changes` alone this
+          // returned a day count computed from an empty findings array while findings was still
+          // pending -- a number from half the data, under a label the status band renders from
+          // all of it, on the same screen.
+          value: figure(
+            {
+              isPending: changes.isPending || findings.isPending,
+              isError: changes.isError || findings.isError,
+            },
+            () => {
             const days = new Set([
               ...(findings.data?.days ?? []).map((d) => d.day),
               ...(changes.data?.days ?? []).map((d) => d.day),
             ])
-            return days.size.toLocaleString()
-          }),
+              return days.size.toLocaleString()
+            }
+          ),
           // A count of days that *have* a row, never a span: a day with no row is a day nothing
           // was recorded, which may be a day nothing happened or a day nothing ran.
           note: "days either series recorded something — not the length of the window",

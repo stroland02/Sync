@@ -63,6 +63,8 @@ import { GettingStartedCard } from "@/features/repositories/getting-started-card
 import { useRepositoryGraph, useRepositoryCoverage } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { ControlBar } from "@/layouts/control-bar"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 
@@ -105,29 +107,92 @@ export function CodebasePage() {
   const { repoId } = useParams<{ repoId: string }>()
   if (repoId === undefined) return <UnknownRoute />
 
+  return <CodebaseScreen repoId={repoId} />
+}
+
+/**
+ * The screen itself, split from the route guard so the band's two reads are unconditional hooks.
+ *
+ * Each figure renders what the region it summarises renders, so the band and the body cannot
+ * disagree: operations mirrors `ApiSurfacePanel`, call sites and integrations mirror the
+ * pipeline's Index and Signal cells.
+ */
+function CodebaseScreen({ repoId }: { repoId: string }) {
+  // Both reads are already issued below — the maps take the graph, the API surface takes the
+  // coverage — and React Query dedupes on the key, so counting them here costs no request.
+  const graph = useRepositoryGraph(repoId)
+  const coverage = useRepositoryCoverage(repoId)
+
+  const surface =
+    coverage.isSuccess && coverage.data.repo_id === repoId ? coverage.data.by_binding_status : null
+  // `null` when coverage has not answered, a number when it has -- including a counted zero.
+  // Collapsing the two rendered an unanswered read as a measured absence, under a scope
+  // string that asserts the measurement happened.
+  const operations =
+    surface === null ? null : Object.values(surface).reduce((sum, n) => sum + n, 0)
+
+  const figures: StatusSegment[] = [
+    {
+      kind: "figure",
+      label: "Operations",
+      // An empty rollup is a repository with no call site at all rather than three examined
+      // zeroes (`binding_status_rollup`), so it reads as absence here as it does in the panel.
+      value: operations === null ? null : operations.toLocaleString(),
+      scope: "counted once each, however many times called",
+    },
+    {
+      kind: "figure",
+      label: "Call sites",
+      value: graph.isSuccess ? graph.data.total_bindings.toLocaleString() : null,
+      scope: "indexed in this repository",
+    },
+    {
+      kind: "figure",
+      label: "Integrations",
+      value: graph.isSuccess ? graph.data.vendors.length.toLocaleString() : null,
+      scope: "called by this repository",
+    },
+  ]
+
+  // Before either read answers, three absence glyphs would say what is missing and not why.
+  const status: StatusSegment[] =
+    graph.isSuccess || coverage.isSuccess
+      ? figures
+      : [
+          {
+            kind: "none",
+            why:
+              graph.isError || coverage.isError
+                ? "the graph did not answer for this codebase"
+                : "asking the graph about this codebase",
+          },
+        ]
+
   return (
-    <section className="flex flex-col gap-8">
-      {/* The header opens the page, as it does on every other screen. It rendered fourth here —
-          below Getting Started, the strip and both maps — which left everything above it
-          unlabelled and unscoped on the one screen a workspace opens on. */}
-      <PageHeaderRegion repoId={repoId} />
-      {/* The pipeline opens the body: five stages, one measured figure each, every stage a door.
-          It replaced the four-tile fact strip rather than sitting beneath it -- the strip's four
-          numbers were this shape's first four cells, and one instrument beats two. */}
-      <PipelineStrip repoId={repoId} />
-      {/* Getting started follows: the workspace identity and the full loop's probed
-          prerequisites, which are instructions rather than measurements. */}
-      <GettingStartedCard repoId={repoId} />
-      {/* Both maps, side by side, each opening its own full view. A codebase has two shapes
-          worth seeing — what it calls, and how it is laid out — and neither summarises the
-          other. Their analytics moved with them: topology to the integration map's page, the
-          technical census to the file tree's, which is what keeps this screen scannable. */}
-      <MapsRegion repoId={repoId} />
-      {/* Good news as a number (W541, owner-picked from the scrapped build): how much of the
-          API surface is verified clean, beside how much is at risk. */}
-      <ApiSurfaceRegion repoId={repoId} />
-      <WorkflowGrid repoId={repoId} />
-    </section>
+    <ScreenFrame status={status}>
+      <section className="flex flex-col gap-8">
+        {/* The header opens the page, as it does on every other screen. It rendered fourth here —
+            below Getting Started, the strip and both maps — which left everything above it
+            unlabelled and unscoped on the one screen a workspace opens on. */}
+        <PageHeaderRegion repoId={repoId} />
+        {/* The pipeline opens the body: five stages, one measured figure each, every stage a door.
+            It replaced the four-tile fact strip rather than sitting beneath it -- the strip's four
+            numbers were this shape's first four cells, and one instrument beats two. */}
+        <PipelineStrip repoId={repoId} />
+        {/* Getting started follows: the workspace identity and the full loop's probed
+            prerequisites, which are instructions rather than measurements. */}
+        <GettingStartedCard repoId={repoId} />
+        {/* Both maps, side by side, each opening its own full view. A codebase has two shapes
+            worth seeing — what it calls, and how it is laid out — and neither summarises the
+            other. Their analytics moved with them: topology to the integration map's page, the
+            technical census to the file tree's, which is what keeps this screen scannable. */}
+        <MapsRegion repoId={repoId} />
+        {/* Good news as a number (W541, owner-picked from the scrapped build): how much of the
+            API surface is verified clean, beside how much is at risk. */}
+        <ApiSurfaceRegion repoId={repoId} />
+        <WorkflowGrid repoId={repoId} />
+      </section>
+    </ScreenFrame>
   )
 }
 

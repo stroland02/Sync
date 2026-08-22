@@ -34,11 +34,13 @@ import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
 import { RelativeTime } from "@/components/relative-time"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
-import { FooterBar } from "@/layouts/footer-bar"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { PageTabs, solutionsTabs } from "@/components/page-tabs"
 import { useTickets } from "@/api/queries"
 import { TicketFunnel } from "@/features/tickets/ticket-funnel"
+import { describeRecordWindow } from "@/lib/record-window"
 import { useOffsetParam } from "@/lib/use-offset-param"
 
 /**
@@ -79,7 +81,51 @@ export function SolutionsPage() {
 
   if (repoId === undefined) return <UnknownRoute />
 
+  // Built for every query state: a band that appears only on success renders "not asked yet"
+  // and "asked and empty" as the same nothing. The two caveats moved out of the panel's caption
+  // rather than being copied into the band — one sentence rendered twice is a fact that can
+  // disagree with itself.
+  const status: StatusSegment[] = query.isSuccess
+    ? [
+        {
+          kind: "records",
+          label: "Solutions",
+          text: describeRecordWindow(
+            offset,
+            query.data.items.length,
+            { count: query.data.total, boundReached: false },
+            "solution",
+            "solutions"
+          ),
+          paging: {
+            offset,
+            limit: DEFAULT_LIMIT,
+            shown: query.data.items.length,
+            total: query.data.total,
+            nextOffset: query.data.next_offset,
+            busy: query.isFetching,
+            onOffsetChange: setOffset,
+          },
+        },
+        { kind: "note", text: "Every remediation that reached the forge, newest first." },
+        {
+          kind: "note",
+          text:
+            "One row per attempt: a finding whose retry also opened counts twice, and neither " +
+            "row is wrong.",
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: query.isError
+            ? "the opened pull requests did not answer"
+            : "asking for the opened pull requests",
+        },
+      ]
+
   return (
+    <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
       <Breadcrumbs trail={[{ label: "Solutions" }]} />
       <SolutionsFunnelRegion repoId={repoId} />
@@ -150,12 +196,6 @@ export function SolutionsPage() {
             value: query.data.total.toLocaleString(),
             unit: `run${query.data.total === 1 ? "" : "s"} that opened a pull request`,
           }}
-          caption={
-            <p className="max-w-prose">
-              Every remediation that reached the forge, newest first. One row per attempt: a
-              finding whose retry also opened counts twice, and neither row is wrong.
-            </p>
-          }
         >
           <Table>
             <TableHeader>
@@ -215,18 +255,10 @@ export function SolutionsPage() {
               })}
             </TableBody>
           </Table>
-          <FooterBar
-            offset={offset}
-            limit={DEFAULT_LIMIT}
-            shown={query.data.items.length}
-            total={query.data.total}
-            nextOffset={query.data.next_offset}
-            busy={query.isFetching}
-            onOffsetChange={setOffset}
-          />
         </MetricPanel>
       )}
     </section>
+    </ScreenFrame>
   )
 }
 

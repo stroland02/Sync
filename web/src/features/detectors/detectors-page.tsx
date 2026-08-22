@@ -54,9 +54,12 @@
 import { AutomationPanel } from "@/features/tickets/automation-panel"
 import { useParams } from "react-router"
 
+import { useDetectors } from "@/api/queries"
 import { InfoHint } from "@/components/info-hint"
 import { ScopeChip } from "@/components/scope-chip"
 
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
@@ -75,9 +78,41 @@ export function DetectorsPage() {
   // the screen contradicting its own URL, on a console whose whole argument is that it tells you
   // the truth about what it checked. There is one source of scope now and the router owns it.
   const { repoId } = useParams<{ repoId: string }>()
+  // The same query key `DetectorAccountability` already holds, so the band costs no request:
+  // the roll-up is the only countable this screen's four regions share.
+  const attribution = useDetectors(repoId)
   if (repoId === undefined) return <UnknownRoute />
 
+  // **Labelled "attributed", never "open".** `total_open_findings` here and `severity_total` on
+  // Findings count one population, and only the label keeps a reader from reading two screens'
+  // bands as two different sets. The band is built for every query state: one that appeared only
+  // on success would render "not asked yet" and "asked and empty" as the same nothing.
+  const status: StatusSegment[] = attribution.isSuccess
+    ? [
+        {
+          kind: "listing",
+          label: "attributed",
+          text:
+            attribution.data.detectors.length === 0
+              ? `No open finding in ${repoId} is attributed to any detector.`
+              : `${attribution.data.total_open_findings.toLocaleString()} open ${
+                  attribution.data.total_open_findings === 1 ? "finding" : "findings"
+                } in ${repoId}, attributed across ${attribution.data.detectors.length} ${
+                  attribution.data.detectors.length === 1 ? "detector" : "detectors"
+                }.`,
+        },
+      ]
+    : [
+        {
+          kind: "none",
+          why: attribution.isError
+            ? "the detector attribution did not answer"
+            : "asking for the detector attribution",
+        },
+      ]
+
   return (
+    <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
       {/* The automatic lane leads (owner ruling): what the platform did without a human. */}
       <AutomationPanel repoId={repoId} />
@@ -113,5 +148,6 @@ export function DetectorsPage() {
 
       <DetectorAccountability repoId={repoId} />
     </section>
+    </ScreenFrame>
   )
 }

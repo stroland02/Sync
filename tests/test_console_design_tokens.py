@@ -1345,3 +1345,53 @@ def test_the_keyframe_registry_widens_when_an_animation_plugin_is_installed(tmp_
     (tmp_path / "package.json").write_text('{"dependencies": {"tailwindcss-animate": "^1"}}', encoding="utf-8")
     violations = _unchosen_keyframes(tmp_path, tmp_path / "src")
     assert violations and "animate-in" in violations[0], "live once the plugin is installed"
+
+
+def _migrated_addresses() -> list[str]:
+    text = (_WEB_SRC / "layouts" / "screen-skeleton.test.tsx").read_text(encoding="utf-8")
+    block = re.search(r"const MIGRATED = \[(.*?)\]", text, re.DOTALL)
+    assert block, "MIGRATED not found in screen-skeleton.test.tsx -- this guard is blind"
+    return re.findall(r'"([^"]+)"', block.group(1))
+
+
+def _screen_frame_consumers(features: Path) -> list[Path]:
+    return [
+        path
+        for path in _iter_source_files(features, suffixes=(".tsx",))
+        if ".test." not in path.name and "layouts/screen-frame" in path.read_text(encoding="utf-8")
+    ]
+
+
+def test_every_migrated_address_has_a_real_screen_frame_consumer():
+    """The ratchet's union check is satisfied by moving a string between two arrays, and never asks
+    whether the screen renders the frame -- so a promotion could be pure bookkeeping.
+
+    It lives here rather than beside the ratchet because the app's tsconfig carries no node types:
+    a `node:fs` import inside `web/src` runs under vitest and fails `npm run build`.
+    """
+    _require_web_src()
+    migrated = _migrated_addresses()
+    consumers = _screen_frame_consumers(_WEB_SRC / "features")
+    assert len(consumers) == len(migrated), (
+        f"{len(migrated)} addresses are marked migrated but {len(consumers)} feature screens "
+        "import layouts/screen-frame -- a promotion the tree does not back. Screens importing it:"
+        + "".join(sorted("\n  " + path.name for path in consumers))
+    )
+
+
+def test_the_consumer_guard_counts_only_screens_that_import_the_frame(tmp_path: Path) -> None:
+    features = tmp_path / "features"
+    features.mkdir()
+    (features / "migrated-page.tsx").write_text(
+        'import { ScreenFrame } from "@/layouts/screen-frame"\n', encoding="utf-8"
+    )
+    (features / "pending-page.tsx").write_text("export function Pending() {}\n", encoding="utf-8")
+    (features / "migrated-page.test.tsx").write_text(
+        'import "@/layouts/screen-frame"\n', encoding="utf-8"
+    )
+
+    consumers = _screen_frame_consumers(features)
+
+    # The unmigrated screen is not counted, and neither is the test file beside the migrated one --
+    # a promotion backed only by a test import is the bookkeeping this guard exists to refuse.
+    assert [path.name for path in consumers] == ["migrated-page.tsx"]

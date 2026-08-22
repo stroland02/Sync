@@ -43,23 +43,75 @@
 
 import { useParams } from "react-router"
 
+import { DEFAULT_LIMIT } from "@/api/client"
+import { useAbandonment, useRuns } from "@/api/queries"
 import { InfoHint } from "@/components/info-hint"
 import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
 import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
 import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { RunsCard } from "@/features/fleet/runs-table"
 import { RunsKpisRegion } from "@/features/runs/runs-kpis-region"
+import { tierOutcomes } from "@/features/runs/tier-outcomes-option"
 import { Breadcrumbs } from "@/layouts/breadcrumbs"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { describeRecordWindow } from "@/lib/record-window"
+import { useFilterParam } from "@/lib/use-filter-param"
+import { useOffsetParam } from "@/lib/use-offset-param"
 
 const QUESTION =
   "What the remediation pipeline attempted, what it abandoned, and which change kinds it does not handle mechanically."
 
 export function RunsPage() {
   const { repoId } = useParams<{ repoId: string }>()
+  // The band's two figures are read at the query keys the table and the corpus cards already use,
+  // off the URL parameters those cards read — so this is the cache entry rather than a second
+  // request, and the band can never describe a page the table is not showing.
+  const [offset] = useOffsetParam("runs_offset")
+  const [outcome] = useFilterParam("runs_outcome")
+  const runs = useRuns({ limit: DEFAULT_LIMIT, offset, outcome })
+  const abandonment = useAbandonment()
+
+  // Built for every query state rather than for success alone: a band that appears only once an
+  // answer arrives renders "not asked yet" and "asked and empty" as the same nothing.
+  const status: StatusSegment[] = [
+    runs.isSuccess
+      ? {
+          kind: "records",
+          label: "Runs",
+          text: describeRecordWindow(
+            offset,
+            runs.data.items.length,
+            { count: runs.data.total, boundReached: false },
+            "run",
+            "runs",
+          ),
+        }
+      : { kind: "none", why: runs.isError ? "the runs did not answer" : "asking for the runs" },
+    abandonment.isSuccess
+      ? {
+          kind: "figure",
+          label: "Corpus attempts",
+          value: tierOutcomes(abandonment.data).totalAttempts.toLocaleString(),
+          scope: "all workspaces",
+        }
+      : {
+          kind: "none",
+          why: abandonment.isError ? "the corpus did not answer" : "asking the corpus",
+        },
+    // Without this the band is a fleet-wide count under one workspace's breadcrumb, which is the
+    // `codebases-panel` defect this screen's scope statement exists to refuse.
+    {
+      kind: "note",
+      text: "Both counts are across every workspace, not this one — neither read can be narrowed to a workspace.",
+    },
+  ]
+
   if (repoId === undefined) return <UnknownRoute />
 
   return (
+    <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
       <div className="flex flex-col gap-field">
         {/* Level name only: the scope trail in the top bar already draws the repository, and
@@ -101,5 +153,6 @@ export function RunsPage() {
       </div>
 
     </section>
+    </ScreenFrame>
   )
 }
