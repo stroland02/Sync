@@ -1054,7 +1054,11 @@ _DECODES_NOTHING = (
     "sync/api/app.py::_int_values_param::ValueError",
     "sync/cli.py::_signing_key::TypeError+ValueError",
     "sync/cli.py::_window_bound::ValueError",
-    "sync/mcp/tools.py::GraphSurface._change_for::KeyError+LookupError+ValueError",
+    # Split from a combined clause by `CI-W565`. What survives here is the narrower half:
+    # `severity_for` raising `UnknownOasdiffLevel` over a severity string the driver decoded
+    # long before the row reached this method. The missing-row half catches `KeyError` and
+    # `LookupError` only, which subsume nothing, so it is correctly absent from this census.
+    "sync/mcp/tools.py::GraphSurface._change_lookup::ValueError",
     "sync/mcp/tools.py::GraphSurface._site_for::KeyError+LookupError+ValueError",
     # `datetime.fromisoformat` over a value an `isinstance(pr_merged_at, str)` above the `try`
     # has already established is a `str`. Nothing under the clause reads bytes, so a decode
