@@ -16,15 +16,15 @@ The rule it exists to enforce: **every agent must shorten the critical path or i
 
 One consequence binds everywhere, because breaking it fails silently: any state key written by parallel branches **must** declare a reducer. Without one, concurrent writes are dropped — no error, no warning, missing results.
 
-Two more, both scoped to the remediation pipeline and both in `.Codex/rules/remediate-stage.md`: the critical path is dominated by the customer's CI run, and `locate → patch → verify` is a data dependency rather than an ordering accident.
+Two more, both scoped to the remediation pipeline and both in `.claude/rules/remediate-stage.md`: the critical path is dominated by the customer's CI run, and `locate → patch → verify` is a data dependency rather than an ordering accident.
 
 ## This is a data pipeline, and it obeys data-pipeline rules
 
-`docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries the argument and names what deliberately does not apply. Two of the six rules are purely about vendor adapters — keep `VendorChange.raw`, and a signature proves origin rather than correctness — and live in `.Codex/rules/signal-stage.md`. The four that bind every session:
+`docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries the argument and names what deliberately does not apply. Two of the six rules are purely about vendor adapters — keep `VendorChange.raw`, and a signature proves origin rather than correctness — and live in `.claude/rules/signal-stage.md`. The four that bind every session:
 
 - **Declare a table's grain as a comment in `schema.sql` before adding a column.** One `migration_outcome` row is one *attempt*, not one finding. A query that counts findings by counting rows is wrong, and wrong quietly.
 - **Every stage is idempotent.** Re-running INDEX, SIGNAL, or DETECT on the same input converges on the same rows. Every table gets a natural key and an explicit conflict clause. `efcc19d` was this bug. **One named exemption:** oasdiff-derived `vendor_change` rows do not converge, because `oasdiff breaking` returns a different answer every run over identical bytes on both pinned versions. Treat that source as at-least-once and do not read a row count from it as a measurement. Nothing else is exempt — INDEX, DETECT and the rest of SIGNAL are bound as written. `docs/superpowers/specs/2026-07-27-sync-pipeline-discipline.md` carries what retires it.
-- **Every binding carries the rung it came from** — `static`, `resolved`, or `observed` — and so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot be fixed. This is enforced rather than asked for: the rung is a column, not a join, and the write refuses an unattributed finding. `.Codex/rules/graph-grain.md` carries where that check sits and why.
+- **Every binding carries the rung it came from** — `static`, `resolved`, or `observed` — and so does every artifact derived from it. A false positive that cannot be attributed to a rung cannot be fixed. This is enforced rather than asked for: the rung is a column, not a join, and the write refuses an unattributed finding. `.claude/rules/graph-grain.md` carries where that check sits and why.
 - **Abandoned runs are data.** `abandon_reason` stays queryable; abandoned attempts are where routing learns which change kinds are not mechanically safe.
 
 ## Non-negotiables
@@ -52,11 +52,11 @@ bind it and none of them is this document:
   `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:427-445` is the
   authoritative block. Three plans built a different one and nobody noticed until a reconciliation
   on 2026-08-05 found three of eleven routes matched, four levels invented and two reparented.
-  `.Codex/rules/console-hierarchy.md` holds it.
+  `.claude/rules/console-hierarchy.md` holds it.
 - **`DESIGN.md` is the token contract** — every colour, size, space and elevation, with the
   arithmetic that proves each contrast, against a 5.05:1 floor. Dark-only as of 2026-08-05.
-  `.Codex/rules/console-surface.md` carries what binds while a screen is open.
-- **The interface is ours.** `.Codex/rules/interface-originality.md`.
+  `.claude/rules/console-surface.md` carries what binds while a screen is open.
+- **The interface is ours.** `.claude/rules/interface-originality.md`.
 
 **One rule sits here rather than in a path rule, because it binds a Python view model exactly as
 much as a React component: no composite score, no health figure, no traffic light, no green dot,
@@ -107,15 +107,15 @@ Git warns `LF will be replaced by CRLF` on every commit. That is expected. Do no
 
 **Test first, always, in both languages.** Write the failing test, run it, watch it fail for the reason you expect, then implement. A test that has never failed has never been shown to test anything.
 
-**TypeScript is test-first too, as of 2026-08-06.** The console has a runner: `cd web && npm test` is `vitest run` over jsdom, wired into CI's `web` job beside `lint` and `build`. Its scope is Decision 6's and it is deliberately narrow — **classification, derivation and structural invariants; never class names, never snapshots.** A snapshot test in a console being actively restyled fails on every correct change and gets deleted within a week by whoever it blocks. Anything about rendered pixels is measured in Chrome and written into `DESIGN.md` instead, which is a different discipline with a different gate. Where a rule *belongs* is a separate question from where it is tested, and `.Codex/rules/console-dev-loop.md` carries it: a rule the payload can answer still belongs in the payload, so two screens cannot disagree about one fact.
+**TypeScript is test-first too, as of 2026-08-06.** The console has a runner: `cd web && npm test` is `vitest run` over jsdom, wired into CI's `web` job beside `lint` and `build`. Its scope is Decision 6's and it is deliberately narrow — **classification, derivation and structural invariants; never class names, never snapshots.** A snapshot test in a console being actively restyled fails on every correct change and gets deleted within a week by whoever it blocks. Anything about rendered pixels is measured in Chrome and written into `DESIGN.md` instead, which is a different discipline with a different gate. Where a rule *belongs* is a separate question from where it is tested, and `.claude/rules/console-dev-loop.md` carries it: a rule the payload can answer still belongs in the payload, so two screens cannot disagree about one fact.
 
-**Executing a plan, decide rather than ask.** `.Codex/rules/autonomous-development.md` carries the rule and the three exceptions that are still the human's. It exists because one blocking question idled a milestone for three hours; a ruling recorded in the plan's ledger costs a fix round to reverse, and waiting costs the afternoon.
+**Executing a plan, decide rather than ask.** `.claude/rules/autonomous-development.md` carries the rule and the three exceptions that are still the human's. It exists because one blocking question idled a milestone for three hours; a ruling recorded in the plan's ledger costs a fix round to reverse, and waiting costs the afternoon.
 
 **A memory that describes who is doing what right now is a hypothesis, not a fact.** `HANDOFF.md`, a coordinator's memory of which worktree owns which milestone, a note about which chat is mid-task — all of it decays in days, because several sessions push to this repository concurrently. A memory about a durable fact (a toolchain quirk, a strategic constraint, a worktree-layout convention) does not carry this risk and can be trusted as read. A memory about live coordination state can be a fortnight stale and read as current, which is worse than no memory at all — it is confident and wrong rather than absent. Verify it against `git log`, `git status`, or `orca worktree ps` before reading deeper into its content, not after acting on it. Measured 2026-08-16: three memory files describing a workspace split and an in-flight task were each independently confirmed stale and fully superseded, only after the check ran.
 
 **A test that cannot fail is worse than no test.** It reports a component as covered while asserting nothing, and nothing downstream ever contradicts it — the import-boundary test's original form exited 0 without parsing its own argument. When a test asserts on a subprocess, an exit code, or an external tool, break the thing deliberately and watch it go red before trusting it.
 
-The rest of the test discipline is in `.Codex/rules/test-discipline.md`, which loads whenever you touch `tests/`: the no-vendor-API and no-model-API rule, why fixtures being ASCII means no test catches a missing `encoding="utf-8"`, and focused-while-iterating then full-before-committing.
+The rest of the test discipline is in `.claude/rules/test-discipline.md`, which loads whenever you touch `tests/`: the no-vendor-API and no-model-API rule, why fixtures being ASCII means no test catches a missing `encoding="utf-8"`, and focused-while-iterating then full-before-committing.
 
 **Never detect a write by comparing against a live mtime.** Filesystems record modification times
 far more coarsely than the clock, so a write that changes no bytes usually leaves `st_mtime_ns`
@@ -132,23 +132,23 @@ time.
 
 ## Model configuration
 
-Always `Codex-opus-5`, always adaptive thinking, always `xhigh` effort. **The two surfaces spell that differently, and they are not interchangeable.**
+Always `claude-opus-5`, always adaptive thinking, always `xhigh` effort. **The two surfaces spell that differently, and they are not interchangeable.**
 
 Messages API — nested, and takes a token ceiling:
 
 ```python
-model="Codex-opus-5"
+model="claude-opus-5"
 thinking={"type": "adaptive"}
 output_config={"effort": "xhigh"}
 max_tokens=64000
 ```
 
-Codex Agent SDK (`ClaudeAgentOptions`) — flat, and has **no** `output_config` and **no** `max_tokens`:
+Claude Agent SDK (`ClaudeAgentOptions`) — flat, and has **no** `output_config` and **no** `max_tokens`:
 
 ```python
 ClaudeAgentOptions(
     cwd=...,
-    model="Codex-opus-5",
+    model="claude-opus-5",
     thinking={"type": "adaptive"},
     effort="xhigh",
     allowed_tools=[...],
@@ -221,10 +221,11 @@ Do not add error handling, fallbacks, or validation for conditions that cannot o
 Three tiers, and they cost very different amounts. Put a convention in the narrowest tier that
 still catches its failure.
 
-**Every turn, for every agent:** this file, and any file in `.Codex/rules/` with no `paths:`
-frontmatter. Two rules load that way today and both are deliberate — `autonomous-development.md`,
-because plan execution is not predicted by any path, and `interface-originality.md`, because the
-directory of competitor screenshots it fences off can be opened from anywhere. **Adding a rule file
+**Every turn, for every agent:** this file, and any file in `.claude/rules/` with no `paths:`
+frontmatter. **One rule loads that way today** — `autonomous-development.md`, because plan execution
+is not predicted by any path. `interface-originality.md` used to be the second and was scoped on
+2026-08-19: `scripts/hook_guard_reads.py` blocks the competitor screenshots deterministically, so
+the rule no longer has to load everywhere to fence them. **Adding a rule file
 without `paths:` promotes it to the most expensive tier in the repository.** Do that on purpose or
 not at all.
 

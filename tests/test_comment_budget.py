@@ -23,6 +23,11 @@ def _run(script: Path) -> subprocess.CompletedProcess[str]:
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
+        # Explicit, because `text=True` alone decodes with the platform codec: on this Windows
+        # runner that is cp1252, and the script's own output carries an em dash. A decode error
+        # here is swallowed and arrives as `stdout=None`, which would read as a guard that ran
+        # and said nothing. `scripts/lint_encoding.py` is what catches the omission.
+        encoding="utf-8",
         check=False,
     )
 
