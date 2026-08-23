@@ -176,7 +176,17 @@ export function RepositoryVendorsPage() {
         >
           All ({vendors.length})
         </Button>
-        {ADAPTER_TIERS.map((tier) => {
+        {/* Every count derives from the same map, so an errored catalogue zeroes them all and the
+            `count === 0` rule below removes every chip -- the control disappears rather than
+            saying why it is gone. */}
+        {!adaptersQuery.isSuccess && (
+          <span className="text-meta text-ink-muted">
+            Tiers are unavailable: the adapter catalogue did not answer, so nothing here has been
+            counted.
+          </span>
+        )}
+        {adaptersQuery.isSuccess &&
+          ADAPTER_TIERS.map((tier) => {
           const count = vendors.filter((v) => adaptersMap.get(v.vendor_id)?.kind === tier).length
           if (count === 0 && tierFilter !== tier) return null
           return (
@@ -293,7 +303,14 @@ export function RepositoryVendorsPage() {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <Badge>{adapter ? adapter.kind : "none"}</Badge>
+                        {/* `none` is a measurement -- this vendor has no adapter. A catalogue
+                            that errored has measured nothing, and printing `none` there claims an
+                            answer the query never gave, on every row at once. */}
+                        {adaptersQuery.isSuccess ? (
+                          <Badge>{adapter ? adapter.kind : "none"}</Badge>
+                        ) : (
+                          <Absent>the adapter catalogue did not answer</Absent>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono">
                         <ServicesCalled

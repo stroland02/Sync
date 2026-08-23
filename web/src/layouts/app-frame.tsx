@@ -30,6 +30,7 @@ import { ErrorSurface } from "@/components/error-surface"
 import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { StatusTargetProvider, useStatusTarget } from "@/layouts/screen-frame"
+import { ScopeTrail } from "@/layouts/scope-switchers"
 import {
   SIDEBAR_WIDTH,
   railState,
@@ -570,19 +571,23 @@ export function AppFrame() {
         <div className="flex min-w-0 flex-1 flex-col">
           <ErrorSurface />
 
-          {/* The scope trail is removed for now on the owner's direction — it and the sidebar
-              were two navigation systems disagreeing about what "Overview" meant, and the
-              redesign that replaces it starts from the new workflows rather than patching the
-              old trail. The bar keeps its height and hairline so the chassis line stays
-              continuous with the sidebar's wordmark row. */}
+          {/* The identity band. The trail was pulled in 2026-08 because it and the sidebar were two
+              navigation systems that could disagree about what "Overview" meant; it returns because
+              it derives every segment from `useLocation()`, so it restates the address rather than
+              holding an opinion about it. It renders before any query resolves -- a bar that waits
+              on `/api/overview` to say where you are says nothing on the slowest navigation, which
+              is when a reader needs it most. */}
           <header
             role="banner"
             className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
           >
             <div className="flex min-w-0 flex-1 items-center">
-              <EnvironmentBadge />
+              <ScopeTrail />
             </div>
-            <CommandPaletteTrigger />
+            <div className="flex shrink-0 items-center gap-section">
+              <EnvironmentBadge />
+              <CommandPaletteTrigger />
+            </div>
           </header>
 
           {/* The routed screen renders inside a centred column capped at 1400px — a page-layout

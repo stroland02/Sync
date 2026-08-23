@@ -33,14 +33,29 @@ afterEach(() => {
 
 const settled = (data: unknown) => ({ isPending: false, isError: false, isSuccess: true, data })
 
-const { useRepositoryCoverage } = vi.hoisted(() => ({ useRepositoryCoverage: vi.fn() }))
+const { useRepositoryCoverage, useAdapters } = vi.hoisted(() => ({
+  useRepositoryCoverage: vi.fn(),
+  useAdapters: vi.fn(),
+}))
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
   useRepositoryCoverage,
+  useAdapters,
 }))
+
+/** The catalogue answered, and holds these adapters. */
+function adapters(items: { vendor_id: string; kind: string }[] = []) {
+  useAdapters.mockReturnValue(settled({ adapters: items }))
+}
+
+/** The catalogue did not answer -- distinct from answering that a vendor has no adapter. */
+function adaptersFailed() {
+  useAdapters.mockReturnValue({ isPending: false, isError: true, isSuccess: false, data: undefined })
+}
 
 /** The coverage answer, in the scope it was computed for. */
 function coverage(repoId: string, byVendor: Record<string, number>) {
+  adapters()
   useRepositoryCoverage.mockReturnValue(
     settled({
       repo_id: repoId,
@@ -124,5 +139,32 @@ describe("the vendors attached to one repository", () => {
 
     expect(container.querySelectorAll("tbody tr").length).toBe(0)
     expect(container.textContent).toContain("computed for a different scope")
+  })
+})
+
+describe("a catalogue that did not answer is not a vendor without an adapter", () => {
+  // Shipped for weeks: the map was built from `data?.adapters ?? []`, so an errored catalogue
+  // rendered the badge `none` on every row -- a positive claim that these vendors have no adapter,
+  // from a query that answered nothing -- and zeroed every tier count, which removed the whole
+  // facet rather than saying why it was gone.
+  it("refuses to print `none` on a row the catalogue never described", () => {
+    coverage("org/one", { stripe: 3 })
+    adaptersFailed()
+
+    renderAt("org/one")
+
+    expect(screen.queryByText("none")).toBeNull()
+    // One per row: every vendor is undescribed when the catalogue does not answer, and each
+    // row says so rather than one banner standing in for all of them.
+    expect(screen.getAllByText(/the adapter catalogue did not answer/i).length).toBeGreaterThan(0)
+  })
+
+  it("says the tiers are uncounted rather than removing the control", () => {
+    coverage("org/one", { stripe: 3 })
+    adaptersFailed()
+
+    renderAt("org/one")
+
+    expect(screen.getByText(/Tiers are unavailable/i)).toBeTruthy()
   })
 })
