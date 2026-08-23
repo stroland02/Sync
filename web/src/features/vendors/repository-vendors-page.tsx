@@ -37,7 +37,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
-import { PageTabs, vendorsTabs } from "@/components/page-tabs"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
 import { ScreenFrame } from "@/layouts/screen-frame"
@@ -207,7 +206,6 @@ export function RepositoryVendorsPage() {
   return (
     <ScreenFrame controls={tierControls} status={status}>
     <section className="flex min-w-0 flex-col gap-8">
-      <PageTabs label="Vendors" tabs={vendorsTabs(repoId ?? "")} />
 
       {/* Dashboard I1. Above the scope check on purpose: the catalogue is its own read with its
           own scope, so it stays true when the overview beneath arrives computed for a different

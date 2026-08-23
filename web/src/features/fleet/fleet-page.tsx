@@ -60,7 +60,6 @@ import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
 import { FleetFacts } from "@/features/fleet/fleet-facts"
 import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
 import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { scopeFromLocation } from "@/layouts/scope-switchers"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
@@ -288,7 +287,6 @@ function FleetScreen({ question }: { question: string }) {
           exists to replace. Recorded conflict: the mock draws a header here and answer 20 rules
           for the answer. */}
       <div className="flex flex-col gap-field">
-        <Breadcrumbs trail={[{ label: "Overview" }]} />
         <p className="text-meta text-muted-foreground">{question}</p>
       </div>
 

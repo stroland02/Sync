@@ -43,8 +43,6 @@ import { KpiStrip } from "@/components/kpi-strip"
 import { MetricPanel } from "@/components/metric-panel"
 import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
-import { PageTabs, solutionsTabs } from "@/components/page-tabs"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -216,8 +214,6 @@ export function CorpusPage() {
   return (
     <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
-      <Breadcrumbs trail={[{ label: "Solutions" }]} />
-      <PageTabs label="Solutions" tabs={solutionsTabs(repoId)} />
 
       {query.isPending && <LoadingState what="the corpus evidence" />}
       {query.isError && (

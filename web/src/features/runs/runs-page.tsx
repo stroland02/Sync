@@ -52,7 +52,6 @@ import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { RunsCard } from "@/features/fleet/runs-table"
 import { RunsKpisRegion } from "@/features/runs/runs-kpis-region"
 import { tierOutcomes } from "@/features/runs/tier-outcomes-option"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -117,7 +116,6 @@ export function RunsPage() {
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes — the page keeps the
             segments the bar does not reach, which here is one. */}
-        <Breadcrumbs trail={[{ label: "Runs" }]} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

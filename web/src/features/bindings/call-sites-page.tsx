@@ -54,7 +54,6 @@ import {
   useSelectionKeys,
   useSelectionParam,
 } from "@/components/detail-layout"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -357,7 +356,6 @@ export function CallSitesPage() {
   return (
     <ScreenFrame controls={controls} status={status}>
     <section className="flex min-w-0 flex-col gap-8">
-      <Breadcrumbs trail={[{ label: "Call sites" }]} />
 
       {/* Dashboards C1, C2, C3. Its own read on its own key, deliberately outside the table's
           success branch: the topology answers a different question over the same rows, and a

@@ -40,7 +40,6 @@ import { ChangeUnitsTable } from "@/features/fleet/change-units-table"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
-import { PageTabs, vendorsTabs } from "@/components/page-tabs"
 import {
   ChangesKpis,
   type ChangesFacets,
@@ -49,7 +48,6 @@ import {
 } from "@/features/vendors/changes-dashboards"
 import { RelativeTime } from "@/components/relative-time"
 import { ErrorState, LoadingState } from "@/components/states"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { describeRecordWindow } from "@/lib/record-window"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
@@ -253,10 +251,6 @@ export function IntegrationChangesPage() {
   return (
     <ScreenFrame status={status}>
     <section className="flex min-w-0 flex-col gap-8">
-      <div className="flex flex-col gap-field">
-        <Breadcrumbs trail={[{ label: "Vendors" }]} />
-        <PageTabs label="Vendors" tabs={vendorsTabs(repoId)} />
-      </div>
 
       {query.isPending && <LoadingState what="the integration changes" />}
       {query.isError && (

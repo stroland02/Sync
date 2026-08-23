@@ -31,6 +31,7 @@ import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { StatusTargetProvider, useStatusTarget } from "@/layouts/screen-frame"
 import { ScopeTrail } from "@/layouts/scope-switchers"
+import { ScreenTabs } from "@/layouts/screen-tabs"
 import {
   SIDEBAR_WIDTH,
   railState,
@@ -581,8 +582,9 @@ export function AppFrame() {
             role="banner"
             className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
           >
-            <div className="flex min-w-0 flex-1 items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-section">
               <ScopeTrail />
+              <ScreenTabs />
             </div>
             <div className="flex shrink-0 items-center gap-section">
               <EnvironmentBadge />

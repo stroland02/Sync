@@ -29,7 +29,6 @@ import {
 } from "@/features/index-graph/tree-map-d3"
 import { CodebaseFactsCard, fetchFacts } from "@/features/repositories/codebase-facts-card"
 import { CodebaseFactsKpis } from "@/features/repositories/codebase-facts-kpis"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -145,7 +144,6 @@ function FileTreeDetail({ repoId }: { repoId: string }) {
       fill
     >
       <section className="flex min-h-0 flex-1 flex-col gap-8">
-        <Breadcrumbs trail={[{ label: "File tree" }]} />
 
         {/* The strip opens this page as it opens every other (owner ruling). Its subject is
             the tree's -- how large this codebase is and what it is made of -- so it reads the

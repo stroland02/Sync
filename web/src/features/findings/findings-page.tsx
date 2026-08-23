@@ -53,7 +53,6 @@ import { useChangeUnits, useDetectors, useWorkspaceFindings } from "@/api/querie
 import { ChangeUnitGroups } from "@/features/findings/change-unit-groups"
 import type { FindingOrder } from "@/api/types"
 import { InfoHint } from "@/components/info-hint"
-import { PageTabs, findingsTabs } from "@/components/page-tabs"
 import { DismissedTally } from "@/features/findings/dismissed-tally"
 import { FindingsKpis } from "@/features/findings/findings-kpis"
 import { ErrorState, LoadingState } from "@/components/states"
@@ -64,7 +63,6 @@ import {
   type TriageTab,
 } from "@/components/triage-tabs"
 import { FindingsTable } from "@/features/findings/findings-table"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -204,8 +202,6 @@ export function FindingsPage() {
       <div className="flex flex-col gap-field">
         {/* Level name only: the scope trail in the top bar already draws the repository, and
             M7-W195 trimmed exactly this repetition from five other routes. */}
-        <Breadcrumbs trail={[{ label: "Findings" }]} />
-        <PageTabs label="Findings" tabs={findingsTabs(repoId)} />
         <p className="text-meta text-muted-foreground">{QUESTION}</p>
       </div>
 

@@ -31,8 +31,6 @@ import {
   fetchRemediationActivity,
 } from "@/features/workflows/remediation-activity"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
-import { PageTabs, findingsTabs } from "@/components/page-tabs"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -136,8 +134,6 @@ export function MetricsPage() {
   return (
     <ScreenFrame status={status}>
       <section className="flex flex-col gap-8">
-        <Breadcrumbs trail={[{ label: "Findings" }]} />
-        <PageTabs label="Findings" tabs={findingsTabs(repoId)} />
         {/* Dashboard T1. Every page opens with its strip (owner ruling), and here the tiles
             are the totals the two charts below sum to -- which is what makes the charts
             checkable rather than merely decorative. */}

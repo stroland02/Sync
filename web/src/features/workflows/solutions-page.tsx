@@ -33,11 +33,9 @@ import { MetricPanel } from "@/components/metric-panel"
 import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
 import { RelativeTime } from "@/components/relative-time"
-import { Breadcrumbs } from "@/layouts/breadcrumbs"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { PageTabs, solutionsTabs } from "@/components/page-tabs"
 import { useTickets } from "@/api/queries"
 import { TicketFunnel } from "@/features/tickets/ticket-funnel"
 import { describeRecordWindow } from "@/lib/record-window"
@@ -127,9 +125,7 @@ export function SolutionsPage() {
   return (
     <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
-      <Breadcrumbs trail={[{ label: "Solutions" }]} />
       <SolutionsFunnelRegion repoId={repoId} />
-      <PageTabs label="Solutions" tabs={solutionsTabs(repoId)} />
 
       {query.isPending && <LoadingState what="the opened pull requests" />}
       {query.isError && (
