@@ -1,73 +1,16 @@
 /**
  * The Solution Workflow: what Sync actually did about one finding, node by node.
  *
- * Competing tools show a black box and a verdict, and ask a reviewer to trust the verdict.
- * Sync checkpoints every node of its remediation graph, so this screen can show the run
- * itself — which node ran, which one the graph owes a visit, which never started, and what
- * each one produced. Everything else in this console exists to get a reviewer here.
+ * Read from the LangGraph checkpointer, a different database from the API Dependency Graph, so this
+ * route carries no provenance envelope — no `indexed_at`, no binding rung, and nothing invented to
+ * fill the gap. No per-node elapsed time exists in any checkpoint it reads (B123) and a superseded
+ * generation is not reachable from it (B124): `GET /api/workflows/{finding_id}` answers with the
+ * newest thread only.
  *
- * The route carries no provenance envelope, unlike the other four. It reads the LangGraph
- * checkpointer tables and the rest read the graph; they are two databases, so there is no
- * `indexed_at` and no rung to report and nothing is invented to fill the gap.
- *
- * ## Recomposed as a narrative by M7-W179
- *
- * `docs/superpowers/briefs/2026-08-07-substrate-workflow.md` is the mapping table this port was
- * gated on. Read that before porting a level, not this docstring.
- *
- * **The reading order is the change.** This screen rendered a status list: a banner saying how the
- * run ended, then a card containing eight nodes. It now reads as an investigation — what arrived,
- * what happened in order with each node's evidence attached to it, and how it ended **at the point
- * where it ended**. On an abandoned run that last part is the whole of it: the reason sits under the
- * evidence of the node that failed and over the nodes reading "the run ended before the graph got
- * here", instead of in a banner four screens above them.
- *
- * **Two of the direction's asks are not in this payload and neither is invented.** There is no
- * per-node elapsed time anywhere in a checkpoint this route reads (B123), and a superseded
- * generation is not reachable from it (B124) — `GET /api/workflows/{finding_id}` answers with the
- * newest thread only. The rail says how many generations there are and where the others are listed,
- * which is what the payload supports, and the opening entry says plainly that the sequence carries
- * no times.
- *
- * ## The header spans both columns, and the title is "Run N", by M7-W193
- *
- * The header was inside the 360px rail with the finding's 32-character identifier at the display
- * step. It is now the grid's first row across both columns, and the title is which run this is among
- * the generations the checkpointer holds. **The finding's own name is not in it, and that is a
- * ruling rather than an omission** — it is not on this payload, and fetching it would put this
- * page's only focal point behind a query that 404s for every patched or abandoned finding, which is
- * exactly the run most worth reading. `lib/detail-title.tsx` carries the argument; the breadcrumb
- * and the rail's first row both still reach the finding in one click.
- *
- * ## A persistent fact rail beside two tabs, by the page-IA plan's section 1
- *
- * The owner's sentence redefined the screen: it is where a human intervenes in work that is still
- * in progress, not a record of what an agent did. Three things follow, and each is a structural
- * change rather than a restyle.
- *
- * **The rail holds still.** It carried the sequence before, which meant the run's identity scrolled
- * away exactly when a reviewer reading the transcript needed it. `run-fact-rail.tsx` now owns it and
- * sticks; the sequence moved into the main pane where it belongs.
- *
- * **Two tabs over one run.** `Activity` is the turn-by-turn transcript — the narrative, the
- * checkpoint timeline, and the reply box at the bottom. `Findings` is the settled output. Nothing is
- * duplicated across them: the run's outcome appears in Activity at the point in the narrative where
- * the run stopped, which is what makes an abandoned run legible, and in Findings as the verdict the
- * tab exists to state. Only one tab is on screen at a time, so that is one fact in two places a
- * reader reaches by two different questions rather than the same fact at two weights.
- *
- * **The reply box cannot send, and says so.** `M10` built resume-on-review-comment; the route that
- * would carry a reviewer's turn into a run does not exist, because the API is read-only.
- * `reply-box.tsx` carries the refusal and names the missing route.
- *
- * ## On `ScreenFrame`, by CI-W557
- *
- * The tab toggle is the screen's one narrowing control, so it moved into the controls band and now
- * spans both columns rather than sitting inside the right one. The status band counts the two things
- * this route can count — the graph's nodes and the timeline entries assembled from them — and both
- * are gated on the one query that answers for either, so neither can print a figure derived from a
- * payload that has not arrived. There is no records segment because nothing here pages: the
- * checkpointer answers with one run whole.
+ * The title is "Run N" and not the finding's own name — a ruling, recorded in `lib/detail-title.tsx`:
+ * the name is not on this payload, and fetching it would put the page's only focal point behind a
+ * query that 404s for every patched or abandoned finding. Mapping table for the port:
+ * `docs/superpowers/briefs/2026-08-07-substrate-workflow.md`.
  */
 
 import { FetchedAt } from "@/components/fetched-at"
@@ -98,11 +41,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/t
 
 
 import { findingHref } from "@/lib/hrefs"
-/**
- * The rail's "Node by node" panel, stated before the sequence it wraps rather than left implicit
- * in the eight rows themselves — a reader meeting a `▶` glyph should already know it means the
- * checkpointer's own last word on that node, not a claim that the node is running right now.
- */
 const NODE_BY_NODE_INTRO =
   "Eight nodes, in the order the graph wires them. A standing is the checkpoint's own answer — nothing here says a node is executing."
 
@@ -111,20 +49,17 @@ export interface WorkflowPageProps {
 }
 
 export function WorkflowPage() {
-  // The identifier comes out of the URL, so it is checked before a request is made for it.
   const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (repoId === undefined || findingId === undefined) return <UnknownRoute />
   return <Workflow repoId={repoId} findingId={findingId} />
 }
 
 /**
- * A background refetch failed, but the last good run is still in hand.
+ * A background refetch failed, but the last good run is still in hand — React Query keeps `data`
+ * across a failed refetch.
  *
- * React Query keeps `data` across a failed refetch, so the honest move is to keep showing
- * it rather than swap the screen for an alarm the reviewer would read as "the run broke" —
- * it is the console's refresh that broke, not the run. Whether the view heals itself differs
- * by case: a live run is still being polled and the next successful hit clears this on its
- * own, but a terminal run has no background poll left to do that, so it gets the retry.
+ * Only a terminal run gets the retry button: a live run is still being polled, so the next
+ * successful hit clears this on its own.
  */
 function StaleBanner({
   fetchedAt,
@@ -165,13 +100,9 @@ function StaleBanner({
 }
 
 /**
- * What `RunOutcome` may say about this screen, which renders all eight nodes as a narrative.
- * The panel does not know that; this page does.
- *
- * Three of these named a position that has moved. The outcome is no longer above the sequence, so
- * nothing is "below" it in the sense these were written for — and the `abandoned` sentence gains
- * what the old arrangement could not carry, because there was no *where* for the outcome to be
- * relative to. The `opened` sentence is untouched: "under `open_pr`" names a heading.
+ * What `RunOutcome` may say about this screen, which renders all eight nodes as a narrative and
+ * places the outcome inside the sequence rather than above it. The panel does not know that; this
+ * page does, so the sentences that depend on position live here.
  */
 const BELOW: BelowThisPanel = {
   inFlight: `Every entry here is the last state the checkpointer recorded, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
@@ -187,11 +118,6 @@ const BELOW: BelowThisPanel = {
 
 /**
  * The narrative's opening entry: what arrived, and what this screen can and cannot see about it.
- *
- * Every sentence but the third was already on this screen — the checkpointer-is-a-different-database
- * paragraph from the foot of the page, and the two sentences from the description of the card the
- * sequence used to sit inside. They are here because this is where a reader meets them before
- * reading anything they qualify, rather than after.
  */
 function Arrival({ repoId, findingId }: { repoId: string; findingId: string }) {
   return (
@@ -221,10 +147,8 @@ function Arrival({ repoId, findingId }: { repoId: string; findingId: string }) {
 }
 
 /**
- * What the band says about the poll, which is a fact about the console rather than the run.
- *
- * A refetch that failed does not stop the poll on a live run and does not start one on a finished
- * run, so the two axes are stated together rather than collapsed into "stale".
+ * A failed refetch does not stop the poll on a live run and does not start one on a finished run,
+ * so the band states both axes rather than collapsing them into "stale".
  */
 function pollNote(terminal: boolean, refreshFailed: boolean): string | null {
   if (refreshFailed) {
@@ -232,8 +156,8 @@ function pollNote(terminal: boolean, refreshFailed: boolean): string | null {
       ? "Could not refresh, and the run reached a terminal outcome, so nothing is polling in the background — these are the last figures the console read."
       : `Could not refresh — these are the last figures the console read, and polling continues every ${WORKFLOW_POLL_MS / 1000} seconds.`
   }
-  // Byte-identical to `FetchedAt`'s `idleReason`, which renders whenever polling is off. One of
-  // the two, not both: a fact written twice will disagree with itself.
+  // `FetchedAt`'s `idleReason` already states the terminal case in the content column, so the band
+  // carries only what that does not — one of the two, never both.
   return terminal ? null : `Re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`
 }
 
@@ -241,9 +165,7 @@ function pollNote(terminal: boolean, refreshFailed: boolean): string | null {
  * The two things this route can count, both read off the one payload that answers for either.
  *
  * A run whose node list is genuinely empty counts `0`; a run nothing has answered for is absent and
- * the caller renders `none` instead. The same holds for the timeline, whose entry count is the
- * nodes that stamped a checkpoint plus the outcome — so it is routinely lower than the node count,
- * and the scope says by how many rather than leaving a reader to subtract.
+ * the caller renders `none` instead.
  */
 function runStatus(
   state: WorkflowState,
@@ -263,9 +185,8 @@ function runStatus(
       kind: "figure",
       label: "Timeline entries",
       value: activityEntries(state).length.toLocaleString(),
-      // `activityEntries` is the stamped nodes PLUS one closing entry once the run has an
-      // outcome, so nodes minus omitted does not reconcile on any terminal run -- which is most
-      // of them. A scope that explains the gap wrongly is worse than one that does not explain it.
+      // `activityEntries` is the stamped nodes PLUS one closing entry once the run has an outcome,
+      // so nodes minus omitted does not reconcile on any terminal run -- which is most of them.
       scope: [
         omitted === 0
           ? "every node wrote a checkpoint timestamp"
@@ -277,8 +198,6 @@ function runStatus(
         .filter(Boolean)
         .join(", "),
     },
-    // `FetchedAt`'s `idleReason` already states the terminal case in the content column, so the
-    // band carries only what that does not: the poll interval and a failed refresh.
     ...(pollNote(terminal, refreshFailed) === null
       ? []
       : [{ kind: "note" as const, text: pollNote(terminal, refreshFailed)! }]),
@@ -290,8 +209,7 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
   const data = query.data
   const terminal = isRunTerminal(data)
 
-  // Short, because the content column carries the same answer in full: two rows spelling out that
-  // state's whole sentence would be one fact written three times. Each still says which nothing it is.
+  // Short: the content column states the same case in full. Each still says which nothing it is.
   const failure = query.isError ? (
     query.error instanceof NotFoundError ? (
       <Absent>no run for this finding</Absent>
@@ -300,9 +218,8 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
     )
   ) : null
 
-  // Built for every state the query can be in, not only the answered one: a band that appears on
-  // success alone renders "nothing has been asked yet" and "asked, and this run holds nothing" as
-  // the same blank strip.
+  // Built for every state the query can be in: a band that appears on success alone renders
+  // "nothing has been asked yet" and "asked, and this run holds nothing" as the same blank strip.
   const status: StatusSegment[] =
     data === undefined
       ? [
@@ -318,10 +235,8 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
       : runStatus(data, terminal, query.isError)
 
   return (
-    /* The toggle is the screen's one narrowing control, so it publishes into the controls band --
-       which puts the tab list outside the pane it switches, and therefore outside `Tabs` in the
-       DOM. Radix carries selection through context rather than nesting, so the root wraps the
-       frame and both bands sit inside it. */
+    /* The tab list publishes into the controls band, outside the pane it switches: Radix carries
+       selection through context rather than nesting, so the root may wrap the whole frame. */
     <Tabs defaultValue="activity" className="flex min-w-0 flex-col gap-8">
       <ScreenFrame
         status={status}
@@ -373,10 +288,6 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
                     onRetry={() => void query.refetch()}
                   />
                 ) : (
-                  /* The healthy counterpart to `StaleBanner`. That banner only appears once a
-                     refetch has failed, so until now a run being watched and a run whose screen had
-                     gone quiet for a terminal outcome looked identical — both just sat there. This
-                     says which. */
                   <FetchedAt
                     at={query.dataUpdatedAt}
                     polling={!terminal}

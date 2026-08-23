@@ -1,94 +1,20 @@
 /**
- * Signals: a catalogue of what is attached to one repository's graph, grouped by the role it plays.
+ * Signals: every integration attached to one repository's graph, grouped by the role it plays
+ * (`docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:455-459`).
  *
- * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:435` places this
- * level under API Services, and `:455-459` (section *M5 — The integration layer*) defines the
- * three roles. Both the role names and their relationship sentences live in `roles.ts` rather
- * than in this file, because the header below states which roles have an integration attached
- * and which do not, and a header that restated the roster would be the same fact in two places.
+ * Role names and relationship sentences live in `roles.ts`, never spelled here:
+ * `tests/test_console_signals_roles.py` fails when this file names a role.
  *
- * **A group per role is not a promise that every role has one.** This deployment has two: the
- * static index gives the vendor role a real answer (which API services this repository's code
- * calls), and `observed_call` / `observed_shape` / `observed_error_window` give the signal-source
- * role a real answer (what traffic showed up, and how it behaved). Nothing in this tree gives the
- * third role an answer at all — no adapter, no configuration table, no row anywhere
- * names a Slack channel, a Linear issue, a Notion page, or a GitHub pull request as a configured
- * destination. Sync *does* open pull requests, at the Solution Workflow's own Pull Request level
- * (`:442`) — but that is the product delivering its remediation output through a hardcoded
- * mechanism, not an integration this graph tracks the way it tracks an API service or a
- * signal source. There is nothing to query, which is why that group is not an empty table: an
- * empty table would claim a question was asked.
- *
- * Grouped by role because the graph attaches at three different points, not because three
- * columns read as balanced. A call site, a traffic row and a delivery would each join the graph
- * differently if the third one existed, and showing them as one undifferentiated "integrations"
- * list would erase the distinction the data actually carries.
- *
- * B94 records what is still missing and why it is blocked rather than merely undone: the level
- * is complete as an honest account of this deployment, and incomplete as the specification's
- * Signals level, until M5 attaches a delivery destination and gives the correlation join something
- * to render across all three.
- *
- * ## Ported onto the chassis and the vendored substrate by M7-W175
- *
- * `docs/superpowers/briefs/2026-08-07-substrate-signals.md` is the mapping table this port was
- * gated on. Read that before porting a level, not this docstring.
- *
- * **The chassis arrives here in the same work item as the substrate, because this level never had
- * it.** The screen opened on a bare 22px heading while the route's own question — the only sentence
- * anywhere that names all three roles in one breath — sat unread in `lib/routes.ts`.
- * `routeQuestion` now renders it, and it does so without this file spelling a role name, which is
- * what `tests/test_console_signals_roles.py` requires.
- *
- * **The M7 plan's catalogue direction lands as a grid inside each role rather than across all
- * three.** One card per integration, grouped by role, with the unattached role's card in the same
- * grid rhythm as its peers rather than as a full-bleed block at the foot of the screen. The
- * signal-source role is the exception and it is measured rather than assumed: its three panels each
- * hold a table of seven to twelve columns, and a table that wide at a third of the width wraps every
- * row.
- *
- * **No `ControlBar`.** The one thing a bar could carry here is the scope, and the scope is already
- * stated by the breadcrumb, by the mono `h1`, and by the paragraph below. A fourth copy is a fact
- * that will disagree with itself.
- *
- * **A chip beside each role, and no dot anywhere.** `ATTACHED` / `NOT ATTACHED` is the absence
- * vocabulary `.claude/rules/console-surface.md` permits as a badge, drawn monochrome. A dot would
- * claim a lifecycle state this data does not hold: attachment is a fact about configuration and
- * says nothing about whether anything reported recently. A source that has not reported is rendered
- * as the sentence it already has.
- *
- * ## Layout extracted from the mock, 2026-08-18 (`docs/superpowers/plans/2026-08-18-mock-layout-
- * extraction.md`)
- *
- * `docs/console-mock/index.html`'s `isSignals` section (line 519) draws three role cards side by
- * side in one `grid-template-columns:repeat(3, minmax(0,1fr))` row, each a bordered card with an
- * eyebrow-plus-title header and a footer note pinned to the card's bottom edge with `margin-top:
- * auto`. That is the structure this file now uses in place of the three stacked full-width
- * sections it had before: one `RoleGroup` per grid column rather than one per vertical block.
- *
- * The mock's fixture draws exactly one integration per role card, with a fixed row-list of its
- * recent reports. Real data does not hold that shape — the vendor role can carry zero, one, or
- * several vendors — so `RoleGroup` takes the mock's *card* (border, radius, eyebrow, title slot,
- * footer note) rather than the mock's *row list*: `AttachmentChip` and the relationship sentence
- * fill the header where the mock puts an integration's own name, and the same real components
- * this level already rendered (`SubjectCatalogue`, `SignalSourcePanel`, `NotAttachedState`) fill
- * the body, unmodified. The two protected intro paragraphs stay above the grid — the mock's
- * fixture screen has no equivalent sentence, and the layout gains the room for them rather than
- * dropping them to match a drawing with no data behind it.
- *
- * ## Onto `ScreenFrame`
- *
- * Three sets page here and a status band renders one pager, so the owner ruled that the controls
- * bar names which set the band counts and the three tables give up their footers to it. The live
- * alternative was the binding surface's — keep one set's footer under its own rows — and no set
- * here is the screen's subject the way call sites are there.
+ * Nothing in this tree gives the human-surface role an answer — no adapter, no configuration
+ * table, no row names a delivery destination — so it renders a stated absence rather than an empty
+ * table, which would claim a question had been asked. B94 tracks what would attach it.
  *
  * A null `telemetry_attached_at` renders "never attached" and never `0`; `signals-page.test.ts`
  * holds it.
  *
- * **The screen still names its repository nowhere** — no breadcrumb, no scope line, no identity
- * band. Deferred with this port rather than by it: identity is the chassis band's, and inventing
- * one here would be a fourth copy of a scope three other surfaces already state.
+ * Owner ruling: the controls bar names which set the band counts and the three tables give up
+ * their footers to it. The live alternative was the binding surface's — each set's footer under
+ * its own rows — and no set here is the screen's subject the way call sites are there.
  */
 
 import { useParams } from "react-router"
@@ -129,8 +55,8 @@ function names(roles: readonly SignalRole[]): string {
   return roles.map((entry) => entry.role).join(", ")
 }
 
-/** Labels are `signal-source-panel.tsx`'s panel headings verbatim: a heading is what binds the
-    bar and the band to a table, and a synonym leaves the pager pointing at nothing nameable. */
+/** Labels below are `signal-source-panel.tsx`'s panel headings verbatim; a synonym leaves the bar
+    and the band pointing at no table anyone can name. */
 const SET_KEYS = ["calls", "shapes", "error_windows"] as const
 
 type SetKey = (typeof SET_KEYS)[number]
@@ -169,8 +95,6 @@ function toSetKey(raw: string | null): SetKey {
 }
 
 /**
- * What the band says about the set the bar has selected.
- *
  * The payload reports `0` for all three sets from a repository nothing ever watched, so a count
  * printed on the never-attached branch is a measured quiet over traffic nobody looked at (B157).
  */
@@ -212,8 +136,7 @@ export function signalsStatus(
         set.singular,
         set.plural
       ),
-      // No pager over a set with no rows: the panel draws its account of the nought rather than a
-      // table there, so there is no page for the buttons to move to.
+      // An empty set draws its account of the nought, not a table, so there is no page to move to.
       paging:
         page.total === 0
           ? undefined
@@ -238,7 +161,6 @@ export function signalsStatus(
   ]
 }
 
-/** A set's total, or which silence this one is — the two are never the same ink. */
 function setTotal(state: ObservedState, key: SetKey): ReactNode {
   if (state.kind === "pending") return <Absent>still asking</Absent>
   if (state.kind === "errored") return <Absent>did not answer</Absent>
@@ -281,13 +203,8 @@ function SetSelector({
   )
 }
 
-/**
- * Whether anything of this role is attached, as a word.
- *
- * The recipe is `RungBadge`'s: the furniture register, a hairline, no fill, no hue. Two members,
- * both legible without colour, and the vocabulary is absence — which is one of the three
- * `.claude/rules/console-surface.md` permits a badge to carry.
- */
+/** A word rather than a dot: attachment is a fact about configuration, and a dot would claim a
+    lifecycle state — whether anything reported recently — that this data does not hold. */
 function AttachmentChip({ attached }: { attached: boolean }) {
   return (
     <span className="furniture shrink-0 rounded-control border border-line px-field py-field text-meta text-ink-muted">
@@ -299,10 +216,8 @@ function AttachmentChip({ attached }: { attached: boolean }) {
 function RoleGroup({ role, children }: { role: SignalRole; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-section rounded-surface border border-line bg-card p-section">
-      {/* A role group contains panels, so the two cannot share a step: levelling them renders a
-          container and its contents at one weight. The role name was `--text-section` while a
-          panel heading was furniture; M7-W188 moved the panel heading onto the section step, so
-          the role name moves up to `--text-page` to keep the ordering it always had. */}
+      {/* A role group contains panels, so the two cannot share a type step; the panel heading sits
+          on the section step, which puts this one above it. */}
       <div className="flex flex-col gap-field">
         <div className="flex flex-wrap items-center gap-row">
           <h2 className="text-page">{role.role}</h2>
@@ -325,10 +240,8 @@ export function SignalsPage() {
   return <SignalsDetail repoId={repoId} />
 }
 
-/**
- * The strip's own read, kept out of `SignalsDetail` so a telemetry route that does not answer
- * costs the tiles and not the three role panels beneath, which read different routes entirely.
- */
+/** Its own read, kept out of `SignalsDetail` so a telemetry route that does not answer costs the
+    tiles and not the three role panels beneath, which read different routes entirely. */
 function SignalsKpisRegion({ repoId }: { repoId: string }) {
   const query = useRepositoryObserved(repoId)
   if (query.isPending) return <LoadingState what="the observed telemetry totals" />
@@ -394,14 +307,10 @@ function SignalsDetail({ repoId }: { repoId: string }) {
       status={signalsStatus(selected, state, repoId)}
     >
     <section className="flex flex-col gap-8">
-      {/* Dashboard S1. Every tile distinguishes "no source attached" from "attached and quiet",
-          which is the distinction this whole rung exists to make and the one an empty page
-          otherwise erases. */}
       <SignalsKpisRegion repoId={repoId} />
 
-      {/* What the screen draws moves behind the ⓘ (owner direction 2026-08-18); the sentence
-          that stays visible is the absence-versus-zero one, because which roles have anything
-          behind them is a claim, not an explanation, and a tooltip is a disclosure. */}
+      {/* Owner direction 2026-08-18: what the screen draws moves behind the ⓘ, and only the
+          absence-versus-zero sentence stays on screen. */}
       <div className="flex items-center gap-row">
         <h2 className="text-section">Attached by role</h2>
         <InfoHint label="About signals">
@@ -414,11 +323,8 @@ function SignalsDetail({ repoId }: { repoId: string }) {
         </InfoHint>
       </div>
 
-      {/* `repeat(3, minmax(0,1fr))`: the mock's own three-across row for the three M5 roles,
-          rather than the three stacked full-width sections this screen drew before the
-          2026-08-18 layout extraction. `xl:` guards the same content from collapsing three
-          data-heavy cards into an unreadable single column below that breakpoint -- the mock
-          renders at a fixed desktop width and does not have to make that call. */}
+      {/* Three across at `xl` only: the signal-source panels hold tables of seven to twelve
+          columns, and a table that wide at a third of a narrower screen wraps every row. */}
       <div className="grid auto-rows-fr gap-section xl:grid-cols-3">
         <RoleGroup role={VENDOR_ROLE}>
           <SubjectCatalogue repoId={repoId} />
@@ -433,10 +339,7 @@ function SignalsDetail({ repoId }: { repoId: string }) {
         </RoleGroup>
       </div>
 
-      {/* Dashboard 7. Propless: it reads `repoId` from the path param, as this page does, because
-          telemetry attaches per repository and a fleet-wide version of the question has no single
-          answer. It holds two refusals of its own -- it states what it counted over rather than
-          summing a page, and it prints the figure instead of drawing a slope through one day. */}
+      {/* Propless: it reads `repoId` from the path param itself. */}
       <ObservedVolumeCard />
     </section>
     </ScreenFrame>

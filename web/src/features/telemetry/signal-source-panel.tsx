@@ -2,41 +2,13 @@
  * The signal-source role's three panels: what traffic showed up for this repository, what
  * shape it had, and where error rates moved.
  *
- * Extracted out of what used to be the standalone `ObservedTelemetryPage`, now that the
- * Signals level (`signals-page.tsx`) is the screen this content lives on. Two of Sync's five
- * detectors raise findings from watched traffic rather than from source, and the graph holds
- * `observed_call`, `observed_shape` and `observed_error_window` for exactly that reason.
+ * No composite figure and no chart — `observed_error_window.error_count` has no denominator in its
+ * own table, and an error window is not a verdict. No catalogue is derived from `source` either
+ * (Ruling 12): `observed_call` carries none, and these rows are one page of each table, so distinct
+ * sources read off them would be a fact about the page rather than the deployment.
  *
- * **The honesty constraint here is sharper than on most panels.** An observed call proves a
- * call site was exercised. It does not prove the binding is correct, and it does not prove the
- * call site still exists in the source. An absence is two different facts — nobody watched, or
- * somebody watched and nothing came — and `telemetry_attached_at` is what separates them, so the
- * empty states below name which one this is rather than listing what they cannot tell apart.
- *
- * No composite figure and no chart: `observed_error_window.error_count` has no denominator in
- * its own table, a shape drift is not an error, and an error window is not a verdict. `source`
- * on a shape or error window names the *mechanism* that produced the row (`interceptor`,
- * `error-payload`, `replay`) — never a vendor's name, per `sync.graph.sources`'s own docstring
- * — so nothing here claims to know which product reported it.
- *
- * ## Ported onto the substrate by M7-W175
- *
- * `docs/superpowers/briefs/2026-08-07-substrate-signals.md` is the mapping table this port was
- * gated on. Three panels, three totals, and each total is its own panel's grain — which is why each
- * takes the figure register here. **A total of zero takes no figure at all.** Rendering `0` at the
- * largest register on the screen would draw an absence as a measured zero; the empty state beneath
- * says in words which of the two this one is.
- *
- * **No catalogue is derived from `source`.** The mechanisms it names would be the truest reading of
- * this role, and two facts refuse it: `observed_call` carries no `source` at all, so a catalogue
- * built from the other two tables would imply the calls came from nowhere; and the rows here are
- * one page of each table, so a set of distinct sources read off them is a fact about the page
- * wearing the clothes of a fact about the deployment. Ruling 12.
- *
- * **The three footers left with `ScreenFrame`.** One band renders one pager, so `signals-page.tsx`
- * carries a bar naming which of these three sets it counts and pages; the offsets stay here because
- * they are this read's parameters. Each panel heading is the word that bar uses for its set, so a
- * rename here is a rename there.
+ * Each panel heading is the word `signals-page.tsx`'s pager bar uses for its set, so a rename here
+ * is a rename there; the offsets stay here because they are this read's parameters.
  */
 
 import { DEFAULT_LIMIT } from "@/api/client"
@@ -52,10 +24,8 @@ import { useOffsetParam } from "@/lib/use-offset-param"
 /**
  * Telemetry attached and quiet: the panel-by-panel nothing, which is a measured nought.
  *
- * `telemetry_attached_at` is what separates this from never-watched (`B157`). Once a source is
- * attached the three panels genuinely differ — calls can arrive while no error window does — so
- * each states its own absence. The never-attached case is one fact about the repository rather
- * than three about the panels, and `NeverAttached` below is where it is said once.
+ * `telemetry_attached_at` is what separates this from never-watched (`B157`); once a source is
+ * attached the three panels genuinely differ, since calls can arrive while no error window does.
  */
 function nothingArrived(what: string, repoId: string, attachedAt: string) {
   return {
@@ -68,18 +38,9 @@ function nothingArrived(what: string, repoId: string, attachedAt: string) {
 }
 
 /**
- * Nothing ever watched this repository, said once for the whole role.
+ * Nothing ever watched this repository, said once for the whole role rather than once per panel.
  *
- * **This replaced three identical copies of itself.** Each of the three panels rendered the same
- * paragraph whenever `telemetry_attached_at` was null — which is every deployment that has not
- * attached a source, so the common case drew one fact three times, verbatim, and the role's card
- * became a wall of repeated prose with no data in it. Nothing is lost by saying it once: the
- * sentence names all three things that would have been recorded, so a reader still learns what
- * telemetry holds from a screen that has none.
- *
- * It names the command, as every empty state here does since `CI-W514`. A reader told they have no
- * telemetry and not how to attach any has been given a diagnosis and no next step, and this is the
- * one empty state on the level whose remedy is a command rather than a wait.
+ * It names the command, as every empty state here does since `CI-W514`.
  */
 function NeverAttached() {
   return (
@@ -96,7 +57,7 @@ function NeverAttached() {
   )
 }
 
-/** A total at the figure register, or nothing at all when the total is zero. */
+/** No figure at all when the total is zero: a rendered `0` draws an absence as a measured nought. */
 function countMetric(total: number, unit: string) {
   return total === 0 ? undefined : { value: total.toLocaleString(), unit }
 }
@@ -121,9 +82,6 @@ export function SignalSourcePanel({ repoId }: { repoId: string }) {
 
   const { calls, shapes, error_windows, telemetry_attached_at } = query.data
 
-  // Said once for the whole role rather than once per panel. Three panels each reporting that
-  // nobody ever watched is one fact about the repository written three times, and the three
-  // panels below have nothing to distinguish until a source exists to distinguish them.
   if (telemetry_attached_at === null) return <NeverAttached />
 
   return (

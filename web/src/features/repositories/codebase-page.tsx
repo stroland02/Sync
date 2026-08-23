@@ -1,55 +1,13 @@
 /**
  * Codebase: the selected repository, and the root of everything beneath it.
  *
- * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:397` names this
- * level "Codebase (the selected repository)" and the amended hierarchy (`:433`) keeps it —
- * this screen did not exist until the 2026-08-05 reconciliation found the console had no way
- * to select one, and everything below it (`/vendors/:id`, `/detectors`, the old `/codebase`)
- * was answering fleet-wide for exactly that reason. This is the fix: pick a repository here,
- * and drill down from it into the vendor rows below.
- *
- * ## The pipeline and its doors, owner ruling 2026-08-19
- *
- * This screen carried four tables — open findings, index coverage, change units, observed
- * telemetry — and every one of them was a truncated copy of a screen an operator could open in
- * full. Three were duplicates outright (Vendors and Findings carry the first, Services the second,
- * Telemetry the fourth); Change units moved to Integration changes and Provenance to Detectors,
- * because both were mounted nowhere else.
- *
- * What replaced them says what this screen is for: `PipelineStrip` draws the five
- * `WORKFLOW_STAGES` with one measured figure each, and `WorkflowGrid` lists every page a workspace
- * can reach under the stage it answers, with the question `lib/routes.ts` already declares for it.
- * The Overview is where a reader learns the shape of the loop and picks a door, not where every
- * screen is previewed.
- *
- * **There is still no figure combining the stages, and there is not going to be.** A scalar over
- * "what we read", "what we watched" and "what is broken" would collapse three different kinds of
- * not-knowing onto one axis. The strip refuses scale for the same reason: its stages count call
- * sites, integrations, calls and findings, and no width may assert a ratio between those.
- *
- * Every figure on this screen and on every screen below it is scoped to `repoId`, and each answer
- * names the scope it was computed in — so picking a different repository changes every number here
- * rather than some of them.
- *
- * ## Ported onto the chassis and the vendored substrate by M7-W173
- *
- * `docs/superpowers/briefs/2026-08-07-substrate-codebase.md` is the mapping table this port was
- * gated on, and it is what to read before porting a level, not this docstring.
- *
- * **The chassis arrives here in the same work item as the substrate, because this level never had
- * it.** Fleet took the chassis in M7-W163 and the substrate in M7-W172; Codebase had neither, and
- * rendered a bare 22px heading over three stacked full-width panels while the route's own question
- * sat unread in `lib/routes.ts`. So `PageHeader` now carries that question at the display step and
- * a `ControlBar` states the scope and holds one action.
- *
- * ## No runs panel and no repair record, until `B149` closes
- *
- * `RunsCard` and `CorpusSummaryCard` both name this screen as their destination and both are
- * unmounted anywhere in the console. Neither is mounted here, and the reason is the payload rather
- * than the layout: `RunRow` carries no `repo_id`, and `/api/corpus` accepts no repository
- * parameter, so either one placed under this heading would render every repository's rows beneath
- * one repository's name. That is the attribution `M14-W265` removed from the repository cards.
- * `codebase-page.test.tsx` holds the absence so a later tidy cannot restore it quietly.
+ * Every figure here and on every screen below is scoped to `repoId` and names the scope it was
+ * computed in. Owner ruling 2026-08-19: this screen shows the shape of the loop and the doors into
+ * it, never a truncated copy of a screen below it, and no figure combines the five stages -- a
+ * scalar over "what we read", "what we watched" and "what is broken" would collapse three kinds of
+ * not-knowing onto one axis. No runs panel and no repair record until `B149` closes: `RunRow`
+ * carries no `repo_id` and `/api/corpus` accepts no repository parameter, so either would render
+ * every repository's rows under one repository's name (`codebase-page.test.tsx` holds the absence).
  */
 
 import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
@@ -68,13 +26,7 @@ import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 
-/**
- * The two map previews, fed one read.
- *
- * One query for both: they draw the same bindings, and two components each issuing their own
- * would be two round trips for one answer -- React Query dedupes on the key, which is what
- * makes the pair free rather than double.
- */
+/** The two map previews, fed one read: both draw the same bindings. */
 function MapsRegion({ repoId }: { repoId: string }) {
   const query = useRepositoryGraph(repoId)
   if (query.isPending) return <LoadingState what="the codebase maps" />
@@ -112,22 +64,17 @@ export function CodebasePage() {
 
 /**
  * The screen itself, split from the route guard so the band's two reads are unconditional hooks.
- *
- * Each figure renders what the region it summarises renders, so the band and the body cannot
- * disagree: operations mirrors `ApiSurfacePanel`, call sites and integrations mirror the
- * pipeline's Index and Signal cells.
  */
 function CodebaseScreen({ repoId }: { repoId: string }) {
-  // Both reads are already issued below — the maps take the graph, the API surface takes the
-  // coverage — and React Query dedupes on the key, so counting them here costs no request.
+  // Both reads are already issued below and React Query dedupes on the key, so counting them
+  // here costs no request.
   const graph = useRepositoryGraph(repoId)
   const coverage = useRepositoryCoverage(repoId)
 
   const surface =
     coverage.isSuccess && coverage.data.repo_id === repoId ? coverage.data.by_binding_status : null
-  // `null` when coverage has not answered, a number when it has -- including a counted zero.
-  // Collapsing the two rendered an unanswered read as a measured absence, under a scope
-  // string that asserts the measurement happened.
+  // `null` until coverage answers, a number once it has -- including a counted zero. Collapsing
+  // the two rendered an unanswered read as a measured absence under a scope string asserting it.
   const operations =
     surface === null ? null : Object.values(surface).reduce((sum, n) => sum + n, 0)
 
@@ -135,8 +82,7 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
     {
       kind: "figure",
       label: "Operations",
-      // An empty rollup is a repository with no call site at all rather than three examined
-      // zeroes (`binding_status_rollup`), so it reads as absence here as it does in the panel.
+      // An empty `binding_status_rollup` is no call site at all, not three examined zeroes.
       value: operations === null ? null : operations.toLocaleString(),
       scope: "counted once each, however many times called",
     },
@@ -171,24 +117,11 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
   return (
     <ScreenFrame status={status}>
       <section className="flex flex-col gap-8">
-        {/* The header opens the page, as it does on every other screen. It rendered fourth here —
-            below Getting Started, the strip and both maps — which left everything above it
-            unlabelled and unscoped on the one screen a workspace opens on. */}
         <PageHeaderRegion repoId={repoId} />
-        {/* The pipeline opens the body: five stages, one measured figure each, every stage a door.
-            It replaced the four-tile fact strip rather than sitting beneath it -- the strip's four
-            numbers were this shape's first four cells, and one instrument beats two. */}
         <PipelineStrip repoId={repoId} />
-        {/* Getting started follows: the workspace identity and the full loop's probed
-            prerequisites, which are instructions rather than measurements. */}
         <GettingStartedCard repoId={repoId} />
-        {/* Both maps, side by side, each opening its own full view. A codebase has two shapes
-            worth seeing — what it calls, and how it is laid out — and neither summarises the
-            other. Their analytics moved with them: topology to the integration map's page, the
-            technical census to the file tree's, which is what keeps this screen scannable. */}
         <MapsRegion repoId={repoId} />
-        {/* Good news as a number (W541, owner-picked from the scrapped build): how much of the
-            API surface is verified clean, beside how much is at risk. */}
+        {/* Good news as a number, W541 owner-picked: verified clean beside at risk. */}
         <ApiSurfaceRegion repoId={repoId} />
         <WorkflowGrid repoId={repoId} />
       </section>
@@ -219,10 +152,7 @@ function PageHeaderRegion({ repoId }: { repoId: string }) {
   )
 }
 
-/**
- * The API surface panel's own read: binding-status counts off the coverage payload, kept out
- * of the page body so a coverage failure costs this panel and not the maps beside it.
- */
+/** Its own read, so a coverage failure costs this panel and not the maps beside it. */
 function ApiSurfaceRegion({ repoId }: { repoId: string }) {
   const query = useRepositoryCoverage(repoId)
   if (!query.isSuccess || query.data.repo_id !== repoId) return null
