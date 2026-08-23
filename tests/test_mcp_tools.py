@@ -476,3 +476,47 @@ def test_the_real_graph_store_satisfies_the_reader_protocol():
         expected = list(inspect.signature(getattr(GraphReader, name)).parameters)
         actual = list(inspect.signature(getattr(GraphStore, name)).parameters)
         assert expected == actual, f"{name} signature drifted: surface expects {expected}, store has {actual}"
+
+
+class _UnreadableChangeGraph(FakeGraph):
+    """A graph holding a change whose row this build cannot read back.
+
+    Not contrived: `vendor_change.severity` carries no CHECK constraint, and `schema.sql` argues
+    at length that it should not, so a severity outside `sync.core.Severity` can sit in a table
+    that predates the vocabulary it violates. `severity_for` raises `UnknownOasdiffLevel`, which
+    is a `ValueError`.
+    """
+
+    def get_vendor_change(self, change_id):
+        raise ValueError(f"{change_id}: unknown oasdiff level 7")
+
+
+def test_a_change_that_was_never_recorded_and_one_that_cannot_be_read_are_different_answers():
+    # Both used to render `change_kind: None` with `spec_diff: {}` and nothing else, so an agent
+    # could not tell "nothing was recorded here" from "something was, and the row is broken".
+    # Only the second is actionable, and it was the one being hidden.
+    never = _surface(
+        findings=[_finding("f1", "cs1", None)], sites=[_site("cs1")], changes=[]
+    )
+    unreadable = GraphSurface(
+        _UnreadableChangeGraph(
+            findings=[_finding("f1", "cs1", "vc1")], sites=[_site("cs1")], changes=[]
+        ),
+        feed_fetched_at=FETCHED,
+    )
+
+    never_row = never.whats_at_risk()["items"][0]
+    unreadable_row = unreadable.whats_at_risk()["items"][0]
+
+    assert never_row["change_kind"] is None
+    assert unreadable_row["change_kind"] is None
+    assert never_row["change_absent_because"] != unreadable_row["change_absent_because"]
+    assert "no vendor change is recorded" in never_row["change_absent_because"]
+    assert "cannot read it back" in unreadable_row["change_absent_because"]
+
+
+def test_a_readable_change_names_no_absence_at_all():
+    row = _default().whats_at_risk()["items"][0]
+
+    assert row["change_kind"] is not None
+    assert row["change_absent_because"] is None

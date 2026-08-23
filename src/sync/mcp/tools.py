@@ -350,7 +350,7 @@ class GraphSurface:
         Shared rather than duplicated because the by-id read's whole contract is that it
         returns what the page returns; two literals would let that drift silently.
         """
-        change = self._change_for(finding)
+        change, change_absent_because = self._change_lookup(finding)
         return {
             "file": site.path,
             "line": site.line,
@@ -359,6 +359,8 @@ class GraphSurface:
             "operation": site.operation_id,
             "vendor": site.vendor_id,
             "change_kind": change.kind if change else None,
+            # Which nothing, when there is one. Null alongside a present `change_kind`.
+            "change_absent_because": change_absent_because,
             "severity": finding.severity,
             "finding_id": finding.id,
             # Per row, because this is the only level at which it can be right: a page built
@@ -376,6 +378,9 @@ class GraphSurface:
         here: no CI ran, and an empty string in a field named for a run would report one that
         does not exist.
         """
+        # Deliberately NOT carrying the absence reason: `sync.core.Evidence` names three fields
+        # and `test_the_response_carries_the_three_fields_the_spec_names` pins the set. The
+        # distinction lives on the at-risk row, which is this console's own shape to widen.
         resolved = change if change is not None else self._change_for(finding)
         site = self._site_for(finding)
         return {
@@ -396,12 +401,35 @@ class GraphSurface:
             return None
 
     def _change_for(self, finding: Finding) -> VendorChange | None:
+        return self._change_lookup(finding)[0]
+
+    def _change_lookup(self, finding: Finding) -> tuple[VendorChange | None, str | None]:
+        """The change a finding names, and -- when there is none -- which nothing it is.
+
+        Three outcomes, two of which used to render identically: a finding with no change
+        recorded and a change this build cannot read back both returned `None`, so an agent
+        reading `change_kind: null` beside `spec_diff: {}` could not tell "nothing was ever
+        recorded" from "something was, and the row is unreadable". Only the second is actionable.
+
+        Not hypothetical: `vendor_change.severity` carries no CHECK, and `schema.sql` argues at
+        length that it should not, so a severity outside `sync.core.Severity` can sit in a table
+        predating the vocabulary it violates. `severity_for` raises `UnknownOasdiffLevel`, a
+        `ValueError`, which the old clause swallowed alongside a genuinely missing row.
+        """
         if finding.vendor_change_id is None:
-            return None
+            return None, "no vendor change is recorded against this finding"
         try:
-            return self._graph.get_vendor_change(finding.vendor_change_id)
-        except (KeyError, LookupError, ValueError):
-            return None
+            return self._graph.get_vendor_change(finding.vendor_change_id), None
+        except (KeyError, LookupError):
+            return None, f"the recorded change {finding.vendor_change_id} is no longer in the graph"
+        except ValueError:
+            # The exception text is not carried. It quotes the row that failed validation, and a
+            # row failing validation is untrusted content -- echoing it puts an unvalidated
+            # vendor string in front of an agent inside a field describing the failure.
+            return None, (
+                f"the recorded change {finding.vendor_change_id} is stored but this build "
+                "cannot read it back"
+            )
 
     def _changes_for_site(self, site: CallSite) -> list[VendorChange]:
         return [

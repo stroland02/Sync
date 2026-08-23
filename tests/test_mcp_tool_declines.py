@@ -155,14 +155,17 @@ def test_a_vendor_change_the_graph_cannot_find_leaves_the_finding_standing():
     assert row["change_kind"] is None
 
 
-def test_a_vendor_change_row_that_does_not_validate_is_served_as_no_change():
-    """`tools.py:294-295`, entered by `ValueError` -- the decline *inside* the reader.
+def test_a_vendor_change_row_that_does_not_validate_says_it_is_unreadable():
+    """The decline *inside* the reader, now named rather than silent.
 
     The row is present, `severity` is a value the model does not accept, and
-    `VendorChange(**row)` raises `pydantic.ValidationError`. That is a `ValueError`, so the
-    catch takes it, and a graph holding a change it cannot parse answers an agent identically
-    to a graph holding no change. This is the behaviour as it stands, pinned rather than
-    endorsed.
+    `VendorChange(**row)` raises `pydantic.ValidationError` -- a `ValueError`. It is still not a
+    tool error and `change_kind` is still null, because there is no kind to report. What changed
+    is that the row now says WHY: a stored-and-unreadable change is a defect somebody can act on,
+    and it used to arrive as the same silence as a finding with no change at all.
+
+    The offending value stays out of the payload. It is untrusted content from a row that failed
+    validation, and echoing it would put it in front of an agent as though it were a kind.
     """
     graph = RowBackedGraph(
         [_finding("f-unparseable", "vc-off-literal-severity")],
@@ -174,16 +177,23 @@ def test_a_vendor_change_row_that_does_not_validate_is_served_as_no_change():
 
     assert row["finding_id"] == "f-unparseable"
     assert row["change_kind"] is None
+    assert "cannot read it back" in row["change_absent_because"]
     assert "catastrophic" not in json.dumps(response)
 
 
-def test_the_three_silences_are_one_answer_to_an_agent():
-    """The finding this file exists to record.
+def test_the_three_silences_are_three_answers_to_an_agent():
+    """The finding this file existed to record, and its repair.
 
     A finding with no vendor change, a finding whose change the graph lost, and a finding whose
-    change the graph holds and cannot parse produce the same row apart from its identifier. An
-    agent has no field to branch on, and the envelope adds none: `binding_source` describes how
-    the binding was established, not whether reading it succeeded.
+    change the graph holds and cannot parse used to produce the SAME row apart from its
+    identifier -- so an agent had no field to branch on, and the envelope added none, because
+    `binding_source` describes how a binding was established and not whether reading it
+    succeeded.
+
+    They are three different facts and only two are actionable: a lost row and an unreadable one
+    are defects, and no-change-recorded is an answer. `change_absent_because` is the field to
+    branch on, and this asserts the three differ rather than asserting their exact wording --
+    the distinction is the contract, the sentences are not.
     """
     absent = RowBackedGraph([_finding("f", None)], {})
     missing = RowBackedGraph([_finding("f", "vc-vanished")], {})
@@ -192,12 +202,13 @@ def test_the_three_silences_are_one_answer_to_an_agent():
         {"vc-off-literal-severity": _row("off-literal-severity")},
     )
 
-    payloads = [
-        _call(graph, "sync_whats_at_risk")["result"]["structuredContent"]
+    reasons = [
+        _rows_of(_call(graph, "sync_whats_at_risk"))[0]["change_absent_because"]
         for graph in (absent, missing, unparseable)
     ]
 
-    assert payloads[0] == payloads[1] == payloads[2]
+    assert all(reason for reason in reasons), reasons
+    assert len(set(reasons)) == 3, reasons
 
 
 def test_an_unreadable_change_is_not_reported_as_a_tool_error():

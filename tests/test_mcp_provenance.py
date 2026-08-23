@@ -48,6 +48,9 @@ PAGE_KEYS = ENVELOPE_KEYS | {"items", "total", "next_offset"}
 RISK_ROW_KEYS = {
     "file", "line", "symbol", "operation", "vendor", "change_kind", "severity", "finding_id",
     "binding_source", "repo_id",
+    # `change_kind` is null for two different reasons -- no change was recorded, or one was and
+    # the row cannot be read back -- and only the second is actionable. The row says which.
+    "change_absent_because",
 }
 EXPLAIN_KEYS = ENVELOPE_KEYS | {
     "symbol", "operation", "vendor", "args_keys", "response_fields_read", "sdk_version",
