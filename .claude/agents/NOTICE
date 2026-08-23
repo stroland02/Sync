@@ -1,0 +1,50 @@
+Three agent definitions in this directory are adapted from the `agent-compatibility`
+plugin in github.com/cursor/plugins, MIT-licensed, at commit 461255613064:
+
+  docs-reliability-review.md   <- agent-compatibility/agents/docs-reliability-review.md
+  startup-review.md            <- agent-compatibility/agents/startup-review.md
+  validation-review.md         <- agent-compatibility/agents/validation-review.md
+
+What was taken: the review dimensions, the scoring anchors, the instruction to pick a
+specific score rather than a round bucket, the "score the damage from the drift rather
+than the existence of drift" rule, and the guardrail against inferring a startup failure
+from a bound port or an existing process.
+
+What was changed: the upstream workflow opens by running a published Cursor CLI scanner
+and blending its deterministic score at 70%. That CLI is not installed here and would be
+a third-party dependency for a review that does not need one, so step one is dropped and
+each agent reads this repository's own surfaces instead. Every agent is grounded in
+measured local instances -- the ratchet with no caller, the false light-block claim, the
+zombie socket, the vacuously-green assertions -- because a rubric that names the defect
+a repository has actually paid for is worth more than a generic one.
+
+Frontmatter is translated to the Claude Code shape: `readonly: true` becomes a tool list
+with no Edit or Write, and `model: fast` becomes an explicit model.
+
+The twenty SaaS-integration plugins in that marketplace are deliberately not adopted.
+This repository runs Postgres behind its own read-only API; a Salesforce or HubSpot
+connector is context spent on a stack that is not here, which is the cost the console's
+own plugin trim of 2026-08-21 measured at roughly 15,000 tokens per session.
+
+---
+
+MIT License
+
+Copyright (c) 2026 Cursor
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR OTHER DEALINGS IN THE SOFTWARE.
