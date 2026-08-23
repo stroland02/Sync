@@ -155,9 +155,15 @@ def corpus_lessons_reader(store) -> "Callable[[VendorChange], str]":
             row for row in store.migration_outcome_abandon_reasons_by_kind()
             if row["change_kind"] == change.kind
         ]
-        for row in sorted(reasons, key=lambda r: -r["attempt_count"])[:3]:
+        # `n`, not `attempt_count`. The two rollups this function reads name their tally
+        # differently -- `migration_outcome_rollup_by_kind` emits `attempt_count`, and
+        # `migration_outcome_abandon_reasons_by_kind` emits `count(*) AS n` -- and reading the
+        # first spelling from the second raised `KeyError` on the only input the block exists
+        # for: a change kind with a prior abandonment. It surfaced as a `make_patch` exception
+        # folded into `abandon_reason`, so it read as a patch failure rather than a lookup bug.
+        for row in sorted(reasons, key=lambda r: -r["n"])[:3]:
             lines.append(
-                f"- tier {row['tier']} abandoned {row['attempt_count']} time(s): "
+                f"- tier {row['tier']} abandoned {row['n']} time(s): "
                 f"{row['abandon_reason_code']}"
             )
         return "\n".join(lines)

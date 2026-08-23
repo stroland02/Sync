@@ -156,9 +156,12 @@ def test_the_corpus_teaches_the_agent_about_its_change_kind():
             ]
 
         def migration_outcome_abandon_reasons_by_kind(self):
+            # `n`, matching `GraphStore`'s `count(*) AS n`. This double returned
+            # `attempt_count` -- the OTHER rollup's spelling -- which is why the reader's
+            # KeyError never surfaced in the suite while raising against every real store.
             return [
                 {"change_kind": "response-property-removed", "tier": 2,
-                 "attempt_count": 2, "abandon_reason_code": "static_verify_exhausted"},
+                 "n": 2, "abandon_reason_code": "static_verify_exhausted"},
             ]
 
     from sync.core.models import VendorChange as VC
