@@ -39,6 +39,15 @@ const OFF_RAIL_STAGE: Record<string, WorkflowStage> = {
   "/repositories/:repoId/integration-changes": "Signal",
   "/repositories/:repoId/metrics": "Detect",
   "/repositories/:repoId/corpus": "Remediate",
+  // The five subject-taking routes. They are not workspace-reachable -- `workspacePages()` filters
+  // on the parameter list, so none of them joins the Overview's pipeline -- but the command palette
+  // groups by stage and asserts every declared route appears exactly once, so a route with no stage
+  // is a route the palette cannot place.
+  "/repositories/:repoId/vendors/:vendorId": "Signal",
+  "/repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId": "Index",
+  "/repositories/:repoId/findings/:findingId": "Detect",
+  "/repositories/:repoId/findings/:findingId/workflow": "Remediate",
+  "/repositories/:repoId/findings/:findingId/workflow/pull-request": "Remediate",
 }
 
 export function stageOf(route: RouteEntry): WorkflowStage | null {

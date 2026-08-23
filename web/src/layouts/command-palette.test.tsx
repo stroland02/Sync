@@ -23,11 +23,11 @@ import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { CommandPaletteProvider, paletteGroups } from "@/layouts/command-palette"
-import { GRAPH_LEVELS, ROUTES } from "@/lib/routes"
+import { ROUTES, WORKFLOW_STAGES } from "@/lib/routes"
 
 afterEach(cleanup)
 
-const rows = () => paletteGroups(ROUTES, GRAPH_LEVELS).flatMap((group) => group.rows)
+const rows = () => paletteGroups(ROUTES, WORKFLOW_STAGES).flatMap((group) => group.rows)
 
 describe("paletteGroups", () => {
   it("lists every declared route exactly once, so the palette is the whole map", () => {
@@ -58,11 +58,14 @@ describe("paletteGroups", () => {
     }
   })
 
-  it("groups by level in the specification's order and drops a level with nothing under it", () => {
-    const groups = paletteGroups(ROUTES, GRAPH_LEVELS)
-    const order = groups.map((group) => group.level)
+  it("groups by pipeline stage in the rail's order and drops a stage with nothing under it", () => {
+    // Stage rather than level, so the palette and the navigation rail sort the same screens the
+    // same way. The assertion above is what makes this safe: every declared route must land in a
+    // stage, and a route with none would silently vanish from the console's map of itself.
+    const groups = paletteGroups(ROUTES, WORKFLOW_STAGES)
+    const order = groups.map((group) => group.heading)
 
-    expect(order).toEqual([...GRAPH_LEVELS].filter((level) => order.includes(level)))
+    expect(order).toEqual([...WORKFLOW_STAGES].filter((stage) => order.includes(stage)))
     for (const group of groups) {
       expect(group.rows.length).toBeGreaterThan(0)
     }

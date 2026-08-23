@@ -33,6 +33,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router"
 
+import { stageOf } from "@/lib/stage-pages"
 import {
   Command,
   CommandDialog,
@@ -44,10 +45,10 @@ import {
 } from "@/components/ui/command"
 import {
   DESTINATIONS,
-  GRAPH_LEVELS,
+  WORKFLOW_STAGES,
   ROUTES,
   type DestinationEntry,
-  type GraphLevel,
+  type WorkflowStage,
   type RouteEntry,
 } from "@/lib/routes"
 
@@ -59,7 +60,6 @@ export interface PaletteRow {
   /** The registry's path, shown to the reader. Equal to `path`; named for what it is on screen. */
   pattern: string
   label: string
-  question: string
   /**
    * `null` on a destination this palette can navigate to. Otherwise the operator's words for
    * where a subject is picked — the row is listed and cannot be followed.
@@ -68,18 +68,17 @@ export interface PaletteRow {
 }
 
 export interface PaletteGroup {
-  /** A graph level, or the heading a destination that is not a level is grouped under. */
-  level: GraphLevel | typeof DESTINATIONS_HEADING
+  /** A pipeline stage, or the heading a destination that is not on the pipeline is grouped under. */
+  heading: WorkflowStage | typeof DESTINATIONS_HEADING
   rows: readonly PaletteRow[]
 }
 
 /**
  * Where a destination that is not a level is listed.
  *
- * Its own group rather than folded into one of the nine. `.claude/rules/console-hierarchy.md`
- * is explicit that a screen may exist without being a level, and a palette that filed Settings
- * under `Fleet` would be the console asserting a place on the ladder that the specification does
- * not give it.
+ * Its own group rather than folded into a stage. `.claude/rules/console-hierarchy.md` is explicit
+ * that a screen may exist without being a level, and Settings is on no pipeline stage either --
+ * filing it under `Index` would assert a place in the run that it does not have.
  */
 export const DESTINATIONS_HEADING = "Deployment" as const
 
@@ -88,22 +87,25 @@ export const DESTINATIONS_HEADING = "Deployment" as const
  *
  * Pure over its arguments so the rule it encodes is testable as a derivation rather than by
  * driving a dialog — `.claude/rules/console-dev-loop.md` bounds the frontend suite to exactly
- * that. A level with no route under it is dropped, so an unbuilt level costs nothing here.
+ * that. A stage with no route under it is dropped.
+ *
+ * Grouped by pipeline stage rather than graph level, so the palette and the navigation rail sort
+ * the same screens the same way: a reader who learns the rail's five headings does not meet nine
+ * different ones the moment they press ⌘K.
  */
 export function paletteGroups(
   routes: readonly RouteEntry[],
-  levels: readonly GraphLevel[]
+  stages: readonly WorkflowStage[]
 ): readonly PaletteGroup[] {
-  return levels
-    .map((level) => ({
-      level,
+  return stages
+    .map((stage) => ({
+      heading: stage,
       rows: routes
-        .filter((route) => route.level === level)
+        .filter((route) => stageOf(route) === stage)
         .map((route) => ({
           path: route.path,
           pattern: route.path,
           label: route.label,
-          question: route.question,
           lookUpFrom: route.params.length === 0 ? null : route.reachedFrom,
         })),
     }))
@@ -113,20 +115,19 @@ export function paletteGroups(
 /** `paletteGroups`, plus the destinations that are not levels, as a group of their own. */
 export function paletteSections(
   routes: readonly RouteEntry[],
-  levels: readonly GraphLevel[],
+  stages: readonly WorkflowStage[],
   destinations: readonly DestinationEntry[]
 ): readonly PaletteGroup[] {
-  const groups = paletteGroups(routes, levels)
+  const groups = paletteGroups(routes, stages)
   if (destinations.length === 0) return groups
   return [
     ...groups,
     {
-      level: DESTINATIONS_HEADING,
+      heading: DESTINATIONS_HEADING,
       rows: destinations.map((destination) => ({
         path: destination.path,
         pattern: destination.path,
         label: destination.label,
-        question: destination.question,
         lookUpFrom: null,
       })),
     },
@@ -204,12 +205,12 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
           <CommandInput placeholder={`${PALETTE_LABEL}…`} />
           <CommandList>
             <CommandEmpty>No declared route matches.</CommandEmpty>
-            {paletteSections(ROUTES, GRAPH_LEVELS, DESTINATIONS).map((group) => (
-              <CommandGroup key={group.level} heading={group.level}>
+            {paletteSections(ROUTES, WORKFLOW_STAGES, DESTINATIONS).map((group) => (
+              <CommandGroup key={group.heading} heading={group.heading}>
                 {group.rows.map((row) => (
                   <CommandItem
                     key={row.path}
-                    value={`${row.label} ${row.question} ${row.pattern}`}
+                    value={`${row.label} ${row.pattern}`}
                     disabled={row.lookUpFrom !== null}
                     onSelect={row.lookUpFrom === null ? () => select(row.path) : undefined}
                   >
