@@ -97,7 +97,7 @@ pythonpath = ["."]
 # take it from 133s to 46s; the default `--dist load` is what those numbers are from,
 # and `--dist loadfile` is 78s because three files hold 79% of the wall clock.
 # Spinning up workers costs about 4s flat, so use `-n0` for a focused run.
-addopts = "-m 'not e2e' -n auto"
+addopts = "-m 'not e2e and not network' -n auto"
 # The watchdog B132 bought, kept because it is what found B132. A single unbounded wait makes
 # the whole gate unreadable: an operator cannot tell a starved run from a stuck one, so they
 # kill it, and then nothing is known about the other 1800 tests either. This turns any future
@@ -110,6 +110,10 @@ timeout = 900
 timeout_method = "thread"
 markers = [
     "e2e: end-to-end test; makes network and model calls",
+    # Network but no model and no spend. Deselected by default for the same reason `e2e` is --
+    # the gate must answer offline -- but run deliberately, because the questions it asks are
+    # the ones committed fixtures are structurally unable to notice: a vendor deleting a file.
+    "network: reads a live public document; no credential, no model, no spend",
     "docker: requires a working local Docker Desktop with Linux containers",
 ]
 

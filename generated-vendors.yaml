@@ -1,4 +1,4 @@
-# Vendors served by reading the manifest their SDK generator commits.
+# Vendors served by reading the specification their SDK is generated from.
 #
 # Adding one is this file and nothing else. `docs/superpowers/specs/2026-07-27-sync-adapter-targets.md`
 # has the argument: supporting a generator costs a day and yields every vendor using it, while
@@ -10,7 +10,14 @@
 #   vendor_id     what `--vendor` selects, and what every row this vendor produces is keyed by
 #   repo          owner/name of the repository the generated SDK lives in
 #   manifest      `.stats.yml` for Stainless, `.speakeasy/workflow.yaml` for Speakeasy
+#   spec          a path in `repo` holding the specification itself
 #   sdk_bindings  which package a customer imports to reach this vendor, per language
+#
+# A row names exactly one of `manifest` and `spec`. Discovery through a generator's manifest is
+# one way to reach a specification rather than the definition of having one: a vendor may commit
+# the document itself, or stop publishing a manifest this deployment can read. Naming both leaves
+# the winner to whichever branch is read first, and naming neither is a vendor that appears
+# configured and is not -- `_generated_vendors` refuses both.
 #
 # A language binding carries up to three names, because they come apart independently and only
 # an unscoped vendor collapses them: `package` is what the manifest declares, `module` is what
@@ -73,9 +80,16 @@
       distribution: anthropic
       module: anthropic
 
+# The stale row `CI-W581` repaired, and the reason it is `spec` rather than `manifest`.
+# `openai/openai-python` deleted `.stats.yml` on 2026-08-12 in a commit titled "remove Stainless
+# attribution and infrastructure" -- they left the generator, so no manifest convention this
+# deployment reads applies to them any more. The specification itself is still committed, and
+# measured on 2026-08-23 it is genuinely diffable rather than one document served twice:
+# 2,868,834 bytes at v3.3.1 against 2,757,171 at v3.0.0. It 404s at v1.99.0, so the usable
+# window starts after v2.
 - vendor_id: openai
   repo: openai/openai-python
-  manifest: .stats.yml
+  spec: api_reference/openapi.transformed.yml
   sdk_bindings:
     typescript:
       package: openai

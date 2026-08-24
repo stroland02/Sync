@@ -74,8 +74,8 @@ symbols would dispatch to the wrong reader with every test still green.
 | A6 | The tier resolves symbols from a staged map, not only a checkout | **landed** |
 | A7 | Every registered vendor's bindings come from its row | **landed** |
 | A8 | A row may name its specification instead of discovering one | **landed** |
-| A9 | OpenAI's row names the specification it actually publishes | next |
-| A10 | A row may name several documents (twilio) | |
+| A9 | OpenAI's row names the specification it actually publishes | **landed** |
+| A10 | A row may name several documents (twilio) | next |
 | A11 | A row declares which oasdiff kinds are noise | |
 | A12 | Stripe is a row; the hand-written adapter is deleted | |
 | A13 | Twilio is a row; the registry names no vendor at all | |

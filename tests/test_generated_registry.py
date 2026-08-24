@@ -374,6 +374,11 @@ def test_the_shipped_configuration_names_only_supported_generator_conventions():
 
     assert shipped, "the shipped configuration registers no vendor at all"
     for entry in shipped:
+        if not entry.get("manifest"):
+            # A row naming its specification names no convention; that it names exactly one of
+            # the two is enforced by `_generated_vendors` and tested there.
+            assert entry.get("spec")
+            continue
         assert entry["manifest"] in {STAINLESS_MANIFEST, SPEAKEASY_MANIFEST}
         assert entry["repo"].count("/") == 1
 

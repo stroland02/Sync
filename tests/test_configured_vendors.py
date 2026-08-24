@@ -36,7 +36,11 @@ MANIFESTS = Path(__file__).parent / "fixtures" / "manifests"
 # What the file's own header documents, and the whole of what the loader reads. Spelled out
 # because the check is that a row carries exactly these: `_generated_vendors` reads `sdk_bindings`
 # with `.get`, so a row misspelling it loses every binding it meant to declare and raises nothing.
-DOCUMENTED_FIELDS = {"vendor_id", "repo", "manifest", "sdk_bindings"}
+DOCUMENTED_FIELDS = {"vendor_id", "repo", "manifest", "spec", "sdk_bindings"}
+
+# Present on every row. `manifest` and `spec` are the alternation and are checked separately,
+# because a row carries exactly one and equality against the documented set would demand both.
+REQUIRED_FIELDS = {"vendor_id", "repo", "sdk_bindings"}
 
 # Generator-times-language pairs a vendor is configured against and no extraction rule covers,
 # accepted as of 2026-07-29.
@@ -91,9 +95,13 @@ def _indexed_languages() -> set[str]:
 
 def _configured_pairs() -> set[tuple[str, str]]:
     """Every (generator, language) the shipped configuration asks to be served."""
+    # A row naming its specification directly has no generator convention to name, and asking
+    # which extractor serves it is a question about the SDK checkout the deployment stages --
+    # not about this file. Those rows are covered by the reachability probe instead.
     return {
         (_generator_of(row["manifest"]), language)
         for row in _rows()
+        if row.get("manifest")
         for language in row.get("sdk_bindings") or {}
     }
 
@@ -115,11 +123,20 @@ def test_every_row_carries_exactly_the_fields_the_header_documents():
 
     for row in rows:
         assert isinstance(row, dict), f"{row!r} is not a mapping"
-        assert set(row) == DOCUMENTED_FIELDS, (
-            f"{row.get('vendor_id', row)} declares {sorted(set(row))}, and the header of "
-            f"{CONFIGURATION} documents {sorted(DOCUMENTED_FIELDS)}"
+        unknown = set(row) - DOCUMENTED_FIELDS
+        assert not unknown, (
+            f"{row.get('vendor_id', row)} declares {sorted(unknown)}, which the header of "
+            f"{CONFIGURATION} does not document and the loader does not read"
         )
-        for field in ("vendor_id", "repo", "manifest"):
+        assert REQUIRED_FIELDS <= set(row), (
+            f"{row.get('vendor_id', row)} is missing {sorted(REQUIRED_FIELDS - set(row))}"
+        )
+        # Exactly one, which is the rule `_generated_vendors` enforces and this file states.
+        assert bool(row.get("manifest")) != bool(row.get("spec")), (
+            f"{row.get('vendor_id', row)} names "
+            f"{'both manifest and spec' if row.get('manifest') else 'neither manifest nor spec'}"
+        )
+        for field in ("vendor_id", "repo"):
             assert isinstance(row[field], str) and row[field], (
                 f"{row['vendor_id']}: {field} is {row[field]!r}"
             )
@@ -141,6 +158,8 @@ def test_every_configured_manifest_names_a_parser_that_exists():
     parser retired tomorrow takes the vendors configured against it down with it here.
     """
     for row in _rows():
+        if not row.get("manifest"):
+            continue
         assert row["manifest"] in _PARSERS, (
             f"{row['vendor_id']} is configured against manifest '{row['manifest']}' and "
             f"sync.signals.generated.manifest parses {sorted(_PARSERS)}"
