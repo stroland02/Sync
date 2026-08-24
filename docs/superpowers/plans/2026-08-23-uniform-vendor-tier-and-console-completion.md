@@ -176,7 +176,11 @@ information.*
   control was retired on 2026-08-21, and `BindingSurfacePage` is on the frame with no exemption.
   What the survey found instead was six ink token names holding two colours, now declared once
   each and read through `var()`.
-- **C7.** Terminal maximum-density pass across the migrated screens.
+- **C7.** *(Landed `CI-W602`.)* Raw spacing steps 1-4 migrated onto the named scale and the
+  scale enforced. One step is left un-named deliberately: 38 sites write `gap-8` (2rem) between
+  a screen's top-level blocks, and adding a fifth spacing step is a DESIGN.md decision the
+  scale's own comment reserves for the owner. **That is the one Track C item awaiting a
+  ruling.**
 
 The console typechecks green today (`npx tsc -b`, exit 0).
 

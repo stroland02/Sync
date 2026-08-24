@@ -70,7 +70,7 @@ export function Tag({
       title={title}
       data-tone={tone}
       className={cn(
-        "furniture inline-flex shrink-0 items-center gap-1.5 rounded-control border px-field py-0.5 font-mono text-meta",
+        "furniture inline-flex shrink-0 items-center gap-field.5 rounded-control border px-field py-0.5 font-mono text-meta",
         TONE_CLASS[tone],
         className,
       )}

@@ -1476,3 +1476,57 @@ def test_the_ink_guard_sees_an_owner_that_has_become_an_alias() -> None:
     ])
 
     assert any("not a colour of its own" in line for line in _ink_violations(css))
+
+
+# --- spacing: the named steps, and the one the console reaches past them for --------
+
+
+#: Raw numeric spacing utilities a screen may still write, and why each is not a density
+#: decision. Everything else in the console's own files goes through `field`, `row`, `section`
+#: or `frame`.
+_SPACING_EXEMPT = {
+    "0": "a reset -- `p-0` and `mt-0` remove a primitive's own padding rather than choosing any",
+    "8": (
+        "2rem, the gap between a screen's top-level blocks. 38 sites in 26 files write it and no "
+        "named step holds it: `section` is 1rem and `frame` is 2.5rem. The scale's own comment "
+        "says a fifth step is a decision recorded in DESIGN.md rather than a value added in "
+        "passing, and DESIGN.md is the owner's document -- so this is measured and named here, "
+        "and stays a raw number until that decision is taken."
+    ),
+}
+
+_SPACING_UTILITY = re.compile(
+    r"\b(?:gap|gap-x|gap-y|p|px|py|pt|pb|pl|pr|m|mt|mb|ml|mr|space-x|space-y)-(\d+)\b"
+)
+
+
+def _raw_spacing_steps(source: str) -> set[str]:
+    """Numeric spacing steps a file writes, ignoring the exempt ones."""
+    return {step for step in _SPACING_UTILITY.findall(source) if step not in _SPACING_EXEMPT}
+
+
+def test_the_console_writes_no_unnamed_spacing_step():
+    _require_web_src()
+
+    offenders: list[str] = []
+    for path in sorted(_WEB_SRC.rglob("*.tsx")):
+        posix = path.as_posix()
+        # The primitives ship with the substrate's own utilities and are not ours to re-author.
+        if "/ui/" in posix or "/vendor/" in posix:
+            continue
+        for step in sorted(_raw_spacing_steps(path.read_text(encoding="utf-8"))):
+            offenders.append(f"{path.relative_to(_WEB_SRC).as_posix()}: -{step}")
+
+    assert offenders == [], (
+        "a screen reached past the named spacing scale. Use `field`, `row`, `section` or "
+        "`frame`, or record a new step in DESIGN.md first:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_the_spacing_guard_sees_a_step_outside_the_scale() -> None:
+    assert _raw_spacing_steps('<div className="flex gap-5">') == {"5"}
+
+
+def test_the_spacing_guard_passes_the_exempt_steps() -> None:
+    """`-0` is a reset and `-8` is measured above; neither is a density choice made in passing."""
+    assert _raw_spacing_steps('<div className="mt-0 gap-8 p-0">') == set()

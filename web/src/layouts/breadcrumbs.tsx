@@ -17,9 +17,9 @@ export interface Crumb {
 export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
   return (
     <nav aria-label="Breadcrumb" className="text-meta text-muted-foreground">
-      <ol className="flex flex-wrap items-center gap-2">
+      <ol className="flex flex-wrap items-center gap-row">
         {trail.map((crumb, index) => (
-          <li key={`${crumb.label}-${index}`} className="flex items-center gap-2">
+          <li key={`${crumb.label}-${index}`} className="flex items-center gap-row">
             {index > 0 && <span aria-hidden="true">→</span>}
             {crumb.to === undefined ? (
               <span aria-current="page" className="text-foreground">

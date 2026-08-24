@@ -97,12 +97,12 @@ export function TableHeadTitle({
   bounded?: boolean
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-field.5">
       <span>{title}</span>
       {suffix ? <span className="font-normal text-muted-foreground">{suffix}</span> : null}
       {rung ? (
         <span
-          className="rounded-control border border-line px-1 py-0 font-mono text-meta font-normal text-muted-foreground"
+          className="rounded-control border border-line px-field py-0 font-mono text-meta font-normal text-muted-foreground"
           title={`Provenance: ${rung}`}
         >
           {rung}

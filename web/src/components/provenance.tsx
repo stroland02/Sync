@@ -58,8 +58,8 @@ export function ProvenanceStrip({
   const { indexed_at, feed_fetched_at, binding_source, context_savings, context_savings_bound_reached } =
     provenance
   return (
-    <div className="flex flex-col gap-2 border-t border-border pt-3">
-      <dl className="flex flex-wrap gap-x-8 gap-y-3">
+    <div className="flex flex-col gap-row border-t border-border pt-row">
+      <dl className="flex flex-wrap gap-x-8 gap-y-row">
         <Field label="Binding source">
           {binding_source === null ? (
             <Absent>{bindingNullLabel}</Absent>

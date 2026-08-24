@@ -67,10 +67,10 @@ function useUnhandledRejections(): void {
 function Kind({ kind, onDismiss }: { kind: ErrorKind; onDismiss: () => void }) {
   const entry = kind.newest
   return (
-    <li className="border-b border-border p-3 last:border-b-0">
-      <div className="flex items-start justify-between gap-2">
+    <li className="border-b border-border p-row last:border-b-0">
+      <div className="flex items-start justify-between gap-row">
         <p className="text-body font-medium">{entry.summary}</p>
-        <div className="flex shrink-0 items-baseline gap-2">
+        <div className="flex shrink-0 items-baseline gap-row">
           {kind.count > 1 && (
             <p className="text-meta text-ink-muted">{kind.count} times, most recently</p>
           )}
@@ -83,12 +83,12 @@ function Kind({ kind, onDismiss }: { kind: ErrorKind; onDismiss: () => void }) {
           </button>
         </div>
       </div>
-      <p className="mt-1 font-mono text-meta text-ink-muted">
+      <p className="mt-field font-mono text-meta text-ink-muted">
         <Formatted value={orAbsent(entry.path)} />
         {entry.status !== undefined ? ` — HTTP ${entry.status}` : ""} —{" "}
         <Formatted value={formatTimestamp(entry.timestamp)} />
       </p>
-      <pre className="mt-1 max-h-32 overflow-auto text-meta whitespace-pre-wrap text-foreground">
+      <pre className="mt-field max-h-32 overflow-auto text-meta whitespace-pre-wrap text-foreground">
         {entry.detail}
       </pre>
     </li>
@@ -129,7 +129,7 @@ export function ErrorSurface() {
               : { duration: ERROR_SURFACE_DURATION, ease: EASE_STANDARD }
           }
         >
-          <div className="flex items-center justify-between gap-2 border-b border-critical-ink/30 px-3 py-2">
+          <div className="flex items-center justify-between gap-row border-b border-critical-ink/30 px-row py-row">
             <Status
               tone="critical"
               label={`${entries.length} ${entries.length === 1 ? "error" : "errors"}`}
@@ -145,7 +145,7 @@ export function ErrorSurface() {
             ))}
           </ul>
           {undrawn > 0 && (
-            <p className="border-t border-border bg-background px-3 py-2 text-meta text-ink-muted">
+            <p className="border-t border-border bg-background px-row py-row text-meta text-ink-muted">
               {undrawn} further {undrawn === 1 ? "kind is" : "kinds are"} in the log and not drawn
               here. Nothing was dropped; the newest {KINDS_SHOWN} kinds are shown.
             </p>

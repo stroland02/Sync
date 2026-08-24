@@ -45,8 +45,8 @@ function Panel({
       role={status ? "alert" : undefined}
       className={
         status
-          ? `max-w-prose rounded-surface border p-4 ${statusSurfaceClass(status)}`
-          : "max-w-prose rounded-surface border border-border p-4 text-muted-foreground"
+          ? `max-w-prose rounded-surface border p-section ${statusSurfaceClass(status)}`
+          : "max-w-prose rounded-surface border border-border p-section text-muted-foreground"
       }
     >
       {status ? (
@@ -54,7 +54,7 @@ function Panel({
       ) : (
         <p className="text-emphasis text-foreground">{headline}</p>
       )}
-      <div className="mt-1 text-body">{children}</div>
+      <div className="mt-field text-body">{children}</div>
     </div>
   )
 }
@@ -93,7 +93,7 @@ function LoadingSweep() {
 
   return (
     <div
-      className="mt-3 h-px w-full overflow-hidden bg-surface-subtle"
+      className="mt-row h-px w-full overflow-hidden bg-surface-subtle"
       role="presentation"
       aria-hidden="true"
     >
@@ -183,7 +183,7 @@ export function NotFoundState({
   return (
     <Panel headline={headline}>
       <p>{detail}</p>
-      <p className="mt-1 font-mono text-meta">{identifier}</p>
+      <p className="mt-field font-mono text-meta">{identifier}</p>
     </Panel>
   )
 }
@@ -273,7 +273,7 @@ export function ErrorState({
   return (
     <Panel status="critical" headline={headline}>
       <p>{detail}</p>
-      {evidence !== undefined && <p className="mt-1 font-mono text-meta">{evidence}</p>}
+      {evidence !== undefined && <p className="mt-field font-mono text-meta">{evidence}</p>}
       {onRetry !== undefined && (
         <p>
           <button

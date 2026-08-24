@@ -49,7 +49,7 @@ export function Status({
 }) {
   const Icon = ICON[tone]
   return (
-    <span className={cn("inline-flex items-center gap-1.5", INK_CLASS[tone], className)}>
+    <span className={cn("inline-flex items-center gap-field.5", INK_CLASS[tone], className)}>
       <Icon aria-hidden="true" className="size-4 shrink-0" />
       {label}
     </span>
