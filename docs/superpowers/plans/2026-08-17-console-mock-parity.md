@@ -2,6 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Ledger reconciled 2026-08-24, and it was badly wrong.** Every one of this plan's 74 checkboxes
+> reads unchecked while **89 `M14-` work items** are in `WORKLOG.md` and the plan's own artefacts
+> are shipped and running: `layouts/detail-grid.tsx`, `layouts/breadcrumbs.tsx`,
+> `features/workflows/activity-timeline.tsx`, `/settings` as a destination. The plan was executed
+> across many sessions and nobody ticked it.
+>
+> **The cost was measured on 2026-08-24**: an agent asked to rebuild the console searched for prior
+> work, read this file as untouched, and wrote a *new* plan for a redesign that was already planned
+> here against the owner's own mock. A day of chassis refactoring followed and the owner's reaction
+> was that the console looked unchanged -- which was correct, and traceable to this ledger.
+>
+> **Do not trust the checkboxes below.** What shipped is in `WORKLOG.md` under `M14-`; what remains
+> is measured by comparing `docs/console-mock/screens/` against the running console, screen by
+> screen. `CI-W607` records the reconciliation rather than back-filling 74 boxes nobody can verify
+> retrospectively.
+
 **Goal:** Bring every console screen to the composition quality of the owner's mock (`docs/console-mock/`), make the workflow route a live-feeling trajectory view without asserting liveness the data cannot back, and leave guards behind so the console cannot silently drift flat again.
 
 **Architecture:** Foundation-first. Phase 0 makes the ledgers true and installs the measurement loop and a raw-utility guard. Phase 1 puts every screen on the shared chassis (one `DetailGrid`, `PageHeader` everywhere, tokens only, no fixture data rendered as fact). Phase 2 closes small composition gaps. Phase 3 rebuilds the workflow route to mock screen 07 with an activity timeline, evidence disclosures, ticking evidence-age, and idle-node recession. Phase 4 lands the never-built destinations and the closing measured walk.
