@@ -164,7 +164,7 @@ def gate_two_evidence_exists(
 ) -> Verdict:
     """Gate 2: the corpus carries real samples for merge rate and three of five axes.
 
-    Reads `sync.dashboard.fleet.corpus_health` rather than recomputing the axes. That function
+    Reads `sync.dashboard.fleet.precedent_health` rather than recomputing the axes. That function
     already draws the distinction this script depends on -- `status` is `measured` or `unmeasured`
     and `value` is `None` rather than `0.0` when nothing was sampled -- and a second implementation
     of it here would be a fact written twice, which CLAUDE.md calls the most expensive debt in this
@@ -179,7 +179,7 @@ def gate_two_evidence_exists(
             name=name,
             status=CANNOT_TELL,
             evidence=[
-                f"corpus_health could not be read: {exc}",
+                f"precedent_health could not be read: {exc}",
                 "no reading is not the same as a reading of zero",
             ],
         )
@@ -815,9 +815,9 @@ def _health_reader(store_error: Exception | None):
             raise store_error
         return refuse
 
-    from sync.dashboard.fleet import corpus_health
+    from sync.dashboard.fleet import precedent_health
 
-    return corpus_health
+    return precedent_health
 
 
 def _resume_path_exists() -> bool | None:
