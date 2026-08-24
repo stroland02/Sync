@@ -112,6 +112,11 @@ fetch_specification = http_fetch
 
 _RAW_CONTENT = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
 
+# What `SpecSource.generator` says for a row that named its specification instead of
+# discovering one. Descriptive only -- the extraction rule is chosen by the staged
+# `sdk_generator.txt`, never by this string.
+DIRECT_SPECIFICATION = "direct"
+
 log = logging.getLogger(__name__)
 
 
@@ -143,15 +148,28 @@ class PreparedVendor:
 class GeneratedVendor:
     """One vendor served by reading the manifest its SDK generator commits.
 
-    Three fields, and none of them is knowledge about the vendor's API: which repository the
-    generated SDK lives in, and which convention's manifest to read out of it. Everything about
-    the specification itself comes from the manifest, which is what makes adding a vendor under
-    a supported generator a configuration entry rather than a module.
+    None of it is knowledge about the vendor's API: which repository the SDK lives in, and how
+    to reach the specification out of it -- through the manifest a generator commits, or at a
+    path the vendor commits the specification to directly. Everything about the specification
+    itself is read from the document, which is what makes adding a vendor a configuration entry
+    rather than a module.
     """
 
     vendor_id: str
     repo: str
-    manifest: str
+    manifest: str | None = None
+    """The generator manifest to discover a specification through, for a vendor that commits one."""
+
+    spec: str | None = None
+    """A path in `repo` holding the specification itself, for a vendor that commits no manifest
+    this deployment can read.
+
+    Exactly one of `manifest` and `spec` is set. Discovery through a manifest is one way to reach
+    a specification rather than the definition of having one: a vendor may pin its specification
+    at a tag, publish one document per product, or stop publishing a manifest altogether, and in
+    each case the specification is still there to be diffed.
+    """
+
     sdk_bindings: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     """Which package a customer imports to reach this vendor, per language.
 
@@ -181,15 +199,27 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
     try:
         configured = [
             GeneratedVendor(
-                vendor_id=entry["vendor_id"], repo=entry["repo"], manifest=entry["manifest"],
+                vendor_id=entry["vendor_id"], repo=entry["repo"],
+                manifest=entry.get("manifest"), spec=entry.get("spec"),
                 sdk_bindings=entry.get("sdk_bindings") or {},
             )
             for entry in entries
         ]
     except (KeyError, TypeError) as exc:
         raise ValueError(
-            f"{path}: every entry needs vendor_id, repo and manifest ({exc})"
+            f"{path}: every entry needs vendor_id, repo, and one of manifest or spec ({exc})"
         ) from None
+
+    for vendor in configured:
+        # Refused here rather than where the specification is reached. The two are alternative
+        # answers to one question, so a row naming both leaves the winner to whichever branch is
+        # read first, and a row naming neither is a vendor that appears configured and is not.
+        if bool(vendor.manifest) == bool(vendor.spec):
+            raise ValueError(
+                f"{path}: {vendor.vendor_id} names "
+                f"{'both manifest and spec' if vendor.manifest else 'neither manifest nor spec'}; "
+                f"a row names exactly one"
+            )
     return {vendor.vendor_id: vendor for vendor in configured}
 
 
@@ -302,6 +332,15 @@ def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
     vendor published nothing" is the exact failure the product exists to catch, arriving from our
     own side.
     """
+    if vendor.spec is not None:
+        # Nothing to discover, so nothing is fetched: the row already answers the question a
+        # manifest read exists to ask. The ref sits in the path, so two versions are two
+        # documents rather than one document fetched twice.
+        return SpecSource(
+            generator=DIRECT_SPECIFICATION,
+            spec_url=_RAW_CONTENT.format(repo=vendor.repo, ref=ref, path=vendor.spec),
+        )
+
     url = _RAW_CONTENT.format(repo=vendor.repo, ref=ref, path=vendor.manifest)
     try:
         body = fetch_manifest(url)

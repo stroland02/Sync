@@ -385,3 +385,80 @@ def test_the_shipped_configuration_is_what_the_command_line_offers():
     shipped = yaml.safe_load(registry.GENERATED_VENDORS_FILE.read_text(encoding="utf-8"))
 
     assert {entry["vendor_id"] for entry in shipped} <= set(available_vendors())
+
+
+# --- a row that names its specification rather than discovering one -----------------
+
+
+def _direct_config(tmp_path, monkeypatch, **over):
+    row = {"vendor_id": "acme", "repo": "acme/openapi", "spec": "openapi/spec3.json"}
+    row.update(over)
+    config = tmp_path / "vendors.yaml"
+    config.write_text(yaml.safe_dump([row]), encoding="utf-8")
+    monkeypatch.setenv(registry.GENERATED_VENDORS_VARIABLE, str(config))
+    return config
+
+
+def test_a_row_naming_a_spec_path_needs_no_manifest(tmp_path, monkeypatch):
+    """Three vendors need this tier and none of them publishes a generator manifest we can use:
+    stripe pins its specification at a git tag, twilio publishes one document per product, and
+    openai deleted its `.stats.yml` outright. Discovery through a manifest is one way to reach a
+    specification, not the definition of having one."""
+    _direct_config(tmp_path, monkeypatch)
+
+    vendors = registry._generated_vendors()
+
+    assert vendors["acme"].spec == "openapi/spec3.json"
+    assert vendors["acme"].manifest is None
+
+
+def test_a_row_naming_both_a_manifest_and_a_spec_is_refused(tmp_path, monkeypatch):
+    """The two are alternative answers to one question -- where is the specification -- and a row
+    naming both leaves which one wins to whichever branch is read first."""
+    _direct_config(tmp_path, monkeypatch, manifest=".stats.yml")
+
+    with pytest.raises(ValueError) as raised:
+        registry._generated_vendors()
+
+    assert "acme" in str(raised.value)
+
+
+def test_a_row_naming_neither_is_refused(tmp_path, monkeypatch):
+    config = tmp_path / "vendors.yaml"
+    config.write_text(
+        yaml.safe_dump([{"vendor_id": "acme", "repo": "acme/openapi"}]), encoding="utf-8"
+    )
+    monkeypatch.setenv(registry.GENERATED_VENDORS_VARIABLE, str(config))
+
+    with pytest.raises(ValueError):
+        registry._generated_vendors()
+
+
+def test_a_direct_row_resolves_a_versioned_url_per_version(tmp_path, monkeypatch):
+    """The ref is in the path, so two versions are two documents rather than one document twice
+    -- which is the `ONE_DOCUMENT` trap that already silently disables two configured vendors."""
+    _direct_config(tmp_path, monkeypatch)
+    vendor = registry._generated_vendors()["acme"]
+
+    base = registry._spec_source(vendor, "v2320")
+    head = registry._spec_source(vendor, "v2330")
+
+    assert base.spec_url == "https://raw.githubusercontent.com/acme/openapi/v2320/openapi/spec3.json"
+    assert head.spec_url != base.spec_url
+    assert base.is_fetchable and head.is_fetchable
+
+
+def test_a_direct_row_fetches_no_manifest_at_all(tmp_path, monkeypatch):
+    """The manifest read is the cheap half of the economic argument. A row that names its
+    specification has nothing to discover, so paying for a manifest fetch would be paying for an
+    answer already written down."""
+    _direct_config(tmp_path, monkeypatch)
+    vendor = registry._generated_vendors()["acme"]
+
+    def _never_fetched(url: str) -> str:
+        raise AssertionError(f"a direct row fetched a manifest: {url}")
+
+    monkeypatch.setattr(registry, "fetch_manifest", _never_fetched)
+
+    assert registry._spec_source(vendor, "v2330").is_fetchable
+
