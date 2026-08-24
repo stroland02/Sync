@@ -169,6 +169,31 @@ def _evidence(finding: Finding) -> str:
     return f"How this was established: {rung} -- {_RUNG_GLOSS.get(rung, 'unrecognised')}"
 
 
+_SOURCE_GLOSS = {
+    "oasdiff": "computed by comparing the two specification documents the vendor published, so "
+               "it is derived rather than quoted",
+    "changelog": "the vendor's own changelog, in their published words rather than computed",
+    "sdk-release": "a release note on the vendor's generated SDK, in their published words",
+    "vendor-deprecation-table": "prose scraped from a page the vendor publishes, so it carries "
+                                "whatever that page said and however this build parsed it",
+}
+
+
+def _change_provenance(change: VendorChange) -> str:
+    """Where the claim above came from, in the agent's own terms.
+
+    The vocabulary spans a computed diff of two documents and prose scraped off a page, and the
+    two rendered identically until this existed. A page can be restyled, mis-parsed or simply
+    wrong, and none of that is visible in the sentence it produced -- which is the whole reason
+    the plan's rule for this track is that unattributed prose is worse than none.
+
+    Outside the untrusted fence, for the reason `_evidence` gives: this is Sync speaking about
+    the vendor's text rather than the text itself.
+    """
+    gloss = _SOURCE_GLOSS.get(change.source, "unrecognised source; treat the claim with care")
+    return f"Where this came from: {change.source} -- {gloss}"
+
+
 def build_patch_prompt(
     finding: Finding,
     change: VendorChange,
@@ -193,6 +218,7 @@ def build_patch_prompt(
             f"Operation: {change.operation_id}  ({change.from_version} -> {change.to_version})",
             f"Affected field: {field_line}",
         ]),
+        _change_provenance(change),
         "",
         *fenced_block(REPOSITORY, [
             f"Call site: {site.path}, line {site.line}",

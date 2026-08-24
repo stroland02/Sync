@@ -114,6 +114,14 @@ What the deferral *did* surface is a real scope defect the rename would have pap
 `UnrecognisedSdkShape` -- **and** the stainless-python rule, so every other rule imports the
 contract from a sibling rule's module. That is what A4 becomes.
 
+**B4 lands as attribution rather than as a fetcher.** The plan framed it as acquiring changelogs.
+Reading the tree first: `ChangeSource` already declares `changelog` and `sdk-release` as members,
+`sync.signals.deprecations.adapter` already fetches vendor pages with a cache and a
+stale-beats-silence policy, and neither of those facts reached the patch prompt at all. Building a
+second fetcher would have added a source the prompt still could not attribute, so the gap worth
+closing first is the one between a claim and its provenance. Acquiring changelogs for vendors that
+publish them stays open, and is now a row-and-fetcher change rather than a prompt change.
+
 ### Two live defects Track A must absorb
 
 Found by running `scripts/demo_signal_chain.py --all` (`CI-W569`). End-to-end coverage is **6 of
@@ -143,7 +151,7 @@ information.*
 - **B3. The evidence rung.** *(Landed `CI-W594`.)* Every fact handed to the agent carries where it came from and at which
   spec hash, so a citation is checkable rather than plausible. This is the part the owner's
   constraint actually names.
-- **B4. Changelog acquisition.** Specifications say what changed structurally; changelogs say what
+- **B4. Changelog acquisition.** *(Landed `CI-W595` as attribution; see ledger.)* Specifications say what changed structurally; changelogs say what
   the vendor *meant*. Same honesty rule applies -- unattributed prose is worse than none.
 
 ## Track C -- finishing the console
