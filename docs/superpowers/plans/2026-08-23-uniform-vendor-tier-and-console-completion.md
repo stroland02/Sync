@@ -76,8 +76,8 @@ symbols would dispatch to the wrong reader with every test still green.
 | A8 | A row may name its specification instead of discovering one | **landed** |
 | A9 | OpenAI's row names the specification it actually publishes | **landed** |
 | A10 | A row may name several documents (twilio) | **landed** |
-| A11 | A row declares which oasdiff kinds are noise | next |
-| A12 | Stripe is a row; the hand-written adapter is deleted | |
+| A11 | A row declares which oasdiff kinds are noise | **landed** |
+| A12 | Stripe is a row; the hand-written adapter is deleted | next |
 | A13 | Twilio is a row; the registry names no vendor at all | |
 | A14 | A stale row is found by a check, not by a person | |
 

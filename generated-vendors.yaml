@@ -12,6 +12,13 @@
 #   manifest      `.stats.yml` for Stainless, `.speakeasy/workflow.yaml` for Speakeasy
 #   spec          a path in `repo` holding the specification itself
 #   sdk_bindings  which package a customer imports to reach this vendor, per language
+#   noise_kinds   oasdiff rule ids this vendor's releases produce in volume without meaning
+#
+# `noise_kinds` is optional and empty everywhere today, which is a measurement rather than an
+# omission: `docs/superpowers/reports/2026-07-29-generated-vendor-noise.md` found the obvious
+# candidate is the sole route to the affected operations for these vendors, so filtering it would
+# report a release as no change at all. A row states its own vendor's release habits and nobody
+# else's; `test_the_shipped_configuration_declares_no_noise_kinds` fails the moment one does.
 #
 # A row names exactly one of `manifest` and `spec`. Discovery through a generator's manifest is
 # one way to reach a specification rather than the definition of having one: a vendor may commit

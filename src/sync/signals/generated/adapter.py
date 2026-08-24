@@ -281,6 +281,7 @@ class GeneratedSpecAdapter:
         sdk_source: Path | str | None = None,
         sdk_spec_operations: Path | str | None = None,
         symbol_map_path: Path | str | None = None,
+        noise_kinds: frozenset[str] | None = None,
         sdk_source_generator: str = DEFAULT_GENERATOR,
     ) -> None:
         self._vendor_id = vendor_id
@@ -307,6 +308,12 @@ class GeneratedSpecAdapter:
         # outranks the checkout rule where both are staged: a rule reading a specification states
         # the operation's own id and service, and a checkout states neither.
         self._symbol_map_path = Path(symbol_map_path) if symbol_map_path else None
+        # Empty for every configured vendor, and that is the measurement rather than an oversight:
+        # `2026-07-29-generated-vendor-noise.md` found this kind is the sole route to the affected
+        # operations for them, so one openai window would report as no change at all. What a row
+        # states applies to that row -- which is a vendor's judgement about its own releases, not
+        # one vendor's release habits applied to every other.
+        self._noise_kinds = frozenset(noise_kinds or ())
         # Rejected here rather than on first lookup. A misconfigured deployment must fail while
         # someone is looking at it, not on the run where a symbol quietly stops resolving.
         if sdk_source_generator not in EXTRACTORS:
@@ -619,9 +626,9 @@ class GeneratedSpecAdapter:
             base_path = self._spec(from_version, base_url, base.label)
             head_path = self._spec(to_version, head_url, head.label)
 
-            # Unfiltered, and the module docstring carries the measurement that says so. A kind
-            # list here would be one vendor's release habits applied to every configured vendor.
             records = run_oasdiff_breaking(base_path, head_path)
+            if self._noise_kinds:
+                records = [r for r in records if r.get("id") not in self._noise_kinds]
             changes = to_vendor_changes(
                 records, vendor_id=self._vendor_id,
                 from_version=from_version, to_version=to_version,
@@ -732,6 +739,7 @@ class CorrelatingGeneratedSpecAdapter(GeneratedSpecAdapter):
         sdk_source: Path | str | None = None,
         sdk_spec_operations: Path | str | None = None,
         symbol_map_path: Path | str | None = None,
+        noise_kinds: frozenset[str] | None = None,
         sdk_source_generator: str = DEFAULT_GENERATOR,
     ) -> None:
         super().__init__(
@@ -744,6 +752,7 @@ class CorrelatingGeneratedSpecAdapter(GeneratedSpecAdapter):
             sdk_source=sdk_source,
             sdk_spec_operations=sdk_spec_operations,
             symbol_map_path=symbol_map_path,
+            noise_kinds=noise_kinds,
             sdk_source_generator=sdk_source_generator,
         )
         self._routes: dict[tuple[str, int], list[tuple[tuple[str, ...], ExtractedOperation]]] | None = None

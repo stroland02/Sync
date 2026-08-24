@@ -13,10 +13,20 @@ vendor that filtered it would report that release as no change at all. That is t
 failure the adapter's own `_spec` docstring refuses to allow from a fetch outage, arriving instead
 from a filter.
 
-So the generated path drops nothing, deliberately. These tests fail the moment somebody adds a
-filter of any shape, and the two committed record sets are the evidence the decision rests on.
-Nothing here reaches the network: the specification fetch is injected, and the vendor records were
-captured by `scripts/measure_generated_vendor_noise.py`.
+So the generated path drops nothing, deliberately, and every test below is asserted against an
+adapter that declares nothing -- which is every configured vendor.
+
+`CI-W583` gave a row the ability to declare its own kinds, and the sentence that used to stand
+here ("these tests fail the moment somebody adds a filter of any shape") is no longer literally
+true: a filter exists and is empty. What the measurement forbids is one vendor's release habits
+applied to every other, and a per-row declaration is the opposite of that. Two things keep it
+honest -- these tests still run against a declaring-nothing adapter, and
+`test_the_shipped_configuration_declares_no_noise_kinds` fails the moment any row declares one, so
+that decision gets made deliberately rather than by inspection.
+
+The two committed record sets are the evidence the decision rests on. Nothing here reaches the
+network: the specification fetch is injected, and the vendor records were captured by
+`scripts/measure_generated_vendor_noise.py`.
 """
 
 from __future__ import annotations
@@ -119,13 +129,14 @@ def _sources(spec_hash_from: str = "h-old", spec_hash_to: str = "h-new"):
     return {"v1": source(MIRROR_BASE, spec_hash_from), "v2": source(MIRROR_HEAD, spec_hash_to)}
 
 
-def _adapter(tmp_path, bodies: dict[str, str] | None = None) -> GeneratedSpecAdapter:
+def _adapter(tmp_path, bodies: dict[str, str] | None = None, noise_kinds=frozenset()) -> GeneratedSpecAdapter:
     served = bodies or {MIRROR_BASE: _enum_spec(["open"]), MIRROR_HEAD: _enum_spec(["open", "shut"])}
     return GeneratedSpecAdapter(
         vendor_id="acme",
         sources=_sources(),
         fetch=served.__getitem__,
         cache_dir=tmp_path / "specs",
+        noise_kinds=noise_kinds,
     )
 
 
@@ -238,3 +249,50 @@ def test_the_enum_kind_is_a_minority_of_what_anthropic_produces():
     assert max({r["id"] for r in records}, key=lambda k: sum(r["id"] == k for r in records)) == (
         "request-property-any-of-removed"
     )
+
+
+# --- a kind a row declares, and the measurement that stays intact ------------------
+
+
+def test_a_row_declaring_no_noise_kinds_filters_nothing(tmp_path):
+    """The default, and the whole of what the measurement above protects."""
+    changes = list(_adapter(tmp_path).fetch_changes("v1", "v2"))
+
+    assert [change.kind for change in changes] == [STRIPE_NOISE_KIND]
+
+
+def test_a_row_declaring_a_kind_drops_exactly_that_kind(tmp_path):
+    """A per-vendor judgement, applied to one vendor.
+
+    What `2026-07-29-generated-vendor-noise.md` measured is that *this* kind is the sole route to
+    the affected operations for the configured vendors, so filtering it for them would report a
+    release as no change at all. That is an argument against one list applied to everyone, not
+    against a vendor stating its own release habits -- and both hand-written adapters state
+    exactly this one, in duplicate, because there was nowhere else to put it.
+    """
+    adapter = _adapter(tmp_path, noise_kinds=frozenset({STRIPE_NOISE_KIND}))
+
+    assert list(adapter.fetch_changes("v1", "v2")) == []
+
+
+def test_the_shipped_configuration_declares_no_noise_kinds():
+    """The measurement, held as a property of the file rather than of the code.
+
+    The mechanism exists so stripe and twilio can carry their own judgement onto rows without
+    imposing it on anyone else. Until they do, no configured vendor filters anything -- and when
+    one arrives, this fails and the decision gets made deliberately instead of by inspection.
+    """
+    from sync.signals.registry import _generated_vendors
+
+    declaring = {
+        vendor_id: sorted(row.noise_kinds)
+        for vendor_id, row in _generated_vendors().items()
+        if row.noise_kinds
+    }
+
+    assert declaring == {}, (
+        "a configured vendor now filters an oasdiff kind. Re-read "
+        "`2026-07-29-generated-vendor-noise.md` before accepting it: for one openai window the "
+        f"filtered kind was every record and every operation. {declaring}"
+    )
+

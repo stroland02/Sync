@@ -170,6 +170,16 @@ class GeneratedVendor:
     each case the specification is still there to be diffed.
     """
 
+    noise_kinds: frozenset[str] = frozenset()
+    """oasdiff rule ids this vendor's releases produce in volume without meaning.
+
+    A judgement about one vendor's release habits, which is why it sits in that vendor's row and
+    not in code. Empty for every row today, and `test_the_shipped_configuration_declares_no_noise
+    _kinds` holds it there: `2026-07-29-generated-vendor-noise.md` measured that the obvious
+    candidate is the sole route to the affected operations for the configured vendors, so
+    filtering it would report a release as no change at all.
+    """
+
     sdk_bindings: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     """Which package a customer imports to reach this vendor, per language.
 
@@ -201,6 +211,7 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
             GeneratedVendor(
                 vendor_id=entry["vendor_id"], repo=entry["repo"],
                 manifest=entry.get("manifest"), spec=entry.get("spec"),
+                noise_kinds=frozenset(entry.get("noise_kinds") or ()),
                 sdk_bindings=entry.get("sdk_bindings") or {},
             )
             for entry in entries
@@ -404,6 +415,7 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
             cache_dir=context.cache_dir,
             sdk_bindings=vendor.sdk_bindings,
             sdk_source=sdk_source_path,
+            noise_kinds=vendor.noise_kinds,
             sdk_source_generator=generator,
         ),
         documents=(),
@@ -431,6 +443,7 @@ def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> Generate
         cache_dir=context.cache_dir,
         sdk_bindings=vendor.sdk_bindings,
         sdk_source=sdk_source_path,
+        noise_kinds=vendor.noise_kinds,
         sdk_source_generator=generator,
     )
 
