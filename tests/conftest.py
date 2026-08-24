@@ -782,3 +782,26 @@ def symbol_resolver(symbol_map_path, vendor_id: str = "stripe", cache_dir=None):
         symbol_map_path=symbol_map_path,
     )
 
+
+
+def require_corpus(name: str) -> None:
+    """Skip when a corpus repository this test needs has not been fetched.
+
+    `.cache/corpus/` is gitignored, so a fresh worktree has none of it and three tests failed
+    for the environment rather than for the code. Red tests that are not defects is what trains
+    a reader to skim a red suite -- the failure this exists to stop is the next real one being
+    read as more of the same.
+
+    Skip rather than a stub: these tests assert over a real checkout's git state, and a fixture
+    standing in for one would assert against the stub instead. `sync.rehearse.fixture` still
+    raises, because a run that reaches for a repository it has not fetched is a genuine failure.
+    """
+    import pytest
+
+    from sync.rehearse.fixture import _CORPUS_ROOT
+
+    if not (_CORPUS_ROOT / name).exists():
+        pytest.skip(
+            f"corpus repository '{name}' is not fetched; "
+            f"run scripts/fetch_corpus_repositories.py to include this test"
+        )

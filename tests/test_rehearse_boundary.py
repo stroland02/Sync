@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 from langgraph.checkpoint.memory import InMemorySaver
 
 from sync.rehearse.driver import run_rehearsal
+from conftest import require_corpus
 from sync.rehearse.fixture import prepare_fixture
 from sync.remediate.graph import build_graph
 
@@ -70,6 +71,7 @@ def test_rehearse_package_does_not_import_forge():
 
 
 def test_rehearsal_fixture_has_zero_remotes(tmp_path: Path):
+    require_corpus("furever")
     repo = prepare_fixture("furever", root=tmp_path)
     result = subprocess.run(
         ["git", "remote", "-v"],

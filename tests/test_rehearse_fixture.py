@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from sync.core import RepoRef
+from conftest import require_corpus
 from sync.rehearse.fixture import prepare_fixture
 
 
@@ -26,6 +27,7 @@ def _git(args: list[str], cwd: Path) -> str:
 
 
 def test_prepare_fixture_produces_git_repo_with_zero_remotes_and_single_commit(tmp_path: Path):
+    require_corpus("furever")
     repo = prepare_fixture("furever", root=tmp_path)
 
     assert isinstance(repo, RepoRef)
@@ -50,6 +52,7 @@ def test_prepare_fixture_produces_git_repo_with_zero_remotes_and_single_commit(t
 
 
 def test_prepare_fixture_is_idempotent_and_converges(tmp_path: Path):
+    require_corpus("furever")
     repo1 = prepare_fixture("furever", root=tmp_path)
     repo2 = prepare_fixture("furever", root=tmp_path)
 

@@ -192,7 +192,5 @@ The console typechecks green today (`npx tsc -b`, exit 0).
   23m54s where the parallel form reaches an identical verdict in 3m56s. Either the prescription or
   the measurement should change; a gate nobody runs because it costs a coffee break is a gate that
   decays.
-- **D4.** A fresh worktree fails four tests for environment rather than for code: `tools/oasdiff.exe`
-  and `.cache/corpus/` are both gitignored and absent. Four failures that look like defects and are
-  not is exactly the noise that trains a reader to skim a red suite. Wants a bootstrap check that
-  says which is missing.
+- **D4.** *(Landed `CI-W603`.)* The three `.cache/corpus` tests skip when the fixture is absent and
+  run where it is present. The suite is green with nothing outstanding.
