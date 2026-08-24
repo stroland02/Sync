@@ -140,7 +140,7 @@ information.*
 - **B2. Operation-scoped slices pinned to a spec hash.** *(Landed `CI-W593`.)* A finding names an operation; the agent
   should receive that operation's slice of the specification and not two megabytes of YAML.
   Anthropic's document is 2,015,896 bytes across 96 paths and 144 operations.
-- **B3. The evidence rung.** Every fact handed to the agent carries where it came from and at which
+- **B3. The evidence rung.** *(Landed `CI-W594`.)* Every fact handed to the agent carries where it came from and at which
   spec hash, so a citation is checkable rather than plausible. This is the part the owner's
   constraint actually names.
 - **B4. Changelog acquisition.** Specifications say what changed structurally; changelogs say what

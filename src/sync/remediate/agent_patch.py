@@ -141,6 +141,34 @@ def _required_edit(field: str | None, site: CallSite) -> str:
     )
 
 
+_RUNG_GLOSS = {
+    "static": "read directly out of this repository's source",
+    "resolved": "read out of source and then resolved through a further step, so it is an "
+                "inference rather than a literal",
+    "observed": "seen in this repository's runtime traffic rather than read from source",
+    "unresolved": "not attributed to an operation at all",
+    "unattributed": "recorded before this run tracked how a binding was established, so how it "
+                    "was reached is unknown",
+}
+
+
+def _evidence(finding: Finding) -> str:
+    """How the call site below came to be attributed, in the agent's own terms.
+
+    `binding_rung` is Sync's vocabulary and not English, so the rung is glossed rather than
+    named alone -- an agent handed `resolved` with no gloss has a token, not a reason to weigh
+    the line above it differently from a literal read.
+
+    Never omitted. A prompt with no provenance line reads as a certain one, which is the
+    strongest of the five claims and the one least often true.
+
+    Rendered outside the untrusted fence: this is Sync's assessment of the repository's text,
+    not the text itself.
+    """
+    rung = finding.binding_rung
+    return f"How this was established: {rung} -- {_RUNG_GLOSS.get(rung, 'unrecognised')}"
+
+
 def build_patch_prompt(
     finding: Finding,
     change: VendorChange,
@@ -172,6 +200,11 @@ def build_patch_prompt(
             f"Arguments passed: {', '.join(site.args_keys) or 'none'}",
             f"Response fields read: {', '.join(site.response_fields_read) or 'none'}",
         ]),
+        # Outside the fence, deliberately. Everything inside it is the repository's own text,
+        # which the agent is told not to read as instruction; this line is Sync speaking about
+        # that text, and fencing it would tell the agent to distrust our own assessment of how
+        # far to trust the lines above.
+        _evidence(finding),
         "",
         f"Required edit: {_required_edit(field, site)}.",
         "Done when: that edit is made and the call site agrees with the change above.",
