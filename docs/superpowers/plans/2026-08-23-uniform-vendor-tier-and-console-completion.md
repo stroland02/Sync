@@ -32,13 +32,54 @@ Today there are three registration routes and two of them are hand-written. `_BU
 servers. The end state is that stripe and twilio are configuration rows like every other vendor,
 and their symbol rules are extractor modules selected the way the four generator rules are.
 
-The detailed commit sequence is being derived by a design run and lands in this file when it does.
-The shape is fixed: a source tier that knows how to *acquire* a document, an extractor that knows
-how to *read* one, and both halves selected by data.
+### The sequence, and how it was chosen
 
-**A1 is applied and green but uncommitted** -- `ExtractedOperation` widened with `operation_id`,
-`service_id` and `languages`, all optional, plus the `adapter.py` changes that honour them and two
-tests in `tests/test_extracted_symbols.py`.
+Three independent designs were produced -- minimum-diff, extractor-spine, and risk-first -- and
+all three converged on the same architecture, which is the strongest signal available that it is
+the right one. The adversarial judge panel and the completeness critic never ran: they died on an
+account limit. **The adjudication below was therefore done by hand against the three surviving
+designs**, and that is worth stating rather than implying a panel confirmed it.
+
+**Risk-first wins the sequence**, because it alone found the constraint that governs everything:
+`vendor-cache/stripe/symbols.json` is digest-pinned at `5f71dcd3bec1302cf70cba56bc9ebf043b38a1727acb43cee9e20fa08ead6be7`
+in `benchmark/corpus/symbol_map.yaml:48` and asserted in the default suite by
+`test_the_repository_ships_a_baked_stripe_cache_that_matches_its_pin`. **The symbol-map JSON is
+the contract, not the Python function** -- both rules may move only if not one number changes, and
+the cache must not be rebaked inside this sequence.
+
+Four live claims were verified independently before adopting them:
+
+| Claim | Measured |
+|---|---|
+| Stripe's spec needs no `gh` subprocess | `raw.githubusercontent.com/stripe/openapi/v2330/openapi/spec3.json` -> **200, 7,866,866 bytes**, unauthenticated |
+| OpenAI's spec moved rather than vanished | `openai-python/v3.3.1/api_reference/openapi.transformed.yml` -> **200, 2,868,834 bytes** |
+| Mistral has a cheap trigger even unfetchable | `.speakeasy/workflow.lock` -> **200, 4,329 bytes**, unauthenticated |
+| The digest pin is real | `benchmark/corpus/symbol_map.yaml:48` |
+
+**Two traps the designs found that a careless fix would walk into.** Prefixing `https://` onto
+Mistral's registry reference returns **200 with a 4,848-byte HTML page** -- `_spec` would cache
+that as a specification and oasdiff would diff it against its identical twin and report clean.
+And registering OpenAI's `.castiron.stats.yml` as a Stainless manifest would make
+`SpecSource.generator == "stainless"` false for a repository whose own commit is titled *remove
+Stainless attribution and infrastructure* -- and that string selects the extraction rule, so
+symbols would dispatch to the wrong reader with every test still green.
+
+| # | Commit | State |
+|---|---|---|
+| A1 | One operation resolves to one name through both entry points | **landed `a568afc1`** |
+| A2 | A reference we cannot resolve is reported as that, not as absent (mistral) | next |
+| A3 | Pin what both symbol rules produce, before anything moves | |
+| A4 | The packages are named for what they hold | |
+| A5 | A rule declares its key, its input and the languages it speaks | |
+| A6 | The tier resolves symbols from a staged map, not only a checkout | |
+| A7 | Every registered vendor's bindings come from its row | |
+| A8 | A row may name its specification instead of discovering one | |
+| A9 | OpenAI's row names the specification it actually publishes | |
+| A10 | A row may name several documents (twilio) | |
+| A11 | A row declares which oasdiff kinds are noise | |
+| A12 | Stripe is a row; the hand-written adapter is deleted | |
+| A13 | Twilio is a row; the registry names no vendor at all | |
+| A14 | A stale row is found by a check, not by a person | |
 
 ### Two live defects Track A must absorb
 
