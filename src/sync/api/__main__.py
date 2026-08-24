@@ -182,8 +182,8 @@ def app_factory() -> Starlette:
     def corpus_reader(*, repo_id: str | None = None):
         return fleet.corpus_summary(store, repo_id=repo_id)
 
-    def corpus_health_reader():
-        return fleet.corpus_health(store)
+    def precedent_health_reader():
+        return fleet.precedent_health(store)
 
     def repositories_reader():
         return fleet.repositories(store)
@@ -422,7 +422,7 @@ def app_factory() -> Starlette:
         dismissal_writer=dismissal_writer,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
-        corpus_health_reader=corpus_health_reader,
+        precedent_health_reader=precedent_health_reader,
         repositories_reader=repositories_reader,
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,

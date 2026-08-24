@@ -21,7 +21,7 @@
  */
 import { useCallback } from "react"
 
-import type { CorpusSummary, Tally } from "@/api/types"
+import type { PrecedentSummary, Tally } from "@/api/types"
 import type { ChartTokens } from "@/components/charts/echart"
 import { EChart } from "@/components/charts/echart"
 import {
@@ -135,7 +135,7 @@ function buildDispositionOption(tally: Tally, tokens: ChartTokens) {
   }
 }
 
-export function CorpusChart({ data }: { data: CorpusSummary }) {
+export function PrecedentChart({ data }: { data: PrecedentSummary }) {
   const buildOption = useCallback(
     (tokens: ChartTokens) => buildDispositionOption(data.by_terminal_status, tokens),
     [data.by_terminal_status],

@@ -26,7 +26,7 @@
  */
 
 import { DEFAULT_LIMIT } from "@/api/client"
-import { useCorpus, useDetectors, useOverview, useRepositories, useRuns } from "@/api/queries"
+import { usePrecedent, useDetectors, useOverview, useRepositories, useRuns } from "@/api/queries"
 import { FactTile } from "@/components/fact-tile"
 import { Skeleton } from "@/components/skeleton"
 import { Absent } from "@/components/status"
@@ -108,7 +108,7 @@ export function FleetFacts() {
   const runs = useRuns({ limit: DEFAULT_LIMIT, offset })
   const repositories = useRepositories()
   const detectors = useDetectors()
-  const corpus = useCorpus()
+  const corpus = usePrecedent()
 
   return (
     <div className="grid gap-section grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">

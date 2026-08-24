@@ -20,7 +20,7 @@
  * table is re-derived by every scan, so a dismissal can outlive the row it names. Two responses
  * were available and this codebase has already ruled between them —
  * `sync.dashboard.fleet.abandonment_by_change_kind` has the identical problem and states its
- * fleet scope in the caption, while `RunsCard` and `CorpusSummaryCard` stay unmounted because
+ * fleet scope in the caption, while `RunsCard` and `PrecedentSummaryCard` stay unmounted because
  * theirs is a *page of rows* that would each read as this repository's. A distribution that names
  * its own scope is the first case, not the second.
  */

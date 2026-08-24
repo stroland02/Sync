@@ -33,7 +33,7 @@ const MIGRATED = [
   "/repositories/:repoId/integration-changes",
   "/repositories/:repoId",
   "/repositories/:repoId/metrics",
-  "/repositories/:repoId/corpus",
+  "/repositories/:repoId/precedent",
   "/repositories/:repoId/solutions",
   "/repositories/:repoId/runs",
   "/repositories/:repoId/vendors",

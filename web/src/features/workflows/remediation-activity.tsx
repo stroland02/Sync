@@ -51,7 +51,7 @@ interface RemediationActivity {
 export async function fetchRemediationActivity(
   signal?: AbortSignal,
 ): Promise<RemediationActivity> {
-  const path = "/api/corpus/activity"
+  const path = "/api/precedent/activity"
   let response: Response
   try {
     response = await fetch(path, { headers: { Accept: "application/json" }, signal })

@@ -6,7 +6,7 @@
  * it, never a truncated copy of a screen below it, and no figure combines the five stages -- a
  * scalar over "what we read", "what we watched" and "what is broken" would collapse three kinds of
  * not-knowing onto one axis. No runs panel and no repair record until `B149` closes: `RunRow`
- * carries no `repo_id` and `/api/corpus` accepts no repository parameter, so either would render
+ * carries no `repo_id` and `/api/precedent` accepts no repository parameter, so either would render
  * every repository's rows under one repository's name (`codebase-page.test.tsx` holds the absence).
  */
 

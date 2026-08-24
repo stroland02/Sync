@@ -270,7 +270,7 @@ export function useRuns(params: PageParams & { outcome?: string | null } = {}) {
  * The repair record, aggregated. Not polled: `migration_outcome` only gains a row when a
  * run finishes an attempt, and the runs poll above already surfaces that a run finished.
  */
-export function useCorpus() {
+export function usePrecedent() {
   return useQuery({
     queryKey: ["corpus"],
     queryFn: ({ signal }) => fetchCorpus(signal),
@@ -285,7 +285,7 @@ export function useCorpus() {
  *
  * Not polled: this grouping moves when SIGNAL runs or a remediation run reaches a new
  * checkpoint, neither of which this screen would learn about sooner than a manual refresh —
- * the same call `useRepositories` and `useCorpus` make.
+ * the same call `useRepositories` and `usePrecedent` make.
  */
 export function useChangeUnits(params: ChangeUnitsParams = {}) {
   const limit = params.limit ?? DEFAULT_LIMIT
@@ -301,7 +301,7 @@ export function useChangeUnits(params: ChangeUnitsParams = {}) {
 }
 
 /**
- * The `repo_id` roll-up from the index. Not polled, for the same reason as `useCorpus`: it
+ * The `repo_id` roll-up from the index. Not polled, for the same reason as `usePrecedent`: it
  * moves only when INDEX runs, which nothing on this screen would tell you had happened
  * sooner than a manual refresh would.
  */
@@ -389,7 +389,7 @@ export function useDetectors(repoId?: string) {
  *
  * Not polled. This view moves when a scan writes a `vendor_change` row or when somebody edits the
  * deployment's vendor configuration, and neither is something this screen would learn about sooner
- * than a manual refresh would — the same call `useRepositories` and `useCorpus` make.
+ * than a manual refresh would — the same call `useRepositories` and `usePrecedent` make.
  */
 export function useAdapters() {
   return useQuery({

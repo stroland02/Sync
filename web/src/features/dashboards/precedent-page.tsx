@@ -2,7 +2,7 @@
  * Metrics → Corpus: how well the remediation loop actually works, and which parts of that
  * question have no answer yet.
  *
- * **Owner ruling, 2026-08-19:** `/api/corpus/health` becomes a fourth Metrics tab. The route and
+ * **Owner ruling, 2026-08-19:** `/api/precedent/health` becomes a fourth Metrics tab. The route and
  * its view model have existed since `M12-W323` with nothing rendering them, and the payload is
  * the most console-shaped one in the product — every axis arrives carrying `status`,
  * `has_samples`, `sample_count`, `provenance` and its own `denominator_description`, which is the
@@ -61,7 +61,7 @@ interface Axis {
   denominator_description: string
 }
 
-interface CorpusHealth {
+interface PrecedentHealth {
   summary: {
     total_runs: number
     distinct_findings: number
@@ -78,8 +78,8 @@ interface CorpusHealth {
   axes: Axis[]
 }
 
-async function fetchCorpusHealth(signal?: AbortSignal): Promise<CorpusHealth> {
-  const path = "/api/corpus/health"
+async function fetchPrecedentHealth(signal?: AbortSignal): Promise<PrecedentHealth> {
+  const path = "/api/precedent/health"
   let response: Response
   try {
     response = await fetch(path, { headers: { Accept: "application/json" }, signal })
@@ -89,7 +89,7 @@ async function fetchCorpusHealth(signal?: AbortSignal): Promise<CorpusHealth> {
   }
   if (!response.ok) throw new ApiStatusError(response.status, path)
   try {
-    return (await response.json()) as CorpusHealth
+    return (await response.json()) as PrecedentHealth
   } catch (cause) {
     throw new MalformedResponseError(path, { cause })
   }
@@ -163,11 +163,11 @@ function describeProvenance(axes: Axis[]): string | null {
   return sourced.length === 0 ? null : sourced.sort().join(", ")
 }
 
-export function CorpusPage() {
+export function PrecedentPage() {
   const { repoId } = useParams<{ repoId: string }>()
   const query = useQuery({
     queryKey: ["corpus-health"],
-    queryFn: ({ signal }) => fetchCorpusHealth(signal),
+    queryFn: ({ signal }) => fetchPrecedentHealth(signal),
   })
 
   if (repoId === undefined) return <UnknownRoute />

@@ -585,7 +585,7 @@ def change_units(
     }
 
 
-def corpus_health(store: GraphStore) -> dict[str, Any]:
+def precedent_health(store: GraphStore) -> dict[str, Any]:
     """The corpus health view model: quality axes status, sample counts, and runs.
 
     Beta's evidence has to be readable before it is quotable, and this answers which
@@ -595,8 +595,8 @@ def corpus_health(store: GraphStore) -> dict[str, Any]:
 
     Uses SQL aggregation on GraphStore (B167) or falls back to compute_axes(store.migration_outcomes()).
     """
-    if hasattr(store, "corpus_health_aggregates"):
-        axes = store.corpus_health_aggregates()
+    if hasattr(store, "precedent_health_aggregates"):
+        axes = store.precedent_health_aggregates()
     else:
         outcomes = store.migration_outcomes()
         axes = compute_axes(outcomes)

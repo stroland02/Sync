@@ -60,8 +60,8 @@ function renderCodebase(path: string) {
 describe("CodebasePage's scope", () => {
   /**
    * Four cards on this console have no importer. Two of them name this screen as their
-   * destination — `RunsCard` and `CorpusSummaryCard` — and neither payload can be narrowed to a
-   * repository: `RunRow` carries no `repo_id` and `/api/corpus` accepts no repository parameter
+   * destination — `RunsCard` and `PrecedentSummaryCard` — and neither payload can be narrowed to a
+   * repository: `RunRow` carries no `repo_id` and `/api/precedent` accepts no repository parameter
    * (`B149`). Mounting either would put every repository's runs under one repository's name,
    * which is the attribution `M14-W265` removed from the repository cards.
    *

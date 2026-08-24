@@ -2801,7 +2801,7 @@ class GraphStore:
 
         The routing question: tier 0 is the mechanical path and the higher tiers cost more, so
         which tier a solution came from is what says whether routing is working. Deliberately not
-        a success *rate* per tier — that is `corpus_health`'s `merge_rate_by_tier`, computed over
+        a success *rate* per tier — that is `precedent_health`'s `merge_rate_by_tier`, computed over
         a denominator this count does not have.
 
         **A tier absent here never ran.** The grouping returns groups that exist, so a caller
@@ -2934,7 +2934,7 @@ class GraphStore:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def corpus_health_aggregates(self):
+    def precedent_health_aggregates(self):
         """Compute the benchmark quality axes directly in Postgres via SQL aggregation.
 
         Avoids O(n) table scans in Python over the append-only `migration_outcome` table (B167).

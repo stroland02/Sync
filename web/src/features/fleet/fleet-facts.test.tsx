@@ -29,7 +29,7 @@ vi.mock("@/api/queries", () => ({
   useRuns: () => mockState.runs,
   useRepositories: () => mockState.repositories,
   useDetectors: () => mockState.detectors,
-  useCorpus: () => mockState.corpus,
+  usePrecedent: () => mockState.corpus,
 }))
 
 /** The five query results the rail reads, swapped per test rather than through a live client. */

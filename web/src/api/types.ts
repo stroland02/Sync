@@ -673,7 +673,7 @@ export interface ChangeUnitsPage {
 export type Tally = Record<string, number>
 
 /**
- * `GET /api/corpus` — the repair record, aggregated.
+ * `GET /api/precedent` — the repair record, aggregated.
  *
  * `attempts` and `distinct_findings` are separate fields on purpose: `sync.remediate.corpus`
  * writes one `migration_outcome` row per attempt, so a finding retried three times is three
@@ -686,7 +686,7 @@ export type Tally = Record<string, number>
  * change. Those runs are real — `/api/runs` still names them through `abandon_reason` — but
  * a row for them here would be a fabrication, not a measurement.
  */
-export interface CorpusSummary {
+export interface PrecedentSummary {
   attempts: number
   distinct_findings: number
   by_terminal_status: Tally
@@ -1211,7 +1211,7 @@ export interface VendorOperationsResponse {
 }
 
 /**
- * One `(change_kind, tier)` pair that has been attempted, from `GET /api/corpus/abandonment`.
+ * One `(change_kind, tier)` pair that has been attempted, from `GET /api/precedent/abandonment`.
  *
  * **The grain is one repair attempt, not one finding.** A finding retried three times is three
  * attempts and one finding, which is why the counts come in pairs and neither is a bare `count`.

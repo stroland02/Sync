@@ -66,7 +66,7 @@ import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
 
 /**
  * `echarts` is ~1.1 MB minified and this screen is one of nine. Lazy, so it lands in its own
- * chunk and never in the initial bundle — the same arrangement `corpus-summary.tsx` makes, and
+ * chunk and never in the initial bundle — the same arrangement `precedent-summary.tsx` makes, and
  * `vite.config.ts`'s `chunkSizeWarningLimit` comment carries why the warning it raises is
  * expected. `fallback={null}` rather than a placeholder: the cards below are the same numbers,
  * already on screen, so nothing is waiting on this.

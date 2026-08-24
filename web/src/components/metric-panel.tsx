@@ -27,7 +27,7 @@
  * **The title is an `h2`, written here rather than taken from the vendored `CardTitle`.** That
  * component renders an `h3` and accepts no `asChild`, and a panel is the level directly under the
  * page: `PageHeader`'s `h1`, then a panel, then whatever a panel's own body headings are —
- * `corpus-summary.tsx`'s three tally headings are `h3` and are contained by their panel, so a
+ * `precedent-summary.tsx`'s three tally headings are `h3` and are contained by their panel, so a
  * panel at `h3` would put a container and its contents on one outline level and leave the document
  * with no `h2` at all. Screen-reader outline and visual weight are two different decisions and this
  * is the file where they stop being confused.

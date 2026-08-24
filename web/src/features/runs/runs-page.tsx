@@ -12,7 +12,7 @@
  * **Every figure here is fleet-wide, and none of it can be narrowed to a workspace.** That is a
  * schema fact and not a gap in the transport: `migration_outcome` stores no `repo_id` at all, by a
  * decision that is exactly what makes the corpus safe to aggregate across customers
- * (`src/sync/api/app.py:20-22`). `/api/runs` and `/api/corpus/abandonment` take no scope parameter
+ * (`src/sync/api/app.py:20-22`). `/api/runs` and `/api/precedent/abandonment` take no scope parameter
  * because there is no column to filter on.
  *
  * That collides with the workspace mandate, which scopes every page and forbids a show-all. The

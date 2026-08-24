@@ -144,7 +144,7 @@ def _fake_corpus_reader(*, repo_id: str | None = None) -> dict[str, Any]:
     }
 
 
-def _fake_corpus_health_reader() -> dict[str, Any]:
+def _fake_precedent_health_reader() -> dict[str, Any]:
     return {
         "summary": {
             "total_runs": 0,
@@ -366,7 +366,7 @@ def _build_app(
     dismissal_writer=lambda finding_id, *, reason, actor: None,
     runs_reader=_fake_runs_reader,
     corpus_reader=_fake_corpus_reader,
-    corpus_health_reader=_fake_corpus_health_reader,
+    precedent_health_reader=_fake_precedent_health_reader,
     repositories_reader=_fake_repositories_reader,
     abandonment_reader=_fake_abandonment_reader,
     binding_reader=_fake_binding_reader,
@@ -421,7 +421,7 @@ def _build_app(
         dismissal_writer=dismissal_writer,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
-        corpus_health_reader=corpus_health_reader,
+        precedent_health_reader=precedent_health_reader,
         repositories_reader=repositories_reader,
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
@@ -958,7 +958,7 @@ def test_corpus_route_returns_the_readers_payload_unaltered():
     )
     client = TestClient(app)
 
-    response = client.get("/api/corpus")
+    response = client.get("/api/precedent")
 
     assert response.status_code == 200
     assert response.json() == payload
@@ -1060,7 +1060,7 @@ def test_corpus_route_passes_repo_id_to_its_reader():
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
     client = TestClient(app)
 
-    client.get("/api/corpus?repo_id=github.com/acme/storefront")
+    client.get("/api/precedent?repo_id=github.com/acme/storefront")
 
     assert calls == [{"repo_id": "github.com/acme/storefront"}]
 
@@ -1075,7 +1075,7 @@ def test_corpus_route_reaches_its_reader_with_none_when_unscoped():
     app = _build_app(surface=GraphSurface(FakeGraph(), feed_fetched_at=FETCHED), corpus_reader=corpus_reader)
     client = TestClient(app)
 
-    client.get("/api/corpus")
+    client.get("/api/precedent")
 
     assert calls == [{"repo_id": None}]
 
@@ -1567,7 +1567,7 @@ class _RecordingClient(NamedTuple):
     workflow_reads: list[str]
     runs_reads: list[dict[str, int]]
     corpus_reads: list[None]
-    corpus_health_reads: list[None]
+    precedent_health_reads: list[None]
     repositories_reads: list[None]
     abandonment_reads: list[None]
     binding_reads: list[tuple[str, str, str | None]]
@@ -1585,7 +1585,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
     workflow_reads: list[str] = []
     runs_reads: list[dict[str, int]] = []
     corpus_reads: list[None] = []
-    corpus_health_reads: list[None] = []
+    precedent_health_reads: list[None] = []
     repositories_reads: list[None] = []
     abandonment_reads: list[None] = []
     binding_reads: list[tuple[str, str, str | None]] = []
@@ -1611,9 +1611,9 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         corpus_reads.append({"repo_id": repo_id})
         return _fake_corpus_reader(repo_id=repo_id)
 
-    def corpus_health_reader():
-        corpus_health_reads.append(None)
-        return _fake_corpus_health_reader()
+    def precedent_health_reader():
+        precedent_health_reads.append(None)
+        return _fake_precedent_health_reader()
 
     def repositories_reader():
         repositories_reads.append(None)
@@ -1673,7 +1673,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         dismissal_writer=lambda finding_id, *, reason, actor: None,
         runs_reader=runs_reader,
         corpus_reader=corpus_reader,
-        corpus_health_reader=corpus_health_reader,
+        precedent_health_reader=precedent_health_reader,
         repositories_reader=repositories_reader,
         abandonment_reader=abandonment_reader,
         binding_reader=binding_reader,
@@ -1694,7 +1694,7 @@ def _recording_client(**graph_kw) -> _RecordingClient:
         context_writer=_fake_context_writer,
     )
     return _RecordingClient(
-        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, corpus_health_reads,
+        TestClient(app), surface, workflow_reads, runs_reads, corpus_reads, precedent_health_reads,
         repositories_reads, abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
         vendor_findings_reads, change_units_reads,
@@ -1709,7 +1709,7 @@ def test_no_route_reaches_past_the_read_surface():
     site = _site("s1")
     change = _change("c1")
     (
-        client, surface, workflow_reads, runs_reads, corpus_reads, corpus_health_reads,
+        client, surface, workflow_reads, runs_reads, corpus_reads, precedent_health_reads,
         repositories_reads, abandonment_reads,
         binding_reads, coverage_reads, observed_reads, detector_reads, severity_reads, overview_reads,
         vendor_findings_reads, change_units_reads,
@@ -1721,10 +1721,10 @@ def test_no_route_reaches_past_the_read_surface():
     assert client.get("/api/findings/f1").status_code == 200
     assert client.get("/api/workflows/f1").status_code == 200
     assert client.get("/api/runs").status_code == 200
-    assert client.get("/api/corpus").status_code == 200
-    assert client.get("/api/corpus/health").status_code == 200
+    assert client.get("/api/precedent").status_code == 200
+    assert client.get("/api/precedent/health").status_code == 200
     assert client.get("/api/repositories").status_code == 200
-    assert client.get("/api/corpus/abandonment").status_code == 200
+    assert client.get("/api/precedent/abandonment").status_code == 200
     assert client.get("/api/change-units").status_code == 200
     assert client.get("/api/vendors/stripe/operations/PostCharges/bindings").status_code == 200
     assert client.get("/api/repositories/r1/coverage").status_code == 200
@@ -1739,7 +1739,7 @@ def test_no_route_reaches_past_the_read_surface():
     # own, one of these counts would read 0 or 2 rather than 1.
     assert len(runs_reads) == 1, "the runs route must reach its own reader exactly once"
     assert len(corpus_reads) == 1, "the corpus route must reach its own reader exactly once"
-    assert len(corpus_health_reads) == 1, "the corpus health route must reach its own reader exactly once"
+    assert len(precedent_health_reads) == 1, "the corpus health route must reach its own reader exactly once"
     assert len(repositories_reads) == 1, "the repositories route must reach its own reader exactly once"
     assert len(abandonment_reads) == 1, "the abandonment route must reach its own reader exactly once"
     assert len(change_units_reads) == 1, "the change-units route must reach its own reader exactly once"
@@ -1889,10 +1889,10 @@ _MULTI_CURSOR_COLLECTIONS = {
 # - `/api/findings/{finding_id}` and `/api/workflows/{finding_id}` each answer one resource. A
 #   finding's list-valued fields (`args_keys`, `response_fields_read`, `known_changes`) describe
 #   that one finding, not a page of findings.
-# - `/api/corpus` and `/api/repositories/{repo_id:path}/coverage` are aggregate counts grouped into
+# - `/api/precedent` and `/api/repositories/{repo_id:path}/coverage` are aggregate counts grouped into
 #   dicts (`by_terminal_status`, `by_vendor`, ...), not lists of records -- there is nothing to
 #   page through.
-# - `/api/corpus/abandonment` is the same shape one level deeper: `groups` is one entry per
+# - `/api/precedent/abandonment` is the same shape one level deeper: `groups` is one entry per
 #   `(change_kind, tier)` pair actually attempted, bounded by the vocabulary of change kinds and
 #   tiers rather than growing with usage the way `/api/runs` does, so it is an aggregate list
 #   rather than a page of records.
@@ -1936,9 +1936,9 @@ _NOT_COLLECTIONS = {
     "/api/overview",
     "/api/findings/{finding_id}",
     "/api/workflows/{finding_id}",
-    "/api/corpus",
-    "/api/corpus/health",
-    "/api/corpus/abandonment",
+    "/api/precedent",
+    "/api/precedent/health",
+    "/api/precedent/abandonment",
     "/api/repositories",
     "/api/repositories/{repo_id:path}/coverage",
     "/api/repositories/{repo_id}/coverage",
@@ -1971,7 +1971,7 @@ _NOT_COLLECTIONS = {
     # Dashboards L2/L3/T4: `days` is one entry per day something was attempted and `by_tier`
     # one per tier that ran -- bounded by the calendar and by the tier ladder, not by how
     # many attempts exist.
-    "/api/corpus/activity",
+    "/api/precedent/activity",
     # Tickets: one row per remediation request against one repository's open findings -- bounded
     # by how many findings an operator or the watch loop has asked about, a set the same order of
     # magnitude as the open findings themselves. The Detectors page renders the whole lifecycle
@@ -2292,7 +2292,7 @@ _NOT_YET_FETCHED_BY_CONSOLE = {
     # 2026-08-19 that the console reads dismissals and never writes one -- and that is the
     # ordinary state of a route this guard holds, because the guard reads fetched paths and
     # is indifferent to method.
-    # `/api/corpus/health` was here from M12-W323 and its receipt is spent: the Metrics ->
+    # `/api/precedent/health` was here from M12-W323 and its receipt is spent: the Metrics ->
     # Corpus tab renders it as of CI-W501, on the owner's ruling of 2026-08-19.
     "/api/repos/{param}/context",  # B126 Task 5: route only, the console screen is M7's line
     "/api/findings",  # Scoped codebase findings: route ready for upcoming Codebase Overview findings view
@@ -2590,8 +2590,8 @@ def test_app_factory_readers_accept_what_their_routes_actually_pass(monkeypatch)
         "/api/repositories/r1/observed",
         "/api/detectors",
         "/api/detectors?repo_id=r1",
-        "/api/corpus",
-        "/api/corpus/health",
+        "/api/precedent",
+        "/api/precedent/health",
         "/api/findings",
         "/api/findings?repo_id=r1",
         "/api/repositories/r1/findings",

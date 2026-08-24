@@ -18,7 +18,7 @@ from starlette.testclient import TestClient
 from sync.api.app import create_app
 from sync.benchmark.axes import Axis, BenchmarkAxes, Counts
 from sync.core import MigrationOutcome
-from sync.dashboard.fleet import corpus_health
+from sync.dashboard.fleet import precedent_health
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -61,8 +61,8 @@ def _outcome(**overrides: Any) -> MigrationOutcome:
     return MigrationOutcome(**fields)
 
 
-def test_corpus_health_empty_corpus_all_axes_unmeasured(store: GraphStore):
-    health = corpus_health(store)
+def test_precedent_health_empty_corpus_all_axes_unmeasured(store: GraphStore):
+    health = precedent_health(store)
 
     assert health["summary"]["total_runs"] == 0
     assert health["summary"]["distinct_findings"] == 0
@@ -88,7 +88,7 @@ def test_corpus_health_empty_corpus_all_axes_unmeasured(store: GraphStore):
         assert axis["sample_count"] == 0
 
 
-def test_corpus_health_distinguishes_zero_from_absence(store: GraphStore):
+def test_precedent_health_distinguishes_zero_from_absence(store: GraphStore):
     # Record 1 finding routed to tier 0 that failed verification and escalated to tier 1
     # Routing accuracy denominator n = 1 (routed to tier 0), held at tier 0 = 0 -> value = 0.0 (measured zero!)
     attempt1 = _outcome(
@@ -112,7 +112,7 @@ def test_corpus_health_distinguishes_zero_from_absence(store: GraphStore):
     store.record_migration_outcome(attempt1)
     store.record_migration_outcome(attempt2)
 
-    health = corpus_health(store)
+    health = precedent_health(store)
 
     assert health["summary"]["total_runs"] == 2
     assert health["summary"]["distinct_findings"] == 1
@@ -158,7 +158,7 @@ def test_corpus_health_distinguishes_zero_from_absence(store: GraphStore):
     assert health["summary"]["rehearsal_attempts"] == 0
 
 
-def test_corpus_health_api_route(store: GraphStore):
+def test_precedent_health_api_route(store: GraphStore):
     attempt = _outcome(
         finding_id="f-1",
         attempt_index=0,
@@ -178,11 +178,11 @@ def test_corpus_health_api_route(store: GraphStore):
 
     app = _build_app(
         surface=GraphSurface(store),
-        corpus_health_reader=lambda: corpus_health(store),
+        precedent_health_reader=lambda: precedent_health(store),
     )
     client = TestClient(app)
 
-    response = client.get("/api/corpus/health")
+    response = client.get("/api/precedent/health")
     assert response.status_code == 200
     data = response.json()
 
@@ -195,7 +195,7 @@ def test_corpus_health_api_route(store: GraphStore):
         assert a["provenance"] == "production"
 
 
-def test_corpus_health_sql_aggregates_match_python_computation(store: GraphStore):
+def test_precedent_health_sql_aggregates_match_python_computation(store: GraphStore):
     from sync.benchmark.axes import compute_axes
 
     # Populate a rich set of attempts: rehearsals, prod runs, mixed outcomes, token counts
@@ -242,7 +242,7 @@ def test_corpus_health_sql_aggregates_match_python_computation(store: GraphStore
     for a in [attempt1, attempt2, attempt3, attempt_rehearsal]:
         store.record_migration_outcome(a)
 
-    sql_axes = store.corpus_health_aggregates()
+    sql_axes = store.precedent_health_aggregates()
     py_axes = compute_axes(store.migration_outcomes())
 
     assert sql_axes.counts.attempts == 4

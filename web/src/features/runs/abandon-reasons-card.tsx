@@ -1,7 +1,7 @@
 /**
  * Dashboard 6, as a component Lane B mounts on the Runs route (decision 30).
  *
- * Self-contained: it fetches `/api/corpus/abandonment` itself and takes no props, so mounting it
+ * Self-contained: it fetches `/api/precedent/abandonment` itself and takes no props, so mounting it
  * is one import and one tag. `abandon-reasons-option.ts` carries what it counts and why.
  *
  * The sentences under the chart are not decoration. This screen is where somebody decides which

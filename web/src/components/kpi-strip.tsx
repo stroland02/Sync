@@ -10,7 +10,7 @@
  * a delta the payload does not carry, never a rate without its denominator — `FactTile`'s own
  * docstring holds that line and this component inherits it rather than restating it.
  *
- * **A tile may not restate its own table's footer at the same weight.** `corpus-chart.tsx`
+ * **A tile may not restate its own table's footer at the same weight.** `precedent-chart.tsx`
  * records two KPI figures being deleted for exactly that. A tile earns its slot by answering
  * something the rows beneath do not: a scope the page is filtered away from, a distribution the
  * rows do not sum, a date the rows do not carry.

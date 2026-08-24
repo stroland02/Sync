@@ -15,7 +15,7 @@
 
 import { lazy, Suspense } from "react"
 
-import { useCorpus } from "@/api/queries"
+import { usePrecedent } from "@/api/queries"
 import type { Tally } from "@/api/types"
 import {
   Table,
@@ -31,8 +31,8 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 // Lazy so echarts and echarts-for-react — the corpus chart's only heavy
 // dependency — land in their own chunk instead of the console's initial
 // bundle.
-const CorpusChart = lazy(() =>
-  import("@/features/fleet/corpus-chart").then((mod) => ({ default: mod.CorpusChart })),
+const PrecedentChart = lazy(() =>
+  import("@/features/fleet/precedent-chart").then((mod) => ({ default: mod.PrecedentChart })),
 )
 
 function TallyTable({ heading, tally }: { heading: string; tally: Tally }) {
@@ -60,8 +60,8 @@ function TallyTable({ heading, tally }: { heading: string; tally: Tally }) {
   )
 }
 
-export function CorpusSummaryCard() {
-  const query = useCorpus()
+export function PrecedentSummaryCard() {
+  const query = usePrecedent()
 
   return (
     <div className="flex flex-col gap-section">
@@ -104,7 +104,7 @@ export function CorpusSummaryCard() {
           ) : (
             <>
               <Suspense fallback={null}>
-                <CorpusChart data={query.data} />
+                <PrecedentChart data={query.data} />
               </Suspense>
               <div className="grid auto-rows-fr gap-section sm:grid-cols-3">
                 <TallyTable heading="By disposition" tally={query.data.by_terminal_status} />

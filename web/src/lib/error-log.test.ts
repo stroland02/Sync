@@ -102,8 +102,8 @@ describe("a row counts only the path it names", () => {
   it("still collapses one summary from one endpoint", () => {
     const kinds = groupErrorsByKind(
       logOf(
-        ["The API is unreachable.", "/api/corpus"],
-        ["The API is unreachable.", "/api/corpus"]
+        ["The API is unreachable.", "/api/precedent"],
+        ["The API is unreachable.", "/api/precedent"]
       )
     )
 

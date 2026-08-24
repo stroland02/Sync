@@ -43,7 +43,7 @@ import { Navigate, useLocation } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import {
-  useCorpus,
+  usePrecedent,
   useDetectors,
   useOverview,
   useRepositories,
@@ -180,7 +180,7 @@ function FleetScreen({ question }: { question: string }) {
   const overview = useOverview()
   const runs = useRuns({ limit: DEFAULT_LIMIT, offset })
   const detectors = useDetectors()
-  const corpus = useCorpus()
+  const corpus = usePrecedent()
 
   const nothingIndexed = repositories.isSuccess && repositories.data.repo_ids.length === 0
 

@@ -611,7 +611,7 @@ def test_palette_series_slots_match_the_stylesheet():
 
 
 def test_the_colour_literal_guard_rejects_a_hardcoded_hex(tmp_path: Path) -> None:
-    (tmp_path / "corpus-chart.tsx").write_text(
+    (tmp_path / "precedent-chart.tsx").write_text(
         'function ink() { return "#ffffff" }\n', encoding="utf-8"
     )
 
@@ -835,7 +835,7 @@ def test_the_dialog_heading_guard_permits_a_header_inside_the_content(tmp_path: 
 #
 # Section 8 of `2026-08-05-sync-console-architecture.md` measures two ink levels plus one accent
 # and never three. The console holds it with `--color-ink` and `--color-ink-muted`;
-# `--color-ink-secondary` has exactly one consumer, `corpus-chart.tsx`'s legend `textStyle`, which
+# `--color-ink-secondary` has exactly one consumer, `precedent-chart.tsx`'s legend `textStyle`, which
 # renders into a canvas and is not a DOM ink level at all. Two call sites reached for it as a
 # class and made a third -- `run-outcome.tsx` on the two screens carrying the densest evidence,
 # and `filters.tsx` on the active-filter strip, where it also made the value *dimmer* than the
@@ -927,9 +927,9 @@ def test_the_registry_guard_rejects_an_undeclared_importer(tmp_path: Path) -> No
     # registry, not a reusable scan -- so this exercises the set arithmetic they end in, which is
     # where an undeclared importer is actually caught.
     registry = {"components/error-surface.tsx"}
-    importers = {"components/error-surface.tsx", "features/fleet/corpus-chart.tsx"}
+    importers = {"components/error-surface.tsx", "features/fleet/precedent-chart.tsx"}
 
-    assert sorted(importers - registry) == ["features/fleet/corpus-chart.tsx"]
+    assert sorted(importers - registry) == ["features/fleet/precedent-chart.tsx"]
 
 
 def test_the_registry_guard_rejects_a_stale_entry() -> None:

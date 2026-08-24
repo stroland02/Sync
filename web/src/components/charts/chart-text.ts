@@ -5,7 +5,7 @@
  * label on one chart and not the other, which reads as a rendering bug rather than as a
  * duplicated rule.
  *
- * Both were `corpus-chart.tsx`'s, and its own comments carried the arguments below.
+ * Both were `precedent-chart.tsx`'s, and its own comments carried the arguments below.
  */
 
 /**

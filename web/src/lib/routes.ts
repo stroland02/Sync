@@ -47,7 +47,7 @@ import { FindingPage } from "@/features/findings/finding-page"
 import { FindingsPage } from "@/features/findings/findings-page"
 import { CallSitesPage } from "@/features/bindings/call-sites-page"
 import { FileTreePage } from "@/features/index-graph/file-tree-page"
-import { CorpusPage } from "@/features/dashboards/corpus-page"
+import { PrecedentPage } from "@/features/dashboards/precedent-page"
 import { MetricsPage } from "@/features/dashboards/metrics-page"
 import { SolutionsPage } from "@/features/workflows/solutions-page"
 import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
@@ -233,14 +233,14 @@ export const ROUTES: readonly RouteEntry[] = [
     // is untouched -- the same reasoning detector attribution and the findings list carry. It
     // moved from the Metrics tabs to the Solutions tabs with the stage grouping: the corpus is
     // remediation output, so it belongs beside the runs that produced it.
-    path: "/repositories/:repoId/corpus",
+    path: "/repositories/:repoId/precedent",
     reachedFrom: "the Solutions tabs",
     nav: false,
     label: "Corpus",
     level: "Solution Workflow",
     question: "What has the remediation loop actually produced, and which measurements have no sample yet?",
     params: ["repoId"],
-    element: CorpusPage,
+    element: PrecedentPage,
   },
   {
     // Solutions: every run that reached a pull request, the owner's page of 2026-08-18. An

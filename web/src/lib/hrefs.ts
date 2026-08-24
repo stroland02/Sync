@@ -138,8 +138,8 @@ export function trendsHref(repoId: string): string {
 }
 
 /** What the remediation loop has produced, and which axes have no sample yet. */
-export function corpusHref(repoId: string): string {
-  return `${repo(repoId)}/corpus`
+export function precedentHref(repoId: string): string {
+  return `${repo(repoId)}/precedent`
 }
 
 /** Every remediation that reached the forge. */

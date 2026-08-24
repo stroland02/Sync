@@ -2,7 +2,7 @@
 
 The transport holds no logic. Per-finding routes are a thin call into `GraphSurface`, which
 answers questions about one repository an agent is already pointed
-at. Fleet-wide routes -- `/api/runs`, `/api/corpus`, `/api/corpus/abandonment`,
+at. Fleet-wide routes -- `/api/runs`, `/api/precedent`, `/api/precedent/abandonment`,
 `/api/repositories` -- answer a
 different grain, every run or every attempt across repositories, which the frozen surface
 answers no question about; those go through reader callables backed by `sync.dashboard`
@@ -81,7 +81,7 @@ SetupReader = Callable[..., dict[str, Any]]
 StagingReader = Callable[[str], dict[str, Any]]
 StagingWriter = Callable[[str, dict[str, Any]], dict[str, Any]]
 CorpusReader = Callable[..., dict[str, Any]]
-CorpusHealthReader = Callable[[], dict[str, Any]]
+PrecedentHealthReader = Callable[[], dict[str, Any]]
 RepositoriesReader = Callable[[], dict[str, Any]]
 
 # `abandonment_by_change_kind`'s reader -- which change kinds are not mechanically safe, and at
@@ -246,7 +246,7 @@ def create_app(
     workflow_reader: WorkflowReader,
     runs_reader: RunsReader,
     corpus_reader: CorpusReader,
-    corpus_health_reader: CorpusHealthReader,
+    precedent_health_reader: PrecedentHealthReader,
     repositories_reader: RepositoriesReader,
     abandonment_reader: AbandonmentReader,
     binding_reader: BindingReader,
@@ -736,8 +736,8 @@ def create_app(
         repo_id = request.query_params.get("repo_id")
         return JSONResponse(corpus_reader(repo_id=repo_id))
 
-    async def corpus_health_endpoint(request: Request) -> JSONResponse:
-        return JSONResponse(corpus_health_reader())
+    async def precedent_health_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse(precedent_health_reader())
 
     async def repositories(request: Request) -> JSONResponse:
         return JSONResponse(repositories_reader())
@@ -943,7 +943,7 @@ def create_app(
         # segment registered after a path parameter is swallowed by it.
         Route("/api/findings/over-time", findings_over_time, methods=["GET"]),
         Route("/api/integration-changes/over-time", changes_over_time, methods=["GET"]),
-        Route("/api/corpus/activity", remediation_activity, methods=["GET"]),
+        Route("/api/precedent/activity", remediation_activity, methods=["GET"]),
         Route("/api/findings/dismissals", dismissal_tally, methods=["GET"]),
         Route("/api/findings/{finding_id}", finding_detail, methods=["GET"]),
         Route("/api/findings/{finding_id}/patch", finding_patch, methods=["GET"]),
@@ -961,9 +961,9 @@ def create_app(
         Route("/api/repositories/{repo_id:path}/topology", topology_route, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", get_staging, methods=["GET"]),
         Route("/api/adapters/{vendor_id}/staging", set_staging, methods=["POST"]),
-        Route("/api/corpus", corpus, methods=["GET"]),
-        Route("/api/corpus/health", corpus_health_endpoint, methods=["GET"]),
-        Route("/api/corpus/abandonment", abandonment, methods=["GET"]),
+        Route("/api/precedent", corpus, methods=["GET"]),
+        Route("/api/precedent/health", precedent_health_endpoint, methods=["GET"]),
+        Route("/api/precedent/abandonment", abandonment, methods=["GET"]),
         Route("/api/repositories", repositories, methods=["GET"]),
         Route("/api/repositories/{repo_id:path}/events", repository_events, methods=["GET"]),
         Route("/api/repositories/{repo_id}/events", repository_events, methods=["GET"]),

@@ -37,7 +37,7 @@ export const SIBLING_GROUPS: readonly SiblingGroup[] = [
     label: "Solutions",
     members: [
       { label: "Solutions", path: "/repositories/:repoId/solutions" },
-      { label: "Corpus", path: "/repositories/:repoId/corpus" },
+      { label: "Corpus", path: "/repositories/:repoId/precedent" },
     ],
   },
   {

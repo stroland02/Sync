@@ -5,7 +5,7 @@
  * get wrong and impossible to see afterwards: **every figure on this screen is fleet-wide, and the
  * screen says so.** `migration_outcome` stores no `repo_id` at all — a schema decision that makes
  * the table safe to aggregate across customers (`src/sync/api/app.py:20-22`) — so `/api/runs` and
- * `/api/corpus/abandonment` cannot be narrowed to a workspace even in principle.
+ * `/api/precedent/abandonment` cannot be narrowed to a workspace even in principle.
  *
  * That collides with the workspace mandate, which scopes every page and forbids a show-all. The
  * owner ruled to mount the cards with an explicit not-narrowed statement rather than hold two

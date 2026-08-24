@@ -16,7 +16,7 @@ import type {
   AdapterInventoryResponse,
   BindingSurfaceResponse,
   ChangeUnitsPage,
-  CorpusSummary,
+  PrecedentSummary,
   DetectorAccountabilityResponse,
   DismissalState,
   DismissalTally,
@@ -239,7 +239,7 @@ export function fetchFindingsOverTime(
 }
 
 export function fetchAbandonment(signal?: AbortSignal): Promise<AbandonmentResponse> {
-  return getJson<AbandonmentResponse>("/api/corpus/abandonment", signal)
+  return getJson<AbandonmentResponse>("/api/precedent/abandonment", signal)
 }
 
 export function fetchVendorOperations(
@@ -338,8 +338,8 @@ export function fetchRuns(params: RunsParams, signal?: AbortSignal): Promise<Run
 }
 
 /** The repair record, aggregated: every `migration_outcome` row, by disposition, strategy and tier. */
-export function fetchCorpus(signal?: AbortSignal): Promise<CorpusSummary> {
-  return getJson<CorpusSummary>("/api/corpus", signal)
+export function fetchCorpus(signal?: AbortSignal): Promise<PrecedentSummary> {
+  return getJson<PrecedentSummary>("/api/precedent", signal)
 }
 
 export interface ChangeUnitsParams extends PageParams, ScopeParams {

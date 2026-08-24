@@ -32,7 +32,7 @@ vi.mock("@/api/queries", async (importOriginal) => ({
     settled({ vendors: [{ vendor_id: "stripe" }], total_findings: 3, total_findings_bound: 1000 }),
   useRuns: () => settled({ items: [], total: 0 }),
   useDetectors: () => settled({ detectors: [] }),
-  useCorpus: () => settled({ attempts: 0, distinct_findings: 0 }),
+  usePrecedent: () => settled({ attempts: 0, distinct_findings: 0 }),
   useRepositoryCoverage: () =>
     settled({ repo_id: "org/one", by_vendor: { stripe: 4 }, last_indexed: {}, total_call_sites: 4 }),
   useChangeUnits: () => settled({ items: [], total: 0, next_offset: null }),

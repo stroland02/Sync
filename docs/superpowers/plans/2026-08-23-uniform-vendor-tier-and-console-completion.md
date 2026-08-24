@@ -134,7 +134,7 @@ The vendor knowledge base the patch agent consults when resolving a finding, und
 constraint: *we must validate that what we reference is correct, because we will not cite false
 information.*
 
-- **B1. Rename `corpus` to Precedent.** *(Python landed `CI-W591`; console next.)* 292 files carry the word, including `sync/core/corpus.py`
+- **B1. Rename `corpus` to Precedent.** *(Landed: `CI-W591` Python, `CI-W592` console and API.)* 292 files carry the word, including `sync/core/corpus.py`
   and the routed address `/repositories/:repoId/corpus`. Mechanical but wide; it wants its own
   commit and no other change riding along.
 - **B2. Operation-scoped slices pinned to a spec hash.** A finding names an operation; the agent

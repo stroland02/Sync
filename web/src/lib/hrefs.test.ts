@@ -30,7 +30,7 @@ import {
   integrationChangesHref,
   callSitesHref,
   trendsHref,
-  corpusHref,
+  precedentHref,
   solutionsHref,
   runsHref,
   servicesHref,
@@ -74,7 +74,7 @@ describe("every builder lands on a declared route", () => {
     ["integration changes", integrationChangesHref(REPO)],
     ["call sites", callSitesHref(REPO)],
     ["trends", trendsHref(REPO)],
-    ["corpus", corpusHref(REPO)],
+    ["precedent", precedentHref(REPO)],
     ["solutions", solutionsHref(REPO)],
   ]
 
