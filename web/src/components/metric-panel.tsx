@@ -45,7 +45,7 @@
 import type { ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 type Metric =
   | { value: ReactNode; unit: string }

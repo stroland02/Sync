@@ -23,7 +23,7 @@
  * an answer goes. `docs/superpowers/briefs/2026-08-07-substrate-signals.md` ruling 7.
  */
 
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 export function NotAttachedState({
   detail,

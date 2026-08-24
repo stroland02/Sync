@@ -165,8 +165,10 @@ information.*
   the skeleton instead: it is the router's fallback and the early return twelve screens make
   for a missing route parameter, so deleting it would have meant twelve screens inventing
   their own no-such-thing screen.
-- **C4.** shadcn catalogue migration. 24 primitives are in `web/src/components/ui/`; the remaining
-  bespoke components move onto them, phased with the chassis per ruling 4.
+- **C4.** *(Landed `CI-W599` as de-duplication.)* Four primitives existed in both substrates and
+  now exist once. The rest of the vendored tree has no shadcn counterpart and stays: replacing a
+  working primitive nothing duplicates is polish, and `one-substrate.test.ts` fails if a fifth
+  duplicate ever appears.
 - **C5.** Token re-derivation. 143 custom properties in `web/src/index.css`, to be re-derived once
   composition is settled -- the owner sequenced composition first, tokens second.
 - **C6.** Deferred content restructuring: `WorkflowPage`'s disabled controls become prose;

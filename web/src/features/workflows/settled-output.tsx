@@ -26,7 +26,7 @@ import { MetricPanel } from "@/components/metric-panel"
 import { NodeEvidence } from "@/features/workflows/evidence"
 import { STANDING_LABEL } from "@/features/workflows/node-standing"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 import { findingHref, pullRequestHref } from "@/lib/hrefs"
 /**

@@ -35,7 +35,7 @@ import type { IndexCoverageResponse } from "@/api/types"
 import { Formatted } from "@/components/status"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { formatTimestamp } from "@/lib/format"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 import { vendorHref } from "@/lib/hrefs"
 export interface AttachedVendor {

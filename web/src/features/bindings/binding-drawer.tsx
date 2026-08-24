@@ -47,7 +47,7 @@ import { formatTimestamp, orAbsent } from "@/lib/format"
 import type { BindingSelection } from "@/features/bindings/binding-selection"
 import { joinOrAbsent } from "@/features/bindings/call-site-fields"
 import { describeChangeSet } from "@/features/bindings/change-set"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   Sheet,
   SheetContent,

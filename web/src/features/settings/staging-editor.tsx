@@ -15,8 +15,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
-import { Button } from "@/vendor/supabase/ui/button"
-import { Input } from "@/vendor/supabase/ui/input"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   ApiStatusError,
   MalformedResponseError,

@@ -53,7 +53,7 @@ import { formatTimestamp } from "@/lib/format"
 import { formatAge, secondsSince, useNow } from "@/lib/elapsed"
 import { STANDING_LABEL, STANDING_SENTENCE } from "@/features/workflows/node-standing"
 import { CHANGE_WASH_DURATION, EASE_STANDARD, useReducedMotion } from "@/lib/motion"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 /**
  * What each node does, for a reader who has not read `sync.remediate.nodes`.

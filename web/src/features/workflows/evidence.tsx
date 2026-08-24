@@ -29,7 +29,7 @@ import { Absent, Formatted } from "@/components/status"
 import { CodeBlock } from "@/features/workflows/code-block"
 import { orAbsent } from "@/lib/format"
 import { asHttpUrl } from "@/lib/url"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 export type FieldKind = "text" | "flag" | "url" | "block"
 

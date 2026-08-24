@@ -62,7 +62,7 @@ import {
 } from "@/features/detectors/rung-series"
 import { FooterBar } from "@/layouts/footer-bar"
 import { describeRung, orAbsent } from "@/lib/format"
-import { Card, CardContent, CardHeader } from "@/vendor/supabase/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 /**
  * `echarts` is ~1.1 MB minified and this screen is one of nine. Lazy, so it lands in its own

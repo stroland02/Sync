@@ -29,7 +29,7 @@ import {
   TableHead as VendoredHead,
   TableHeader as VendoredHeader,
   TableRow as VendoredRow,
-} from "@/vendor/supabase/ui/table"
+} from "@/components/ui/table"
 
 export { Table, TableBody }
 
