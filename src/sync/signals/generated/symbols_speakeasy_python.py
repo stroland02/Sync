@@ -70,9 +70,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sync.signals.generated.symbols import (
-    GENERATOR as _STAINLESS_PYTHON_GENERATOR,
-)
-from sync.signals.generated.symbols import (
     ExtractedOperation,
     ExtractionReport,
     UnrecognisedSdkShape,
@@ -95,19 +92,6 @@ _CLIENT_BASE = "BaseSDK"
 _REQUEST_BUILDERS = {"_build_request", "_build_request_async"}
 _METHOD_KEYWORD = "method"
 _PATH_KEYWORD = "path"
-
-
-@dataclass(frozen=True)
-class SpeakeasyPythonExtractionReport(ExtractionReport):
-    """The same report, carrying the name of the rule that actually produced it.
-
-    Only the name differs, for the reason the other two subclasses give: `ExtractionReport.render`
-    names the generator of the flavour that defined it, so this extraction rendered through it
-    would tell an operator that `stainless-python` read the SDK.
-    """
-
-    def render(self) -> str:
-        return f"{GENERATOR}{super().render().removeprefix(_STAINLESS_PYTHON_GENERATOR)}"
 
 
 def _comparable(http_method: str, path: str) -> tuple[str, str]:
@@ -334,7 +318,8 @@ def report_extraction(
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
     } & comparable
-    return SpeakeasyPythonExtractionReport(
+    return ExtractionReport(
+        rule=GENERATOR,
         operations=operations,
         declared_operation_count=len(spec_operations),
         comparable_key_count=len(comparable),

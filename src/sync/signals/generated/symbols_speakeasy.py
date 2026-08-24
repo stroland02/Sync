@@ -98,9 +98,6 @@ from tree_sitter import Language, Node, Parser
 
 from sync.signals.generated import typescript_grammar as grammar
 from sync.signals.generated.symbols import (
-    GENERATOR as _PYTHON_GENERATOR,
-)
-from sync.signals.generated.symbols import (
     ExtractedOperation,
     ExtractionReport,
     UnrecognisedSdkShape,
@@ -148,20 +145,6 @@ _PARAMETER = re.compile(r"\{[^}]*\}")
 
 _ClassKey = tuple[str, str]
 """A class's identity: the module that declares it, and its name."""
-
-
-@dataclass(frozen=True)
-class SpeakeasyExtractionReport(ExtractionReport):
-    """The same report, carrying the name of the rule that actually produced it.
-
-    Only the name differs, and it has to differ for the reason `TypeScriptExtractionReport` gives:
-    `ExtractionReport.render` names the generator of the flavour that defined it, so a Speakeasy
-    extraction rendered through it would tell an operator that `stainless-python` read the SDK.
-    Every number the line carries is composed by that method rather than restated here.
-    """
-
-    def render(self) -> str:
-        return f"{GENERATOR}{super().render().removeprefix(_PYTHON_GENERATOR)}"
 
 
 def _comparable(http_method: str, path: str) -> tuple[str, str]:
@@ -563,7 +546,8 @@ def report_extraction(
     reached = {
         _comparable(operation.http_method, operation.path) for operation in operations
     } & comparable
-    return SpeakeasyExtractionReport(
+    return ExtractionReport(
+        rule=GENERATOR,
         operations=operations,
         declared_operation_count=len(spec_operations),
         comparable_key_count=len(comparable),

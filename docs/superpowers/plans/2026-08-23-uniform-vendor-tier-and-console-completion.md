@@ -69,7 +69,7 @@ symbols would dispatch to the wrong reader with every test still green.
 | A1 | One operation resolves to one name through both entry points | **landed `a568afc1`** |
 | A2 | A reference we cannot resolve is reported as that, not as absent (mistral) | **landed `f1eb6e91`** |
 | A3 | Pin what both symbol rules produce, before anything moves | **landed `01b883c7`** |
-| A4 | The packages are named for what they hold | next (deferral discharged) |
+| A4 | The shared report stops naming one rule (rename declined, see ledger) | **landed** |
 | A5 | The rule contract is checked where a rule registers | **landed `bef14cb9`** |
 | A6 | The tier resolves symbols from a staged map, not only a checkout | **landed** |
 | A7 | Every registered vendor's bindings come from its row | **landed** |
@@ -102,6 +102,17 @@ its name until a rule that is not a generator's makes `RULE` the truer word. Wha
 today: the contract is `GENERATOR`, `extract_symbols` and `report_extraction`, and `EXTRACTORS`
 touches only the first, so a module missing either function registers successfully and fails much
 later inside `_extracted_symbols`.
+
+**A4 narrows again, and the package keeps its name.** The deferral was taken so the package could
+be named for what it finally holds. It now holds the tier, one acquisition convention, two rule
+registries and six rules -- and `generated` is not false of any of them: every vendor served here
+publishes a generated SDK and a fetchable specification. Renaming 125 import references for a
+marginally better word is the polish `CLAUDE.md` says competes with the milestone.
+
+What the deferral *did* surface is a real scope defect the rename would have papered over:
+`symbols.py` holds the shared contract -- `ExtractedOperation`, `ExtractionReport`,
+`UnrecognisedSdkShape` -- **and** the stainless-python rule, so every other rule imports the
+contract from a sibling rule's module. That is what A4 becomes.
 
 ### Two live defects Track A must absorb
 

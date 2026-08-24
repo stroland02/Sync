@@ -165,6 +165,16 @@ class ExtractionReport:
     name that is gone raises at the first stale read.
     """
 
+    rule: str
+    """Which extraction rule produced this, in that rule's own name.
+
+    Carried rather than read off a module constant. `render` used the `GENERATOR` of the rule
+    that happened to define this class, so every other rule subclassed it to substitute its own
+    name -- three subclasses whose docstrings all said the same thing, and three imports of one
+    rule's identity by another. Naming the producer is the point of the line, so the producer
+    states it.
+    """
+
     operations: tuple[ExtractedOperation, ...]
 
     declared_operation_count: int
@@ -270,7 +280,7 @@ class ExtractionReport:
         emission it does not know.
         """
         return (
-            f"{GENERATOR}: {self.extracted_count} symbols extracted, reaching "
+            f"{self.rule}: {self.extracted_count} symbols extracted, reaching "
             f"{self.covered_count} of {self.comparable_key_count} comparable routes "
             f"({self.coverage_ratio:.1%}); the specification declares "
             f"{self.declared_operation_count} operations"
@@ -566,6 +576,7 @@ def report_extraction(
         _route(operation.http_method, operation.path) for operation in operations
     } & comparable
     return ExtractionReport(
+        rule=GENERATOR,
         operations=operations,
         declared_operation_count=len(spec_operations),
         comparable_key_count=len(comparable),
