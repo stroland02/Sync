@@ -42,7 +42,7 @@ from sync.core import CallSite, Finding, RepoRef, VendorChange
 from sync.graph.store import GraphStore
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate import nodes
-from sync.remediate.corpus import make_recorder
+from sync.remediate.precedent import make_recorder
 from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.state import MAX_STATIC_ATTEMPTS, RunState

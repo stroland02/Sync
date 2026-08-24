@@ -84,7 +84,7 @@ SYMBOL_MAP_FILENAME = "symbols.json"
 # moved that knowledge rather than removed it.
 GENERATED_VENDORS_FILE = Path(__file__).resolve().parents[3] / "generated-vendors.yaml"
 
-# A deployment configuring its own set overrides the shipped one. The same shape `corpus_salt`
+# A deployment configuring its own set overrides the shipped one. The same shape `precedent_salt`
 # uses, and for the same reason: the committed default is right for this repository and wrong to
 # impose on a deployment that has its own vendors.
 GENERATED_VENDORS_VARIABLE = "SYNC_GENERATED_VENDORS"

@@ -52,7 +52,7 @@ number is fabricated from them.
 
 Nothing is derived from `arg_key_hashes`. That column is salted per deployment, so grouping on it
 across customers returns one bucket per customer and looks exactly like an answer;
-`sync.core.corpus` carries the full argument. The shape columns -- `change_kind`, `tier`,
+`sync.core.precedent` carries the full argument. The shape columns -- `change_kind`, `tier`,
 `symbol_shape` -- are the ones that mean the same thing everywhere.
 """
 

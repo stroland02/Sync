@@ -46,7 +46,7 @@ from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate.agent_patch import AgentRemediator
-from sync.remediate.corpus import corpus_salt
+from sync.remediate.precedent import precedent_salt
 from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.remediate.parameters import ParameterOmitRemediator, ParameterRenameRemediator
@@ -1678,7 +1678,7 @@ def ingest(args: argparse.Namespace) -> int:
     `ingest.py` names it as something that had to be decided before it could have a caller --
     stable for the lifetime of a deployment and stored somewhere, or the same URL digests two
     ways and the repeated-call finding disappears with nothing in the schema able to detect it.
-    `corpus_salt` already satisfies exactly that, under the same three constraints, so the
+    `precedent_salt` already satisfies exactly that, under the same three constraints, so the
     decision here is to reuse it: a second salt store would be a second thing an operator has
     to carry between hosts and a second one they can silently lose.
     """
@@ -1723,7 +1723,7 @@ def ingest(args: argparse.Namespace) -> int:
     store = GraphStore(args.dsn)
     store.apply_schema()
 
-    report = ingest_payload(payload, store, args.repo_id, vendor, corpus_salt())
+    report = ingest_payload(payload, store, args.repo_id, vendor, precedent_salt())
     # `uncorrelated` is the number worth watching: an ingest that correlates nothing looks
     # exactly like a repository that does not call this vendor from every query downstream.
     print(

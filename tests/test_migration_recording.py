@@ -26,7 +26,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from sync.core import CallSite, Finding, MigrationOutcome, Patch, RepoRef, VendorChange, VerifyResult
 from sync.forge.github import PullRequest
-from sync.remediate.corpus import CorpusWriterMissing
+from sync.remediate.precedent import PrecedentWriterMissing
 from sync.remediate.graph import build_graph
 from sync.remediate.tiered import CannotPatch, TerminalTier, TieredRemediator
 
@@ -313,7 +313,7 @@ def test_wall_ms_is_measured_rather_than_defaulted(monkeypatch):
 
     ticks = iter([1000.0, 1000.25, 1000.5, 1000.75, 1001.0, 1001.5, 1002.0, 1002.5])
     monkeypatch.setattr(
-        "sync.remediate.corpus.now", lambda: next(ticks, 1003.0)
+        "sync.remediate.precedent.now", lambda: next(ticks, 1003.0)
     )
 
     _, store = _run()
@@ -336,7 +336,7 @@ def test_a_corpus_write_that_raises_is_visible_in_the_logs(caplog):
     wrong and every rate computed from it is quietly short."""
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="sync.remediate.corpus"):
+    with caplog.at_level(logging.WARNING, logger="sync.remediate.precedent"):
         _run(store=ExplodingStore())
 
     assert any("migration_outcome" in record.getMessage() for record in caplog.records)
@@ -345,7 +345,7 @@ def test_a_corpus_write_that_raises_is_visible_in_the_logs(caplog):
 def test_corpus_recorder_tracks_attempt_and_error_statistics():
     """B130: a failed corpus write is tracked with counters and error messages on the recorder,
     so an operator or driver can query whether bookkeeping succeeded without crashing the run."""
-    from sync.remediate.corpus import make_recorder
+    from sync.remediate.precedent import make_recorder
 
     store = ExplodingStore()
     recorder = make_recorder(store)
@@ -387,7 +387,7 @@ def test_a_store_with_no_corpus_method_fails_before_the_run_starts():
         def get_vendor_change(self, _id): return CHANGE
         def set_finding_status(self, _id, status): pass
 
-    with pytest.raises(CorpusWriterMissing, match="record_migration_outcome"):
+    with pytest.raises(PrecedentWriterMissing, match="record_migration_outcome"):
         _run(store=OldStore())
 
 
@@ -397,12 +397,12 @@ def test_a_store_with_no_corpus_method_fails_before_the_run_starts():
 @pytest.fixture()
 def salt_file(monkeypatch, tmp_path):
     """A salt file of this test's own, and no in-process fallback carried in from another."""
-    from sync.remediate import corpus
+    from sync.remediate import precedent
 
     monkeypatch.delenv("SYNC_CORPUS_SALT", raising=False)
     path = tmp_path / ".sync-corpus-salt"
-    monkeypatch.setattr(corpus, "SALT_FILE", path)
-    monkeypatch.setattr(corpus, "_fallback", None)
+    monkeypatch.setattr(precedent, "SALT_FILE", path)
+    monkeypatch.setattr(precedent, "_fallback", None)
     return path
 
 
@@ -423,7 +423,7 @@ def test_the_persisted_salt_is_reused_rather_than_regenerated(salt_file):
     run's, which is the whole reason the corpus is worth keeping."""
     salt_file.write_text("a-previously-generated-salt" + chr(10), encoding="utf-8")
 
-    from sync.core.corpus import hash_arg_keys
+    from sync.core.precedent import hash_arg_keys
 
     _, store = _run()
 
@@ -435,7 +435,7 @@ def test_the_persisted_salt_is_reused_rather_than_regenerated(salt_file):
 
 def test_the_environment_variable_wins_over_the_persisted_file(salt_file):
     """An operator who configures a salt has overridden the generated one, not joined it."""
-    from sync.core.corpus import hash_arg_keys
+    from sync.core.precedent import hash_arg_keys
 
     salt_file.write_text("generated" + chr(10), encoding="utf-8")
     import os
@@ -456,13 +456,13 @@ def test_a_salt_file_that_cannot_be_written_still_records_the_row(monkeypatch, t
     """
     import logging
 
-    from sync.remediate import corpus
+    from sync.remediate import precedent
 
     monkeypatch.delenv("SYNC_CORPUS_SALT", raising=False)
-    monkeypatch.setattr(corpus, "SALT_FILE", tmp_path / "no-such-directory" / "salt")
-    monkeypatch.setattr(corpus, "_fallback", None)
+    monkeypatch.setattr(precedent, "SALT_FILE", tmp_path / "no-such-directory" / "salt")
+    monkeypatch.setattr(precedent, "_fallback", None)
 
-    with caplog.at_level(logging.WARNING, logger="sync.remediate.corpus"):
+    with caplog.at_level(logging.WARNING, logger="sync.remediate.precedent"):
         state, store = _run()
 
     assert state["outcome"] == "opened"
@@ -474,11 +474,11 @@ def test_a_salt_file_that_cannot_be_written_still_records_the_row(monkeypatch, t
 def test_the_in_process_fallback_salt_is_stable_within_a_run(monkeypatch, tmp_path):
     """One salt per process, not one per row. A salt regenerated per call would make two
     attempts of the same finding disagree about the same argument keys."""
-    from sync.remediate import corpus
+    from sync.remediate import precedent
 
     monkeypatch.delenv("SYNC_CORPUS_SALT", raising=False)
-    monkeypatch.setattr(corpus, "SALT_FILE", tmp_path / "no-such-directory" / "salt")
-    monkeypatch.setattr(corpus, "_fallback", None)
+    monkeypatch.setattr(precedent, "SALT_FILE", tmp_path / "no-such-directory" / "salt")
+    monkeypatch.setattr(precedent, "_fallback", None)
 
     _, store = _run(adapter=StubAdapter(verdicts=[_fail(), _ok()]))
 
@@ -488,7 +488,7 @@ def test_the_in_process_fallback_salt_is_stable_within_a_run(monkeypatch, tmp_pa
 
 def test_the_salt_reaches_the_hashes_rather_than_being_ignored():
     """A salt that is read and then not used is the same hole as no salt at all."""
-    from sync.core.corpus import hash_arg_keys
+    from sync.core.precedent import hash_arg_keys
 
     _, store = _run()
     assert store.rows[0].arg_key_hashes == hash_arg_keys(["amount", "currency"], salt=SALT)
@@ -525,7 +525,7 @@ def test_a_run_abandoned_at_prepare_writes_no_row(caplog):
 
     import logging
 
-    with caplog.at_level(logging.DEBUG, logger="sync.remediate.corpus"):
+    with caplog.at_level(logging.DEBUG, logger="sync.remediate.precedent"):
         state, store = _run(adapter=FailingAdapter())
 
     assert state["outcome"] == "abandoned"

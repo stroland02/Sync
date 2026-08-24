@@ -26,7 +26,7 @@ import pytest
 
 from sync.benchmark import compute_axes
 from sync.core import CallSite, Finding, MigrationOutcome, Patch, VendorChange
-from sync.remediate.corpus import CorpusWriterMissing, make_recorder
+from sync.remediate.precedent import PrecedentWriterMissing, make_recorder
 
 NODES = Path(__file__).resolve().parents[1] / "src" / "sync" / "remediate" / "nodes.py"
 
@@ -79,21 +79,21 @@ def test_a_store_without_the_writer_fails_at_construction():
     """The soft lookup this replaces produced a run that looked successful and recorded
     nothing. Failing here, where `build_graph` calls `make_recorder`, is before any node has
     run and so before there is a run to lose."""
-    with pytest.raises(CorpusWriterMissing):
+    with pytest.raises(PrecedentWriterMissing):
         make_recorder(Storeless())
 
 
 def test_the_failure_names_the_method_that_is_missing():
     """A reader should not have to diff two versions of the store to work out why recording
     stopped."""
-    with pytest.raises(CorpusWriterMissing, match="record_migration_outcome"):
+    with pytest.raises(PrecedentWriterMissing, match="record_migration_outcome"):
         make_recorder(Storeless())
 
 
 def test_the_failure_names_the_object_that_lacks_it():
     """Which store was handed in is the other half of the answer -- the pipeline builds one
     from a DSN and tests hand in their own."""
-    with pytest.raises(CorpusWriterMissing, match="Storeless"):
+    with pytest.raises(PrecedentWriterMissing, match="Storeless"):
         make_recorder(Storeless())
 
 
@@ -109,7 +109,7 @@ def test_an_attribute_that_is_not_callable_is_not_a_writer(bound):
     store = Store()
     store.record_migration_outcome = bound
 
-    with pytest.raises(CorpusWriterMissing):
+    with pytest.raises(PrecedentWriterMissing):
         make_recorder(store)
 
 

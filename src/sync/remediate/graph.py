@@ -17,7 +17,7 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 
 from sync.remediate import nodes
-from sync.remediate.corpus import make_recorder
+from sync.remediate.precedent import make_recorder
 from sync.remediate.serde import with_sync_types
 from sync.remediate.state import RunState
 

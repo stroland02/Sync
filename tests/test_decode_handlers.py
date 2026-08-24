@@ -1139,7 +1139,7 @@ _WHOLE_STAGE_CATCH_ALL = (
     "sync/index/typescript.py::TypeScriptAdapter._read_manifest::Exception",
     "sync/mcp/server.py::_call::Exception",
     "sync/rehearse/driver.py::_scan::Exception",
-    "sync/remediate/corpus.py::CorpusRecorder.__call__::Exception",
+    "sync/remediate/precedent.py::PrecedentRecorder.__call__::Exception",
     "sync/remediate/nodes.py::_observed::Exception",
     "sync/remediate/nodes.py::make_abandon.abandon::Exception",
     "sync/remediate/nodes.py::make_await_ci.await_ci::Exception",

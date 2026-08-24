@@ -55,7 +55,7 @@ from sync.cli import (
 from sync.core import CallSite, Finding, ObservedShape, RepoRef
 from sync.detect.observed_drift import MIN_SAMPLES
 from sync.graph.store import GraphStore
-from sync.remediate import corpus
+from sync.remediate import precedent
 from sync.signals.deprecations import (
     parameters_to_vendor_changes,
     parse_parameter_deprecations,
@@ -526,8 +526,8 @@ def test_ingest_reads_a_payload_from_stdin(staged_cache, store, monkeypatch, cap
     collector run anywhere outside an English-speaking deployment sends. This command has no
     handler at all, so reading the pipe as text made that a traceback rather than an exit code.
     """
-    monkeypatch.delenv(corpus.SALT_VARIABLE, raising=False)
-    monkeypatch.setattr(corpus, "SALT_FILE", Path(str(staged_cache)) / ".sync-corpus-salt")
+    monkeypatch.delenv(precedent.SALT_VARIABLE, raising=False)
+    monkeypatch.setattr(precedent, "SALT_FILE", Path(str(staged_cache)) / ".sync-corpus-salt")
     spans = (Path(__file__).parent / "fixtures" / "otlp" / "stripe_client_spans.json").read_text(
         encoding="utf-8"
     ).replace("checkout-api", "checkout-api-INV" + _A_ACUTE + "LIDA")
@@ -1056,7 +1056,7 @@ def _benchmark_args(score_pair=None):
 
 
 def _corpus_spec(tmp_path: Path, spec: dict) -> Path:
-    path = tmp_path / "corpus.yaml"
+    path = tmp_path / "precedent.yaml"
     path.write_text(yaml.safe_dump(spec), encoding="utf-8")
     return path
 
@@ -1091,7 +1091,7 @@ def test_a_pair_specification_missing_a_top_level_key_is_refused_naming_the_file
 
     printed = capsys.readouterr()
     assert "pair specification: " in printed.err
-    assert "corpus.yaml" in printed.err
+    assert "precedent.yaml" in printed.err
     # Both, not the first one it noticed. An operator told about one missing key at a time edits
     # and re-runs once per field.
     assert "repo" in printed.err and "cache" in printed.err
@@ -1118,7 +1118,7 @@ def test_a_pair_specification_that_is_not_there_is_refused_naming_the_file(
 ):
     """The read itself, which had no handler: a `--score-pair` an operator mistyped raised out of
     the command where every missing field inside the file is already refused by name."""
-    absent = tmp_path / "absent-corpus.yaml"
+    absent = tmp_path / "absent-precedent.yaml"
 
     assert benchmark(_benchmark_args(absent)) == 2
 
@@ -1136,7 +1136,7 @@ def test_a_pair_specification_that_is_not_utf8_at_all_is_refused_naming_the_file
     printed the codec's complaint -- which names a byte offset and no file. Two paths reach this
     command and an operator told only that byte 0 is invalid has to guess which.
     """
-    spec = tmp_path / "corpus.yaml"
+    spec = tmp_path / "precedent.yaml"
     spec.write_bytes(yaml.safe_dump(_COMPLETE_SPEC).encode("utf-16"))
 
     assert benchmark(_benchmark_args(spec)) == 2
@@ -1154,7 +1154,7 @@ def test_a_pair_specification_that_is_not_yaml_is_refused_rather_than_raised(
     `yaml.YAMLError` inherits straight from `Exception` -- so it passed through the chain around
     `_score_corpus` untouched and reached the operator as a traceback. A tab where a space
     belongs is the ordinary way an operator writes one."""
-    spec = tmp_path / "corpus.yaml"
+    spec = tmp_path / "precedent.yaml"
     spec.write_text("repo: /nowhere\n\tvendor: stripe\n", encoding="utf-8")
 
     assert benchmark(_benchmark_args(spec)) == 2

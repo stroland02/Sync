@@ -21,7 +21,7 @@ import sync.cli as cli
 from sync.cli import _detector_suite, _model_deprecations, _scan, ingest, run
 from sync.core import CallSite, RepoRef
 from sync.graph.store import GraphStore
-from sync.remediate import corpus
+from sync.remediate import precedent
 from sync.remediate.literal_swap import LiteralSwapRemediator
 from sync.signals.deprecations import ANTHROPIC, OPENAI
 from sync.signals.registry import PreparedVendor
@@ -373,8 +373,8 @@ def deployment_salt(tmp_path, monkeypatch):
     """Point the deployment's salt at a throwaway file, and take the override out of the
     environment so the file path is what runs. Otherwise every ingest test writes
     `.sync-corpus-salt` into the repository root."""
-    monkeypatch.delenv(corpus.SALT_VARIABLE, raising=False)
-    monkeypatch.setattr(corpus, "SALT_FILE", tmp_path / ".sync-corpus-salt")
+    monkeypatch.delenv(precedent.SALT_VARIABLE, raising=False)
+    monkeypatch.setattr(precedent, "SALT_FILE", tmp_path / ".sync-corpus-salt")
     return tmp_path / ".sync-corpus-salt"
 
 
@@ -438,7 +438,7 @@ def test_the_ingest_salt_is_stable_across_invocations(tmp_path, deployment_salt)
 
 
 def test_the_ingest_salts_with_the_deployments_own_salt(tmp_path, monkeypatch, deployment_salt):
-    """Reuse asserted rather than assumed. `corpus_salt` already answers the question
+    """Reuse asserted rather than assumed. `precedent_salt` already answers the question
     `ingest.py` says has to be answered before this path can exist -- stable per deployment,
     unique to it, stored -- so a second salt store would be a second thing an operator carries
     between hosts and a second one they can lose. Changing the deployment's salt has to change
@@ -446,11 +446,11 @@ def test_the_ingest_salts_with_the_deployments_own_salt(tmp_path, monkeypatch, d
     """
     store = _empty_store()
 
-    monkeypatch.setenv(corpus.SALT_VARIABLE, "salt-one")
+    monkeypatch.setenv(precedent.SALT_VARIABLE, "salt-one")
     assert ingest(_ingest_args(tmp_path)) == 0
     under_one = _targets(store)
 
-    monkeypatch.setenv(corpus.SALT_VARIABLE, "salt-two")
+    monkeypatch.setenv(precedent.SALT_VARIABLE, "salt-two")
     assert ingest(_ingest_args(tmp_path)) == 0
 
     assert _targets(store) - under_one

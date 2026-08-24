@@ -288,7 +288,7 @@ class MigrationOutcome(BaseModel):
     "Safe to aggregate" is not the same as "comparable in every column", and an earlier version
     of this docstring ran the two together. The shape columns carry no salt and mean the same
     thing for every customer; `arg_key_hashes` is salted per deployment and groups into one
-    bucket per customer if aggregated across them. `sync.core.corpus` says which is which, and
+    bucket per customer if aggregated across them. `sync.core.precedent` says which is which, and
     it is worth reading before writing a query against this table.
     """
 
@@ -385,7 +385,7 @@ class MigrationOutcome(BaseModel):
         The reduction happens here rather than at the call sites that record outcomes, so there
         is one place where source could leak and it is the place that is tested.
         """
-        from sync.core.corpus import hash_arg_keys, symbol_shape
+        from sync.core.precedent import hash_arg_keys, symbol_shape
 
         return cls(
             finding_id=finding_id,
@@ -546,7 +546,7 @@ class ObservedCall(BaseModel):
 
         `binding_rung` defaults to what `operation_id` implies, so the two cannot disagree.
         """
-        from sync.core.corpus import hash_request_target
+        from sync.core.precedent import hash_request_target
 
         first = min(spans, key=lambda s: s.started_at)
         last = max(spans, key=lambda s: s.started_at)

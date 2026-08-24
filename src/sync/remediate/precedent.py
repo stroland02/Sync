@@ -42,7 +42,7 @@ fabrication rather than a measurement. Neither is a schema problem; both are the
   different fact from "the agent tier ran and failed", which `tiered.TierFailed` carries a
   strategy for and which does write a row.
 
-An unconfigured salt is deliberately **not** on that list -- see `corpus_salt`.
+An unconfigured salt is deliberately **not** on that list -- see `precedent_salt`.
 """
 
 from __future__ import annotations
@@ -60,6 +60,12 @@ from sync.route import AGENT, CODEMOD
 
 log = logging.getLogger(__name__)
 
+# Both names keep `corpus` after `CI-W591` renamed everything else to Precedent, and that is a
+# decision rather than a missed replacement. They are deployment surface: an operator has the
+# variable set and the file on disk, and this module's own argument is that the salt must be
+# stable across runs or the store cannot be joined to itself. Renaming either re-salts every
+# digest and orphans every row already written, silently -- the rename would look complete and
+# every aggregate would quietly start from nothing.
 SALT_VARIABLE = "SYNC_CORPUS_SALT"
 # Gitignored, and that is the point: a salt committed to git is a public salt. Kept at the
 # repository root rather than under `.cache/` so it is visible to anyone wondering what
@@ -94,7 +100,7 @@ def now() -> float:
     return time.time()
 
 
-def corpus_salt() -> str:
+def precedent_salt() -> str:
     """The per-deployment salt for `hash_arg_keys`.
 
     Three constraints have to hold together, and only one arrangement satisfies all three.
@@ -173,7 +179,7 @@ def static_error_class(diagnostics: str | None) -> str | None:
     return f"TS{found.group(1)}" if found else None
 
 
-class CorpusWriterMissing(TypeError):
+class PrecedentWriterMissing(TypeError):
     """A store handed to `make_recorder` cannot write the corpus.
 
     A `TypeError` because that is what it is: the object does not satisfy the one method this
@@ -183,7 +189,7 @@ class CorpusWriterMissing(TypeError):
 
 
 @runtime_checkable
-class CorpusWriter(Protocol):
+class PrecedentWriter(Protocol):
     """The whole contract a store owes this module.
 
     One method. Stated as a protocol so the requirement has a name a reader can find, rather
@@ -193,7 +199,7 @@ class CorpusWriter(Protocol):
     def record_migration_outcome(self, outcome: MigrationOutcome) -> None: ...
 
 
-class CorpusRecorder:
+class PrecedentRecorder:
     """A callable recorder with queryable attempt and error metrics.
 
     B130: a recording failure must never crash a run, but swallowing errors silently makes
@@ -201,7 +207,7 @@ class CorpusRecorder:
     makes failed writes queryable without raising.
     """
 
-    def __init__(self, store: CorpusWriter, *, is_rehearsal: bool = False) -> None:
+    def __init__(self, store: PrecedentWriter, *, is_rehearsal: bool = False) -> None:
         self._store = store
         self._is_rehearsal = is_rehearsal
         self.attempt_count: int = 0
@@ -261,7 +267,7 @@ class CorpusRecorder:
             return False
 
 
-def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False) -> CorpusRecorder:
+def make_recorder(store: PrecedentWriter, *, is_rehearsal: bool = False) -> PrecedentRecorder:
     """The callable closed over `store` that every terminal and retried node records through.
 
     `is_rehearsal` is bound once at construction rather than threaded through every caller.
@@ -276,7 +282,7 @@ def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False) -> CorpusR
     every one of those runs in the corpus. It is threaded through explicitly instead, and
     defaults to `False` because every existing caller means a production run.
 
-    Raises `CorpusWriterMissing` if the store cannot write. Callability is checked rather than
+    Raises `PrecedentWriterMissing` if the store cannot write. Callability is checked rather than
     presence, because `hasattr` is satisfied by anything bound to that name -- a column, a
     `None`, a leftover attribute -- and the contract is a method. The message names both the
     method and the type that lacks it, so a reader does not have to diff two versions of the
@@ -284,13 +290,13 @@ def make_recorder(store: CorpusWriter, *, is_rehearsal: bool = False) -> CorpusR
     """
     write = getattr(store, "record_migration_outcome", None)
     if not callable(write):
-        raise CorpusWriterMissing(
+        raise PrecedentWriterMissing(
             f"{type(store).__name__} cannot write the migration corpus: it needs a callable "
             f"record_migration_outcome(outcome), which is the single write every benchmark "
             f"axis reads from"
         )
 
-    return CorpusRecorder(store, is_rehearsal=is_rehearsal)
+    return PrecedentRecorder(store, is_rehearsal=is_rehearsal)
 
 
 def _record(
@@ -351,7 +357,7 @@ def _record(
             # `nodes.py` already calls by that name in the report reason.
             routing_row=state.get("routing_row") or "unrouted",
             wall_ms=wall_ms,
-            salt=corpus_salt(),
+            salt=precedent_salt(),
             static_verify_passed=static_passed,
             static_verify_error_class=(
                 static_error_class(state.get("diagnostics")) if static_passed is False else None

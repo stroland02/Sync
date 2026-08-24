@@ -16,7 +16,7 @@ import os
 import pytest
 
 from sync.core import CallSite, MigrationOutcome, Patch, VendorChange
-from sync.core.corpus import hash_arg_keys, symbol_shape
+from sync.core.precedent import hash_arg_keys, symbol_shape
 from sync.graph.store import GraphStore
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")

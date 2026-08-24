@@ -366,7 +366,7 @@ def record_merge_outcome(
     The pull request is matched to its attempt by `pr_number`, which is the only durable
     link between GitHub and a corpus row: the row carries no branch and the payload carries
     no finding. That link has to be written when the pull request is opened. Nothing does
-    that yet -- `sync.remediate.corpus` records every other column and leaves this one null
+    that yet -- `sync.remediate.precedent` records every other column and leaves this one null
     -- so until it does, every delivery lands on the quiet no-match path.
     """
     verify_signature(body, signature, secret)

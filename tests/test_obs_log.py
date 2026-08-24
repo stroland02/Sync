@@ -88,14 +88,14 @@ def test_json_format_emits_one_parseable_object_per_line(monkeypatch):
     monkeypatch.setattr(sys, "stderr", stream)
 
     configure(level="INFO", fmt="json")
-    log = logging.getLogger("sync.remediate.corpus")
+    log = logging.getLogger("sync.remediate.precedent")
     log.info("no tier attempted a repair")
 
     lines = [line for line in stream.getvalue().splitlines() if line.strip()]
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["level"] == "INFO"
-    assert record["logger"] == "sync.remediate.corpus"
+    assert record["logger"] == "sync.remediate.precedent"
     assert record["message"] == "no tier attempted a repair"
 
 

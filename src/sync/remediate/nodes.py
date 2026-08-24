@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from sync.core import CallSite, Evidence, Patch, RepoRef, VendorChange
-from sync.remediate import corpus
+from sync.remediate import precedent
 from sync.remediate.state import MAX_CI_ATTEMPTS, MAX_STATIC_ATTEMPTS, RunState
 from sync.route.disposition import decide_tier
 from sync.route.matrix import NO_PATCH
@@ -208,7 +208,7 @@ def _close_previous_attempt(state: RunState, record) -> None:
     cannot push -- and those four are mutually exclusive, which is what makes "one row per
     attempt" hold with no de-duplicating bookkeeping here. The last three are terminal, so
     none can be followed by another attempt, and the first `patch` call has no previous
-    attempt to close. `corpus.record` drops a call that describes no attempt.
+    attempt to close. `precedent.record` drops a call that describes no attempt.
     """
     if record is not None:
         record(state, terminal_status="retried")
@@ -223,7 +223,7 @@ def make_patch(remediator, record=None):
         attempts = state.get("static_attempts", 0) + 1
         started = {
             "static_attempts": attempts,
-            "attempt_started_at": corpus.now(),
+            "attempt_started_at": precedent.now(),
             "attempt_static_passed": None,
             "attempt_ci_result": None,
         }
@@ -685,7 +685,7 @@ def make_report(halt_reason: str | None = None, record=None):
     the same rule that already gives a run abandoned before any attempt no row at all. The
     consequence is a real gap rather than a tidy omission: the routing decision reaches
     `RunState` and stops there, so a tier -1 outcome is invisible to any benchmark computed
-    off the corpus. Recording it needs a `strategy` value that does not exist --
+    off the precedent. Recording it needs a `strategy` value that does not exist --
     `PatchStrategy` is a two-value Literal and the column is `NOT NULL` -- which is a change
     to `sync.core` and `remediate.corpus`, not to this node.
 
@@ -740,7 +740,7 @@ def make_abandon(store, forge, record=None):
 
         # The abandoned attempt is the negative class, and a corpus of successes alone can
         # compute no precision and evaluate no future router. A run that abandoned before
-        # any attempt writes nothing, which `corpus.record` decides -- zero attempts is
+        # any attempt writes nothing, which `precedent.record` decides -- zero attempts is
         # zero rows at this table's grain.
         if record is not None:
             record(
