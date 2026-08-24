@@ -24,6 +24,8 @@ import {
 } from "@/features/vendors/vendor-findings-table"
 import { VendorSourcesCard } from "@/features/vendors/vendor-sources-card"
 import { DetailGrid } from "@/layouts/detail-grid"
+import { ScreenFrame } from "@/layouts/screen-frame"
+import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { chipSurface } from "@/lib/selectable-surface"
 import { useFilterParam } from "@/lib/use-filter-param"
@@ -54,8 +56,36 @@ export function VendorPage() {
     ? (panelParam as PanelId)
     : "changes"
 
+  // The panel chips are what narrow this screen, so they are the controls band rather than a
+  // strip inside the content -- which is what `ScreenFrame` exists to keep in one place across
+  // every screen.
+  const controls = (
+    <nav aria-label="Vendor records" className="flex flex-wrap items-center gap-row">
+      {PANELS.map((entry) => (
+        <button
+          key={entry.id}
+          type="button"
+          aria-pressed={entry.id === panel}
+          onClick={() => setPanel(entry.id === "changes" ? null : entry.id)}
+          className={`rounded-control border px-row py-field text-body ${chipSurface(entry.id === panel)}`}
+        >
+          {entry.label}
+        </button>
+      ))}
+    </nav>
+  )
+
+  // Which record is mounted, not how many rows it holds: the counts belong to the cards, which
+  // each fetch their own and publish nothing here. A `listing` says what is on screen without
+  // claiming a number this component has not got.
+  const status: StatusSegment[] = [
+    { kind: "listing", label: "Showing", text: PANELS.find((e) => e.id === panel)!.label },
+    { kind: "note", text: `for ${vendorId} in ${repoId}` },
+  ]
+
   return (
-    <section className="flex flex-col gap-8">
+    <ScreenFrame status={status} controls={controls}>
+      <section className="flex flex-col gap-8">
       {/* Header and Fact List */}
       <DetailGrid
         railSide="end"
@@ -91,20 +121,6 @@ export function VendorPage() {
       </div>
 
       <div className="flex flex-col gap-8" data-testid="vendor-panels">
-        <nav aria-label="Vendor records" className="flex flex-wrap items-center gap-row">
-          {PANELS.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-pressed={entry.id === panel}
-              onClick={() => setPanel(entry.id === "changes" ? null : entry.id)}
-              className={`rounded-control border px-row py-field text-body ${chipSurface(entry.id === panel)}`}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </nav>
-
         {panel === "changes" && <VendorChangesCard vendorId={vendorId} repoId={repoId} />}
         {panel === "findings" && (
           <>
@@ -114,6 +130,7 @@ export function VendorPage() {
         )}
         {panel === "sources" && <VendorSourcesCard vendorId={vendorId} repoId={repoId} />}
       </div>
-    </section>
+      </section>
+    </ScreenFrame>
   )
 }

@@ -38,11 +38,13 @@ const MIGRATED = [
   "/repositories/:repoId/runs",
   "/repositories/:repoId/vendors",
   "/repositories/:repoId/detectors",
-]
-
-const PENDING = [
   "/repositories/:repoId/vendors/:vendorId",
 ]
+
+// Empty, and the ratchet stays: a route added later still has to be accounted for, and the
+// `PENDING` assertion below still runs -- over nothing, which is the honest end state rather
+// than a list somebody deletes.
+const PENDING: string[] = []
 
 /** The index route is wired in `App.tsx` rather than the registry, so it is named here as "/". */
 const INDEX_ROUTE = "/"

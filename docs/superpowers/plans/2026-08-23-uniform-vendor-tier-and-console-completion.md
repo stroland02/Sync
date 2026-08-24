@@ -156,7 +156,7 @@ information.*
 
 ## Track C -- finishing the console
 
-- **C1.** `/repositories/:repoId/vendors/:vendorId` is the last `PENDING` entry in
+- **C1.** *(Landed `CI-W596`; `PENDING` is empty.)* `/repositories/:repoId/vendors/:vendorId` was the last `PENDING` entry in
   `web/src/layouts/screen-skeleton.test.tsx`. Twenty of twenty-one screens are on `ScreenFrame`.
 - **C2.** Delete `RouteEntry.question`: 22 route entries, three consumers (`App.tsx:66,77`,
   `workflow-grid.tsx:58`, `page-header.tsx`), two tests (`routes-question.test.ts`,
