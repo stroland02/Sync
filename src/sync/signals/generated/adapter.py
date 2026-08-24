@@ -329,10 +329,17 @@ class GeneratedSpecAdapter:
         A vendor whose SDK this deployment has not staged has nothing to read, and guessing is
         the thing being avoided rather than the thing being deferred.
 
-        `language` is accepted and ignored. An extraction rule covers a generator *times* a
-        language and is named as one string, `sdk_source_generator`, chosen where the checkout is
-        staged. Selecting it from the caller's language instead would mean deciding that
-        `typescript` implies Stainless, which is the kind of convention this module refuses.
+        `language` selects no rule, and that refusal is unchanged: an extraction rule covers a
+        generator *times* a language and is named as one string, `sdk_source_generator`, chosen
+        where the checkout is staged. Deciding `typescript` implies Stainless from the caller's
+        language is the convention this module refuses.
+
+        What `language` does do is honour a rule that stated its own coverage. A rule reading an
+        SDK checkout knows one language and says nothing, so every symbol resolves for every
+        caller, exactly as before. A rule reading a specification can derive several spellings at
+        once and says which is which -- and a TypeScript spelling must not answer a Python call
+        site that never writes it. That is the rule narrowing its own output, not the caller
+        choosing a rule.
         """
         symbols = self._extracted_symbols()
         if symbols is None:
@@ -343,13 +350,26 @@ class GeneratedSpecAdapter:
         found = symbols.get(chain)
         if found is None:
             return None
+        # `None` means the rule stated no coverage, which every checkout-reading rule does, so
+        # the symbol answers any caller. A stated tuple that omits this caller's language is a
+        # spelling that language does not have.
+        if (
+            found.languages is not None
+            and language is not None
+            and language not in found.languages
+        ):
+            return None
+
+        # A rule that read the specification states the operation's own name and the service it
+        # belongs to. A rule that read an SDK checkout states neither, and the route is
+        # synthesised as before -- inventing a plausible id would be the guess this module
+        # refuses in the paragraph above, but discarding one the vendor stated is the opposite
+        # error and just as wrong.
         return OperationRef(
-            # No operationId: the SDK states a route, not the specification's name for it. The
-            # route is what a change is matched on, and inventing an id would be the guess this
-            # module refuses in the paragraph above.
-            operation_id=f"{found.http_method} {found.path}",
+            operation_id=found.operation_id or f"{found.http_method} {found.path}",
             http_method=found.http_method.lower(),
             path=found.path,
+            service_id=found.service_id,
         )
 
     def _extracted_symbols(self) -> dict[str, ExtractedOperation] | None:
@@ -627,9 +647,14 @@ class CorrelatingGeneratedSpecAdapter(GeneratedSpecAdapter):
         if not matched:
             return None
         entry = min(matched, key=lambda e: e.path.count("{"))
+        # Synthesised only where the rule stated no id, exactly as `operation_for_symbol` does.
+        # `operation_id` is what a finding joins a vendor change against, so a stated id honoured
+        # on one resolver and discarded on the other files one operation under two keys and joins
+        # neither -- the static and observed rungs of the same call, never meeting.
         return OperationRef(
-            operation_id=f"{entry.http_method} {entry.path}",
+            operation_id=entry.operation_id or f"{entry.http_method} {entry.path}",
             http_method=entry.http_method.lower(),
             path=entry.path,
+            service_id=entry.service_id,
         )
 

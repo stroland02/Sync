@@ -114,13 +114,42 @@ class UnrecognisedSdkShape(Exception):
 
 @dataclass(frozen=True)
 class ExtractedOperation:
-    """One call the SDK makes, as its own source states it."""
+    """One call the SDK makes, as its own source states it.
+
+    The last three fields are `None` for every rule that reads an SDK checkout, because a
+    checkout states a route and not the specification's name for it. A rule reading the
+    specification itself knows all three, and dropping them would make the richer input answer
+    the poorer question.
+    """
 
     symbol: str
     """The chain a customer writes, without the package root -- `messages.batches.create`."""
 
     http_method: str
     path: str
+
+    operation_id: str | None = None
+    """The specification's own name for this operation, where the rule read one.
+
+    `None` means no name was stated, and the caller synthesises `"GET /v1/charges"` from the
+    route. That synthesis is deliberate and stays -- inventing a plausible id would be the guess
+    this module refuses -- but a rule that read a real id must not have it thrown away.
+    """
+
+    service_id: str | None = None
+    """Which of a vendor's products this operation belongs to, where the vendor divides itself.
+
+    Twilio publishes sixty documents and a customer calls two of them; Stripe publishes one.
+    `None` means the vendor states no division, not that the division is unknown.
+    """
+
+    languages: tuple[str, ...] | None = None
+    """The languages whose SDK spells this symbol this way, or `None` for all of them.
+
+    A rule reading one checkout knows only that checkout's language and says nothing, which is
+    `None`. A rule reading a specification can derive several spellings at once, and a symbol
+    that resolves for TypeScript must not resolve a Python call site that never spells it.
+    """
 
 
 @dataclass(frozen=True)

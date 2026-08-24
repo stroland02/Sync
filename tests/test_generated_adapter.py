@@ -28,6 +28,7 @@ from sync.signals.generated.adapter import (
     CorrelatingGeneratedSpecAdapter,
     GeneratedSpecAdapter,
 )
+from sync.signals.generated.symbols import ExtractedOperation
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SPECS = FIXTURES / "specs"
@@ -342,3 +343,36 @@ def test_unsupported_unstaged_generated_adapter_declares_uncorrelatable_reason(t
     assert "no staged SDK source" in adapter.uncorrelatable_reason
     assert not hasattr(adapter, "operation_for_request")
 
+
+def test_both_entry_points_answer_one_operation_the_same_way(tmp_path: Path):
+    """`operation_id` is what a finding joins a vendor change against, so the two resolvers
+    have to agree on it or one operation occupies two keys.
+
+    A rule that read the specification states the vendor's own id; a rule that read a checkout
+    states none and the route is synthesised. The divergence this catches is one-sided: the
+    symbol path was taught to honour a stated id while the correlator kept synthesising, which
+    would file the static and observed rungs of one operation under different names and join
+    neither to the other.
+    """
+    adapter = CorrelatingGeneratedSpecAdapter(
+        vendor_id="acme",
+        sources={},
+        fetch=_CountingFetch({}),
+        cache_dir=tmp_path / "cache",
+    )
+    stated = ExtractedOperation(
+        symbol="charges.retrieve",
+        http_method="GET",
+        path="/v1/charges/{charge}",
+        operation_id="GetChargesCharge",
+        service_id="Charges",
+    )
+    adapter._extracted_symbols = lambda: {"charges.retrieve": stated}
+
+    by_symbol = adapter.operation_for_symbol("acme.charges.retrieve")
+    by_request = adapter.operation_for_request("GET", "/v1/charges/ch_123")
+
+    assert by_symbol is not None and by_request is not None
+    assert by_symbol == by_request
+    assert by_request.operation_id == "GetChargesCharge"
+    assert by_request.service_id == "Charges"

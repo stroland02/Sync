@@ -380,3 +380,26 @@ def test_an_operation_unknown_to_the_specification_is_logged_and_still_resolves(
 
     assert "/v1/model_registry" in " ".join(r.getMessage() for r in caplog.records)
     assert reference is not None and reference.path == "/v1/model_registry"
+
+
+def test_an_operation_carrying_its_own_id_is_not_given_a_synthesised_one():
+    """A rule that read the specification knows the vendor's name for an operation.
+
+    Synthesising `"GET /v1/charges"` over it would discard a stated fact for a derived one, and
+    the derived one does not match what a spec diff reports the change against.
+    """
+    op = ExtractedOperation(
+        symbol="charges.create", http_method="POST", path="/v1/charges",
+        operation_id="PostCharges",
+    )
+
+    assert op.operation_id == "PostCharges"
+
+
+def test_an_operation_stating_no_id_still_synthesises_the_route():
+    # Every checkout-reading rule is this case, and it must not change.
+    op = ExtractedOperation(symbol="charges.create", http_method="POST", path="/v1/charges")
+
+    assert op.operation_id is None
+    assert op.service_id is None
+    assert op.languages is None
