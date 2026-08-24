@@ -19,6 +19,13 @@
  * `window.innerWidth` for its actual answer and uses the query only to learn when to re-read it, and
  * jsdom's window is 1024px wide — above the 768px breakpoint either way. A stub that reported a
  * match would therefore contradict the width the same hook is about to measure.
+ *
+ * `EventSource` is the fourth, and it was found by a guard rather than by a crash. jsdom ships no
+ * implementation, `useRepositoryEvents` constructs one on mount, and the `ErrorBoundary` above the
+ * graph page caught the `ReferenceError` — so the screen rendered its fallback and every assertion
+ * about the screen itself was answered by the boundary instead. It never opens a connection and
+ * never dispatches, which leaves `useRepositoryEvents` at the optimistic `live` its own first
+ * `useState` sets; a test asserting on stream *status* wants a fake it can drive, not this.
  */
 
 if (
@@ -34,6 +41,26 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     unobserve() {}
     disconnect() {}
   }
+}
+
+if (typeof globalThis.EventSource === "undefined") {
+  globalThis.EventSource = class {
+    url: string
+    onerror: ((this: EventSource, event: Event) => void) | null = null
+    onmessage: ((this: EventSource, event: MessageEvent) => void) | null = null
+    onopen: ((this: EventSource, event: Event) => void) | null = null
+    readyState = 0
+    withCredentials = false
+    constructor(url: string | URL) {
+      this.url = String(url)
+    }
+    addEventListener() {}
+    removeEventListener() {}
+    dispatchEvent() {
+      return false
+    }
+    close() {}
+  } as unknown as typeof EventSource
 }
 
 if (typeof window !== "undefined" && window.matchMedia === undefined) {
