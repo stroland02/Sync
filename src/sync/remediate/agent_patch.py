@@ -148,6 +148,7 @@ def build_patch_prompt(
     diagnostics: str = "",
     repo_context: str = "",
     corpus_lessons: str = "",
+    spec_slice: str = "",
 ) -> str:
     """Everything the agent needs, and nothing it does not."""
     field = changed_field(change)
@@ -183,6 +184,16 @@ def build_patch_prompt(
         *fenced_block(VENDOR, [finding.rationale]),
         "",
     ]
+
+    # Fenced as VENDOR because that is what it is: the vendor's own document, quoted. It names
+    # the specification hash it was cut from, so a claim the agent makes from it stays checkable
+    # -- which is the whole of why the slice is worth carrying.
+    if spec_slice:
+        sections += [
+            "What the specification says about this operation:",
+            *fenced_block(VENDOR, spec_slice.splitlines()),
+            "",
+        ]
 
     # Ahead of `_SCOPE_RULES` so the rules keep the last and strongest position, and ahead of
     # the diagnostics block so the cacheable prefix grows rather than moves. An empty context
@@ -340,6 +351,7 @@ class AgentRemediator:
         repo_context: str = "",
         runner: PatchRunner | None = None,
         lessons_for: Callable[[VendorChange], str] | None = None,
+        slice_for: Callable[[VendorChange], str] | None = None,
     ) -> None:
         # Bound once at construction rather than threaded through `propose()`. The caller
         # constructs one `AgentRemediator` per run, after reading the stored context once, so
@@ -351,6 +363,9 @@ class AgentRemediator:
         # per-change lookup, and taking a function keeps the database driver on the caller's
         # side of the seam the same way `repo_context` keeps the read there.
         self._lessons_for = lessons_for
+        # The same seam as `lessons_for`, for the same reason: reading a staged document is the
+        # caller's business, and a tier that never uses one must not grow a parameter for it.
+        self._slice_for = slice_for
         # The default is the production path, carrying the gate. A caller that names no runner
         # gets a hardened one; the seam serves tests and M9's outcome vocabulary rather than
         # being a switch somebody has to remember to set.
@@ -379,8 +394,10 @@ class AgentRemediator:
         diagnostics: str = "",
     ) -> Patch:
         lessons = self._lessons_for(change) if self._lessons_for is not None else ""
+        sliced = self._slice_for(change) if self._slice_for is not None else ""
         prompt = build_patch_prompt(
-            finding, change, site, diagnostics, self._repo_context, corpus_lessons=lessons,
+            finding, change, site, diagnostics, self._repo_context,
+            corpus_lessons=lessons, spec_slice=sliced,
         )
         repo_path = Path(repo.local_path)
 

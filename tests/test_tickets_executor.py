@@ -77,7 +77,7 @@ def _wire_fakes(monkeypatch, graph: _FakeGraph) -> None:
     monkeypatch.setattr(cli, "load_catalogue", lambda: "catalogue")
     monkeypatch.setattr(
         cli, "build_remediator",
-        lambda catalogue, repo_context, lessons_for=None: "remediator",
+        lambda catalogue, repo_context, lessons_for=None, slice_for=None: "remediator",
     )
     monkeypatch.setattr(cli, "GitHubForge", lambda: "forge")
     monkeypatch.setattr(cli, "build_graph", lambda **kw: graph)

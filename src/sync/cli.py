@@ -46,6 +46,7 @@ from sync.index.literals import index_operation_literals
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.remediate.agent_patch import AgentRemediator
+from sync.remediate.spec_slice import slice_for_cache
 from sync.remediate.precedent import precedent_salt
 from sync.remediate.graph import build_graph
 from sync.remediate.literal_swap import LiteralSwapRemediator
@@ -174,6 +175,7 @@ def corpus_lessons_reader(store) -> "Callable[[VendorChange], str]":
 def build_remediator(
     catalogue: dict[str, dict] | None = None, repo_context: str = "",
     lessons_for: "Callable[[VendorChange], str] | None" = None,
+    slice_for: "Callable[[VendorChange], str] | None" = None,
 ) -> TieredRemediator:
     """The tier cascade, cheapest first, with the agent last and unconditional.
 
@@ -213,7 +215,9 @@ def build_remediator(
             ParameterOmitRemediator(),
             ParameterRenameRemediator(),
             PropertyOmitRemediator(),
-            TerminalTier(AgentRemediator(repo_context=repo_context, lessons_for=lessons_for)),
+            TerminalTier(AgentRemediator(
+                repo_context=repo_context, lessons_for=lessons_for, slice_for=slice_for,
+            )),
         ],
         catalogue=catalogue,
     )
@@ -1240,6 +1244,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                 remediator=build_remediator(
                     catalogue, repo_context=repo_context,
                     lessons_for=corpus_lessons_reader(store),
+                    slice_for=slice_for_cache(cache),
                 ),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )
@@ -1323,6 +1328,7 @@ def cmd_tickets(args) -> int:
                 remediator=build_remediator(
                     catalogue, repo_context=repo_context,
                     lessons_for=corpus_lessons_reader(store),
+                    slice_for=slice_for_cache(cache),
                 ),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )

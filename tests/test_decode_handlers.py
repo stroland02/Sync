@@ -394,6 +394,25 @@ def _drive_checkout(root: Path) -> None:
     assert sources == {} and skipped == ["billing.ts"]
 
 
+def _drive_spec_slice(root: Path) -> None:
+    """A staged specification whose bytes are not UTF-8, which a truncated fetch really leaves.
+
+    The answer is the same for all three exceptions the clause names: skip that candidate. A
+    slice is an improvement to a prompt and never a precondition for one, so an unreadable
+    document costs the slice rather than the run -- which is what makes the empty string the
+    honest return here rather than a swallowed failure.
+    """
+    from types import SimpleNamespace
+
+    from sync.remediate.spec_slice import slice_for_cache
+
+    (root / "undecodable.json").write_bytes(UTF16)
+
+    rendered = slice_for_cache(root)(SimpleNamespace(operation_id="PostCharges"))
+
+    assert rendered == ""
+
+
 def _drive_webhook(_: Path) -> None:
     from sync.forge.webhook import WebhookFormatError, parse_pull_request_event
 
@@ -841,6 +860,8 @@ DRIVERS: dict[str, Callable[[Path], None]] = {
     "sync/index/codebase.py::_attach_snippets::OSError+UnicodeDecodeError+ValueError":
         _drive_attach_snippets,
     "sync/benchmark/checkout.py::read_checkout::UnicodeDecodeError": _drive_checkout,
+    "sync/remediate/spec_slice.py::slice_for_cache.render::JSONDecodeError+OSError+UnicodeDecodeError":
+        _drive_spec_slice,
     "sync/index/python_lang.py::PythonAdapter._readable_sources::UnicodeDecodeError":
         _drive_python_sources,
     "sync/index/typescript.py::TypeScriptAdapter._readable_sources::UnicodeDecodeError":

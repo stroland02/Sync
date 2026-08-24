@@ -137,7 +137,7 @@ information.*
 - **B1. Rename `corpus` to Precedent.** *(Landed: `CI-W591` Python, `CI-W592` console and API.)* 292 files carry the word, including `sync/core/corpus.py`
   and the routed address `/repositories/:repoId/corpus`. Mechanical but wide; it wants its own
   commit and no other change riding along.
-- **B2. Operation-scoped slices pinned to a spec hash.** A finding names an operation; the agent
+- **B2. Operation-scoped slices pinned to a spec hash.** *(Landed `CI-W593`.)* A finding names an operation; the agent
   should receive that operation's slice of the specification and not two megabytes of YAML.
   Anthropic's document is 2,015,896 bytes across 96 paths and 144 operations.
 - **B3. The evidence rung.** Every fact handed to the agent carries where it came from and at which
