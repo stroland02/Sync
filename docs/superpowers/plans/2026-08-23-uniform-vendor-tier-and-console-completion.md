@@ -71,8 +71,8 @@ symbols would dispatch to the wrong reader with every test still green.
 | A3 | Pin what both symbol rules produce, before anything moves | **landed `01b883c7`** |
 | A4 | The packages are named for what they hold | **deferred to after A13** |
 | A5 | The rule contract is checked where a rule registers | **landed `bef14cb9`** |
-| A6 | The tier resolves symbols from a staged map, not only a checkout | next |
-| A7 | Every registered vendor's bindings come from its row | |
+| A6 | The tier resolves symbols from a staged map, not only a checkout | **landed** |
+| A7 | Every registered vendor's bindings come from its row | next |
 | A8 | A row may name its specification instead of discovering one | |
 | A9 | OpenAI's row names the specification it actually publishes | |
 | A10 | A row may name several documents (twilio) | |

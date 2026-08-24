@@ -376,3 +376,86 @@ def test_both_entry_points_answer_one_operation_the_same_way(tmp_path: Path):
     assert by_symbol == by_request
     assert by_request.operation_id == "GetChargesCharge"
     assert by_request.service_id == "Charges"
+
+
+def test_a_staged_symbol_map_resolves_without_any_checkout(tmp_path: Path):
+    """The uniform tier could only resolve a symbol from a staged SDK *checkout*.
+
+    Both hand-written adapters resolve from a staged `symbols.json` that their preparer wrote, so
+    until the tier can read one, moving stripe or twilio onto it would be a silent downgrade --
+    every call site stops resolving and the run reports zero findings rather than an error.
+    """
+    staged = tmp_path / "symbols.json"
+    staged.write_text(
+        (Path("vendor-cache") / "stripe" / "symbols.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    adapter = GeneratedSpecAdapter(
+        vendor_id="stripe",
+        sources={},
+        fetch=_CountingFetch({}),
+        cache_dir=tmp_path / "cache",
+        symbol_map_path=staged,
+    )
+
+    op = adapter.operation_for_symbol("stripe.charges.retrieve")
+
+    assert op is not None
+    assert op.operation_id == "GetChargesCharge"
+    assert op.http_method == "get"
+    assert op.path == "/v1/charges/{charge}"
+
+
+def test_a_staged_map_missing_a_field_loads_rather_than_raising(tmp_path: Path):
+    """The committed caches carry four keys per entry and no `service_id`.
+
+    They were baked before the builder emitted one, `benchmark/corpus/symbol_map.yaml` pins their
+    bytes, and rebaking them inside this sequence is the thing the pin forbids -- so the reader
+    must treat every field but the route as optional.
+    """
+    staged = tmp_path / "symbols.json"
+    staged.write_text(
+        '{"acme.things.list": {"operation_id": "ListThings", '
+        '"http_method": "get", "path": "/v1/things"}}',
+        encoding="utf-8",
+    )
+    adapter = GeneratedSpecAdapter(
+        vendor_id="acme",
+        sources={},
+        fetch=_CountingFetch({}),
+        cache_dir=tmp_path / "cache",
+        symbol_map_path=staged,
+    )
+
+    op = adapter.operation_for_symbol("acme.things.list")
+
+    assert op is not None and op.operation_id == "ListThings"
+    assert op.service_id is None
+
+
+def test_a_staged_map_is_preferred_over_a_checkout_rule(tmp_path: Path):
+    """Both staged at once is a real configuration -- stripe stages a map and could stage a
+    checkout -- and the map is the richer answer, so it wins rather than racing."""
+    sdk_dest = tmp_path / "sdk_source"
+    shutil.copytree(FIXTURES / "sdk_sources" / "anthropic_python", sdk_dest, dirs_exist_ok=True)
+    staged = tmp_path / "symbols.json"
+    staged.write_text(
+        '{"anthropic.messages.create": {"operation_id": "MessagesCreate", '
+        '"http_method": "post", "path": "/v1/messages", "service_id": "Messages"}}',
+        encoding="utf-8",
+    )
+    adapter = GeneratedSpecAdapter(
+        vendor_id="anthropic",
+        sources={},
+        fetch=_CountingFetch({}),
+        cache_dir=tmp_path / "cache",
+        sdk_source=sdk_dest,
+        symbol_map_path=staged,
+    )
+
+    op = adapter.operation_for_symbol("anthropic.messages.create")
+
+    assert op is not None
+    assert op.operation_id == "MessagesCreate"
+    assert op.service_id == "Messages"
+

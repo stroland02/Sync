@@ -79,6 +79,7 @@ all of them. `tests/test_generated_adapter_noise.py` holds the decision.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -235,6 +236,33 @@ def http_fetch(url: str, timeout: float = 60.0) -> str:
         return response.read().decode("utf-8")
 
 
+def _read_staged_map(vendor_id: str, path: Path) -> dict[str, ExtractedOperation]:
+    """A `symbols.json` a preparer wrote, keyed the way this adapter keys its own map.
+
+    The file states the fully-dotted chain a customer writes; `operation_for_symbol` strips the
+    vendor root before looking up, so the root comes off here too or nothing ever matches.
+
+    Every field but the route is read with `.get`. The committed caches carry four keys per entry
+    and no `service_id`, `benchmark/corpus/symbol_map.yaml` pins their bytes, and rebaking them is
+    what that pin exists to forbid.
+    """
+    document = json.loads(path.read_text(encoding="utf-8"))
+    root = f"{vendor_id}."
+    symbols: dict[str, ExtractedOperation] = {}
+    for key, entry in document.items():
+        chain = key[len(root):] if key.startswith(root) else key
+        languages = entry.get("languages")
+        symbols[chain] = ExtractedOperation(
+            symbol=chain,
+            http_method=entry["http_method"],
+            path=entry["path"],
+            operation_id=entry.get("operation_id"),
+            service_id=entry.get("service_id"),
+            languages=tuple(languages) if languages else None,
+        )
+    return symbols
+
+
 class GeneratedSpecAdapter:
     """Turns two commits of a generated SDK's manifest into the vendor changes between them."""
 
@@ -248,6 +276,7 @@ class GeneratedSpecAdapter:
         sdk_bindings: Mapping[str, Mapping[str, str]] | None = None,
         sdk_source: Path | str | None = None,
         sdk_spec_operations: Path | str | None = None,
+        symbol_map_path: Path | str | None = None,
         sdk_source_generator: str = DEFAULT_GENERATOR,
     ) -> None:
         self._vendor_id = vendor_id
@@ -264,6 +293,10 @@ class GeneratedSpecAdapter:
         # Its absence costs the cross-check, not the map: extraction still answers, and the
         # disagreement it would have surfaced simply is not looked for.
         self._sdk_spec_operations = Path(sdk_spec_operations) if sdk_spec_operations else None
+        # A map a preparer already derived, which is how both hand-written adapters resolve. It
+        # outranks the checkout rule where both are staged: a rule reading a specification states
+        # the operation's own id and service, and a checkout states neither.
+        self._symbol_map_path = Path(symbol_map_path) if symbol_map_path else None
         # Rejected here rather than on first lookup. A misconfigured deployment must fail while
         # someone is looking at it, not on the run where a symbol quietly stops resolving.
         if sdk_source_generator not in EXTRACTORS:
@@ -420,6 +453,10 @@ class GeneratedSpecAdapter:
         property of the source rather than of whether a specification was staged, and without a
         specification there is no coverage line for it to travel in.
         """
+        if self._symbol_map_path is not None:
+            if self._symbols is None:
+                self._symbols = _read_staged_map(self._vendor_id, self._symbol_map_path)
+            return self._symbols
         if self._sdk_source is None:
             return None
         if self._symbols is None:
@@ -652,6 +689,7 @@ class CorrelatingGeneratedSpecAdapter(GeneratedSpecAdapter):
         sdk_bindings: Mapping[str, Mapping[str, str]] | None = None,
         sdk_source: Path | str | None = None,
         sdk_spec_operations: Path | str | None = None,
+        symbol_map_path: Path | str | None = None,
         sdk_source_generator: str = DEFAULT_GENERATOR,
     ) -> None:
         super().__init__(
@@ -663,6 +701,7 @@ class CorrelatingGeneratedSpecAdapter(GeneratedSpecAdapter):
             sdk_bindings=sdk_bindings,
             sdk_source=sdk_source,
             sdk_spec_operations=sdk_spec_operations,
+            symbol_map_path=symbol_map_path,
             sdk_source_generator=sdk_source_generator,
         )
         self._routes: dict[tuple[str, int], list[tuple[tuple[str, ...], ExtractedOperation]]] | None = None
