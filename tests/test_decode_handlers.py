@@ -1108,6 +1108,9 @@ _WHOLE_STAGE_CATCH_ALL = (
     # would be worse than deriving slightly coarser names. `fetch_specification` decodes, and
     # carries its own handling.
     "sync/signals/registry.py::_stage_symbol_map::Exception",
+    # Wraps one HEAD request so a probe reports every row rather than stopping at the first dead
+    # one. Nothing under the clause decodes: the request is never read, only its status taken.
+    "sync/cli.py::_reach::Exception",
     "sync/cli.py::_decline_line::Exception",
     "sync/cli.py::_model_deprecations::Exception",
     "sync/cli.py::_parameter_deprecations::Exception",

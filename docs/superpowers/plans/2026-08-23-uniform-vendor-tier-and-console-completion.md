@@ -69,7 +69,7 @@ symbols would dispatch to the wrong reader with every test still green.
 | A1 | One operation resolves to one name through both entry points | **landed `a568afc1`** |
 | A2 | A reference we cannot resolve is reported as that, not as absent (mistral) | **landed `f1eb6e91`** |
 | A3 | Pin what both symbol rules produce, before anything moves | **landed `01b883c7`** |
-| A4 | The packages are named for what they hold | **deferred to after A13** |
+| A4 | The packages are named for what they hold | next (deferral discharged) |
 | A5 | The rule contract is checked where a rule registers | **landed `bef14cb9`** |
 | A6 | The tier resolves symbols from a staged map, not only a checkout | **landed** |
 | A7 | Every registered vendor's bindings come from its row | **landed** |
@@ -82,7 +82,7 @@ symbols would dispatch to the wrong reader with every test still green.
 | A12c | Stripe is a row; the hand-written adapter is deleted | **landed** |
 | A13a | A row may name several documents; the twilio rule relocates | **landed** |
 | A13b | Twilio is a row; the registry names no vendor at all | **landed** |
-| A14 | A stale row is found by a check, not by a person | next |
+| A14 | A stale row is found by a check, not by a person | **landed** |
 
 ### Two rulings against the adjudicated sequence, 2026-08-23
 

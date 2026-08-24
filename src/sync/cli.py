@@ -2249,6 +2249,74 @@ def _score_corpus(spec_path: Path, score_dsn: str):
                             skipped_files=tuple(skipped))
 
 
+def _reach(url: str) -> tuple[bool, str]:
+    """Whether a document is served, without downloading it.
+
+    HEAD rather than GET: the question is whether the row still points at something, and a
+    specification is megabytes. A failure is reported as its status rather than raised, because
+    one dead row must not stop the probe reporting the other seventeen.
+    """
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        url, method="HEAD", headers={"User-Agent": "sync-vendors-probe"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status == 200, str(response.status)
+    except urllib.error.HTTPError as exc:
+        return False, str(exc.code)
+    except Exception as exc:  # noqa: BLE001 -- a probe reports, it does not raise
+        return False, type(exc).__name__
+
+
+def vendors_probe(args: argparse.Namespace, probe=None) -> int:
+    """Resolve every configured row against its live source and name the ones that are gone.
+
+    `CI-W581` closed this class of defect with a test, and a test is the wrong shape for the
+    person who needs the answer: finding a stale row should not require knowing pytest, a marker
+    name and a deselect rule. Every other gate reads committed fixtures and is structurally
+    unable to notice a vendor deleting a file, so this is the only check that can.
+
+    `probe` is injected so the suite exercises the reporting without reaching the network.
+    """
+    from sync.signals.registry import _RAW_CONTENT, _generated_vendors
+
+    reach = probe or _reach
+    rows = _generated_vendors()
+
+    checked = 0
+    unreachable: list[str] = []
+    for vendor_id, row in sorted(rows.items()):
+        declared = row.spec if isinstance(row.spec, tuple) else None
+        paths = [document.path for document in declared] if declared else [row.manifest or row.spec]
+        for path in paths:
+            url = _RAW_CONTENT.format(repo=row.repo, ref="HEAD", path=path)
+            checked += 1
+            ok, status = reach(url)
+            if not ok:
+                unreachable.append(f"{vendor_id}: {url} -> {status}")
+        print(f"{vendor_id:<18} {row.repo}")
+
+    # The count is the operator-facing half. "18 rows, 21 documents, 21 reachable" is a different
+    # sentence from silence, and silence is what a probe that found nothing looks like.
+    print(
+        f"\n{len(rows)} row(s), {checked} document(s), "
+        f"{checked - len(unreachable)} reachable"
+    )
+
+    if unreachable:
+        print(
+            "\na configured row names a document its vendor no longer publishes. The row is "
+            "stale, not the vendor unwatchable -- find where the specification moved to and "
+            "repoint it:\n  " + "\n  ".join(unreachable),
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def intake(args: argparse.Namespace) -> int:
     """Report which of a repository's declared dependencies Sync can actually watch.
 
@@ -2727,6 +2795,14 @@ def build_parser() -> argparse.ArgumentParser:
                                help="read indexed call sites and observed calls from here when "
                                     "ranking; unused otherwise")
     intake_parser.set_defaults(func=intake)
+
+    vendors_parser = sub.add_parser("vendors", help="inspect the configured vendor rows")
+    vendors_sub = vendors_parser.add_subparsers(dest="vendors_command", required=True)
+    vendors_probe_parser = vendors_sub.add_parser(
+        "probe",
+        help="check every configured row still points at a document its vendor publishes",
+    )
+    vendors_probe_parser.set_defaults(func=vendors_probe)
 
     benchmark_parser = sub.add_parser(
         "benchmark", help="print the tier B quality axes with their sample sizes"

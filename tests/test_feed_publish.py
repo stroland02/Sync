@@ -315,12 +315,17 @@ def test_publishing_binds_no_port_and_uploads_nothing(tmp_path, store, signing_k
     The command writes two files and stops, so whoever runs it decides where the bytes go --
     the same boundary `ingest` and `merge-outcome` hold.
     """
-    import sync.cli as cli
+    import inspect
 
-    source = Path(cli.__file__).read_text(encoding="utf-8")
     out = tmp_path / "out"
     publish_feed(_args(out))
 
     assert sorted(path.name for path in out.iterdir()) == ["stripe.json", "stripe.json.sig"]
+
+    # Scoped to this command rather than to the whole module. It read every line of `cli.py`
+    # until `CI-W589` added `vendors probe`, whose entire job is to reach the network -- and a
+    # whole-file ban that a legitimate command trips is one somebody deletes rather than narrows,
+    # which would lose the property this actually guards.
+    source = inspect.getsource(publish_feed)
     for forbidden in ("socket", "bind(", "boto3", "upload", "requests.put", "urlopen"):
         assert forbidden not in source
