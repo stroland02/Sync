@@ -58,3 +58,7 @@ scripts/orchestration/hold_clock.json
 # in a diff nobody can read.
 .playwright-mcp/
 
+# Screenshots the browser tools drop beside the tree when given a bare filename.
+# `.playwright-mcp/` catches the snapshots and logs; this catches the images, which land
+# in the repository root instead.
+/*.png
