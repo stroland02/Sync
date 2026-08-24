@@ -7,7 +7,7 @@ import pytest
 from sync.core import VendorAdapter
 from sync.signals.stripe import adapter as adapter_module
 from sync.signals.stripe.adapter import StripeAdapter
-from sync.signals.stripe.symbols import SymbolCollision, build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import SymbolCollision, build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
 

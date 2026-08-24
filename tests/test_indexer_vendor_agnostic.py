@@ -33,7 +33,7 @@ from sync.index import python_lang, typescript
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.signals.registry import available_vendors
-from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbols
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_symbols
 

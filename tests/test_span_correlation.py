@@ -19,7 +19,7 @@ import pytest
 
 from sync.core.conformance import check_request_correlator
 from sync.core.protocols import RequestCorrelator
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SPEC = json.loads((FIXTURES / "specs" / "stripe_v2330_shape.json").read_text(encoding="utf-8"))

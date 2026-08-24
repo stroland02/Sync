@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sync.core import LanguageAdapter, RepoRef
 from sync.index.typescript import TypeScriptAdapter
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 from conftest import symbol_resolver
 

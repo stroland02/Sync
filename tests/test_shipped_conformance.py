@@ -94,7 +94,7 @@ from sync.signals.registry import (
     available_vendors,
     load_vendor,
 )
-from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbols
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_symbols
 
 FIXTURES = Path(__file__).parent / "fixtures"

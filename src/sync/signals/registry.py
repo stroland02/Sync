@@ -64,7 +64,7 @@ from sync.signals.generated.adapter import (
 from sync.signals.generated.manifest import SpecSource, parse_manifest
 from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
 from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
-from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbols
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_symbols
 

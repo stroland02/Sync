@@ -1,6 +1,6 @@
 """Every input the two hand-written symbol maps refuse to resolve, and what the caller sees.
 
-`sync.signals.twilio.symbols` and `sync.signals.stripe.symbols` are the two maps written by
+`sync.signals.twilio.symbols` and `sync.signals.generated.symbols_stripe_openapi` are the two maps written by
 rule rather than read out of a generator, and between them they held eleven unexecuted
 statements. Every one is a decline: an input that produces no symbol.
 
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from sync.signals.stripe.symbols import build_symbol_map as build_stripe_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_map
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_map
 
 TWILIO_FIXTURES = Path(__file__).parent / "fixtures" / "twilio"

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.stage_symbol_map import stage_symbol_map
 from scripts.symbol_map_pin import SymbolMapMismatch, symbol_map_digest, verify_staged_map
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 # One path with one operation, which is all the builder needs to produce a map. The specification
 # the corpus really uses is 7.8 MB and gitignored; what is under test here is the pin check

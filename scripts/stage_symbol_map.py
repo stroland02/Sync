@@ -32,7 +32,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 # Run as `uv run python scripts/stage_symbol_map.py`, Python puts `scripts/` on the path and not
 # the repository root, so the sibling module below is unimportable by the name the tests use.

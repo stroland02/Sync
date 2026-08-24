@@ -24,7 +24,7 @@ from pathlib import Path
 
 from sync.core import CallSite, RepoRef
 from sync.index.python_lang import PythonAdapter
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PY = FIXTURES / "py"

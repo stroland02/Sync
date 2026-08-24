@@ -26,7 +26,7 @@ import pytest
 
 from sync.core.models import ObservedCall
 from sync.graph.store import GraphStore
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 from sync.telemetry import ingest_payload
 from sync.telemetry.otlp import client_spans
 

@@ -304,7 +304,7 @@ def test_the_hand_written_stripe_map_is_unaffected():
     exactly as it did, and the regression is worth pinning here because the two paths now answer
     the same question."""
     from sync.signals.stripe.adapter import StripeAdapter
-    from sync.signals.stripe.symbols import build_symbol_map
+    from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     spec = {"paths": {"/v1/charges": {"post": {"operationId": "PostCharges"}}}}
     map_path = FIXTURES / "stripe-map-unused.json"

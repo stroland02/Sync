@@ -1,8 +1,8 @@
 """What the two specification-reading symbol rules emit today, recorded before they move.
 
 `docs/superpowers/plans/2026-08-23-uniform-vendor-tier-and-console-completion.md` Track A moves
-`sync.signals.stripe.symbols` and `sync.signals.twilio.symbols` into the extraction-rule registry
-so that no vendor is served by hand-written code. A move is only safe if it changes nothing, and
+the two hand-written symbol builders into the extraction-rule registry so that no vendor is
+served by hand-written code. A move is only safe if it changes nothing, and
 "changes nothing" is a claim somebody has to be able to check -- these digests are that check.
 
 They are deliberately not the same artifact as `benchmark/corpus/symbol_map.yaml`. That pin
@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from scripts.symbol_map_pin import symbol_map_digest
-from sync.signals.stripe.symbols import build_symbol_map as build_stripe_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_map
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_map
 
 FIXTURES = Path(__file__).parent / "fixtures"

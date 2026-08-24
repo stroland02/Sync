@@ -20,7 +20,7 @@ import pytest
 
 from sync.core import RequestCorrelator, VendorAdapter
 from sync.core.conformance import check_request_correlator
-from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbol_map
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.twilio.symbols import SymbolCollision, build_symbol_map
 

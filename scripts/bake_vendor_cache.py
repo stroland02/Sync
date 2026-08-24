@@ -30,7 +30,7 @@ from typing import Any, Mapping
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.symbol_map_pin import symbol_map_digest
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 PROVENANCE = "provenance.json"
 DEFAULT_INTO = Path("vendor-cache")

@@ -344,7 +344,7 @@ PROPERTY_REMOVED = dict(
 def _python_adapter(root: Path):
     from sync.index.python_lang import PythonAdapter
     from sync.signals.stripe.adapter import StripeAdapter
-    from sync.signals.stripe.symbols import build_symbol_map
+    from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     map_path = root / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
@@ -539,7 +539,7 @@ def _drive_literal_call_sites(root: Path) -> None:
 def _tracker_cache(root: Path) -> Path:
     """A cache holding the symbol map both error-tracker commands refuse to run without."""
     from sync.signals.registry import SYMBOL_MAP_FILENAME
-    from sync.signals.stripe.symbols import build_symbol_map
+    from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     cache = root / "cache"
     cache.mkdir(exist_ok=True)
@@ -722,7 +722,7 @@ def _drive_read_seed(root: Path) -> None:
 def _drive_ts_manifest(root: Path) -> None:
     from sync.index.typescript import TypeScriptAdapter
     from sync.signals.stripe.adapter import StripeAdapter
-    from sync.signals.stripe.symbols import build_symbol_map
+    from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     map_path = root / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
@@ -768,7 +768,7 @@ def _drive_typescript_sources(root: Path) -> None:
     """The same gate on the other language, reached the same way."""
     from sync.index.typescript import TypeScriptAdapter
     from sync.signals.stripe.adapter import StripeAdapter
-    from sync.signals.stripe.symbols import build_symbol_map
+    from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     map_path = root / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")

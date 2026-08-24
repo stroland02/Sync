@@ -11,7 +11,7 @@ import pytest
 
 from sync.core import CallSite, RepoRef
 from sync.index.codebase import CodebaseIndexReport, index_codebase
-from sync.signals.stripe.symbols import build_symbol_map
+from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
 STRIPE_SPEC = {
     "paths": {
