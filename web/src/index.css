@@ -234,7 +234,16 @@
      up to the 4px grid -- which is a rule rather than seven choices, and which lands
      `--text-body` on a 20px line box, the number DESIGN.md's `row-md` is derived from.
      Tracking is two-tiered and travels with the heading role, not with size alone.
-     DESIGN.md's Type section carries the condition under which a step keeps it. */
+     DESIGN.md's Type section carries the condition under which a step keeps it.
+
+     The twelve steps below are kept although `text-2xl` and up appear in no class in this tree.
+     They are the substrate's ramp, not spare tokens: the role names above resolve onto them, the
+     vendored and shadcn primitives are authored in `text-sm`, and Tailwind derives a utility for
+     each whether or not a screen writes it. Deleting the unwritten ones would leave a ramp with
+     holes and restyle every primitive that reads `--text-sm`.
+
+     What is enforced instead is that the console's own screens use the role names --
+     `lib/type-scale.test.ts`, which names the file and the class when one does not. */
   --text-sm: 0.8125rem;
   --text-base: 0.9375rem;
   --text-lg: 1rem;

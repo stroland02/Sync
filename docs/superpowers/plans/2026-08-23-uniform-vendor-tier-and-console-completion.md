@@ -169,8 +169,9 @@ information.*
   now exist once. The rest of the vendored tree has no shadcn counterpart and stays: replacing a
   working primitive nothing duplicates is polish, and `one-substrate.test.ts` fails if a fifth
   duplicate ever appears.
-- **C5.** Token re-derivation. 143 custom properties in `web/src/index.css`, to be re-derived once
-  composition is settled -- the owner sequenced composition first, tokens second.
+- **C5.** *(Landed `CI-W600` as enforcement.)* Measured rather than re-derived: the console's own
+  screens already use the role names, and the ramp steps beneath them are the substrate the roles
+  resolve onto rather than spare tokens. A guard now fails when a screen reaches past the roles.
 - **C6.** Deferred content restructuring: `WorkflowPage`'s disabled controls become prose;
   `BindingSurfacePage` gets no exemption.
 - **C7.** Terminal maximum-density pass across the migrated screens.
