@@ -97,10 +97,39 @@ log = logging.getLogger(__name__)
 
 Fetch = Callable[[str], str]
 
-EXTRACTORS = {
-    module.GENERATOR: module
-    for module in (stainless_python, stainless_typescript, speakeasy_typescript, speakeasy_python)
-}
+# The three members `_extracted_symbols` and `_report_unreadable` actually reach for. Checked
+# here because the dict this replaced read `GENERATOR` and nothing else: a module missing either
+# function registered successfully, and the failure surfaced later inside the adapter, where the
+# traceback names the caller rather than the rule that is incomplete.
+_RULE_CONTRACT = ("GENERATOR", "extract_symbols", "report_extraction")
+
+
+def register_extraction_rules(modules) -> dict:
+    """The rules keyed by what each one calls itself, refusing any that is not one."""
+    registry: dict = {}
+    for module in modules:
+        name = getattr(module, "__name__", repr(module))
+        for member in _RULE_CONTRACT:
+            if not hasattr(module, member):
+                raise TypeError(
+                    f"{name} is registered as an extraction rule and declares no {member}; "
+                    f"a rule states {', '.join(_RULE_CONTRACT)}"
+                )
+        key = module.GENERATOR
+        if not isinstance(key, str) or not key:
+            raise TypeError(f"{name}.GENERATOR is {key!r}, which names no rule")
+        if key in registry:
+            raise TypeError(
+                f"{name} and {registry[key].__name__} both register as {key!r}; "
+                f"one rule would silently replace the other"
+            )
+        registry[key] = module
+    return registry
+
+
+EXTRACTORS = register_extraction_rules(
+    (stainless_python, stainless_typescript, speakeasy_typescript, speakeasy_python)
+)
 """Which rule reads a staged SDK, by the generator and language that emitted it.
 
 Keyed by generator *times language*, because that is the unit an extraction rule covers. Stainless

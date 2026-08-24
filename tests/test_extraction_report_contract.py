@@ -798,3 +798,111 @@ def _spec(tmp_path: Path, *operations: tuple[str, str]) -> Path:
         encoding="utf-8",
     )
     return destination
+
+
+# --- the contract itself, checked where a rule registers -------------------------
+
+
+def test_every_registered_rule_satisfies_the_contract_the_adapter_calls():
+    """The three members `GeneratedSpecAdapter` actually reaches for, asserted on every rule.
+
+    Held as a property of the shipped registry rather than a list, so a fifth rule inherits the
+    check by existing rather than by somebody remembering to add a line here.
+    """
+    from sync.signals.generated.adapter import EXTRACTORS
+
+    assert EXTRACTORS, "an empty registry would satisfy every loop below vacuously"
+    for key, module in EXTRACTORS.items():
+        assert module.GENERATOR == key, f"{module.__name__} is registered under {key!r}"
+        assert callable(module.extract_symbols), key
+        assert callable(module.report_extraction), key
+
+
+def test_a_module_that_is_not_an_extraction_rule_is_refused_where_it_registers():
+    """`EXTRACTORS` was built by reading `GENERATOR` and nothing else, so a module missing either
+    function registered successfully and failed much later inside `_extracted_symbols` -- at which
+    point the traceback names the adapter rather than the rule that is actually incomplete.
+    """
+    import types
+
+    import pytest
+
+    from sync.signals.generated.adapter import register_extraction_rules
+
+    incomplete = types.SimpleNamespace(
+        GENERATOR="acme-python",
+        extract_symbols=lambda source_root: ((), ()),
+    )
+    incomplete.__name__ = "acme_python"
+
+    with pytest.raises(TypeError) as raised:
+        register_extraction_rules((incomplete,))
+
+    assert "acme_python" in str(raised.value)
+    assert "report_extraction" in str(raised.value)
+
+
+def test_a_rule_naming_no_generator_is_refused_rather_than_registered_under_none():
+    import types
+
+    import pytest
+
+    from sync.signals.generated.adapter import register_extraction_rules
+
+    nameless = types.SimpleNamespace(
+        extract_symbols=lambda source_root: ((), ()),
+        report_extraction=lambda *a, **k: None,
+    )
+    nameless.__name__ = "nameless_rule"
+
+    with pytest.raises(TypeError) as raised:
+        register_extraction_rules((nameless,))
+
+    assert "GENERATOR" in str(raised.value)
+
+
+def test_the_registry_is_what_the_validator_produced():
+    """Without this the validator could exist, be correct, and never be the thing that built
+    `EXTRACTORS` -- a check nothing routes through is a check that cannot fail."""
+    from sync.signals.generated import (
+        symbols_speakeasy,
+        symbols_speakeasy_python,
+        symbols_typescript,
+    )
+    from sync.signals.generated.adapter import EXTRACTORS, register_extraction_rules
+
+    rebuilt = register_extraction_rules(
+        (symbols, symbols_typescript, symbols_speakeasy, symbols_speakeasy_python)
+    )
+
+    assert rebuilt == EXTRACTORS
+
+
+def test_two_rules_claiming_one_name_are_refused_rather_than_one_replacing_the_other():
+    """A dict comprehension keyed on `GENERATOR` silently kept whichever came last.
+
+    Nothing collides today, and this exists because something will: Track A registers two more
+    rules, and a copied module that forgot to change its `GENERATOR` would remove a working rule
+    with every test still green.
+    """
+    import types
+
+    import pytest
+
+    from sync.signals.generated.adapter import register_extraction_rules
+
+    def _rule(module_name):
+        rule = types.SimpleNamespace(
+            GENERATOR="acme-python",
+            extract_symbols=lambda source_root: ((), ()),
+            report_extraction=lambda *a, **k: None,
+        )
+        rule.__name__ = module_name
+        return rule
+
+    with pytest.raises(TypeError) as raised:
+        register_extraction_rules((_rule("first_rule"), _rule("second_rule")))
+
+    assert "acme-python" in str(raised.value)
+    assert "first_rule" in str(raised.value) and "second_rule" in str(raised.value)
+

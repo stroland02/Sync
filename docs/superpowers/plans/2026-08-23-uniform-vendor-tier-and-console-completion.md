@@ -69,8 +69,8 @@ symbols would dispatch to the wrong reader with every test still green.
 | A1 | One operation resolves to one name through both entry points | **landed `a568afc1`** |
 | A2 | A reference we cannot resolve is reported as that, not as absent (mistral) | **landed `f1eb6e91`** |
 | A3 | Pin what both symbol rules produce, before anything moves | **landed `01b883c7`** |
-| A4 | The packages are named for what they hold | next |
-| A5 | A rule declares its key, its input and the languages it speaks | |
+| A4 | The packages are named for what they hold | **deferred to after A13** |
+| A5 | The rule contract is checked where a rule registers | next |
 | A6 | The tier resolves symbols from a staged map, not only a checkout | |
 | A7 | Every registered vendor's bindings come from its row | |
 | A8 | A row may name its specification instead of discovering one | |
@@ -80,6 +80,25 @@ symbols would dispatch to the wrong reader with every test still green.
 | A12 | Stripe is a row; the hand-written adapter is deleted | |
 | A13 | Twilio is a row; the registry names no vendor at all | |
 | A14 | A stale row is found by a check, not by a person | |
+
+### Two rulings against the adjudicated sequence, 2026-08-23
+
+**A4, the package rename, moves to the end.** Measured: 73 files reference `sync.signals.generated`,
+and the rename delivers no capability. Two reasons to do it last rather than fourth. A package can
+only be named correctly once you know what it holds -- today it holds four generator rules, and
+after A12 and A13 it holds six rules of two kinds -- so renaming now names it for a state that does
+not exist yet. And 73 files of churn ahead of the semantic work maximises the conflict surface with
+the other sessions pushing to this repository. What the later commits actually need from A4 is not
+the name but the contract, which is A5. Reversible: the rename is mechanical whenever it happens.
+
+**A5 narrows to the structural check alone.** The original form had each rule declare `RULE`, `INPUT`
+and `LANGUAGES`. `INPUT` and `LANGUAGES` have no reader until a specification-reading rule registers,
+and `CLAUDE.md` is explicit that an abstraction for an anticipated second caller is debt with no
+asset behind it -- so those two fields arrive with the commit that reads them, and `GENERATOR` keeps
+its name until a rule that is not a generator's makes `RULE` the truer word. What is left is real
+today: the contract is `GENERATOR`, `extract_symbols` and `report_extraction`, and `EXTRACTORS`
+touches only the first, so a module missing either function registers successfully and fails much
+later inside `_extracted_symbols`.
 
 ### Two live defects Track A must absorb
 
