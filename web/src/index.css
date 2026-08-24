@@ -63,13 +63,13 @@
      tests/test_console_design_tokens.py, which holds the class rather than the token so
      a chart resolving it through getComputedStyle keeps working. */
   --color-foreground: oklch(0.95 0.00275 159);
-  --color-foreground-light: oklch(0.798 0.00275 159);
-  --color-foreground-lighter: oklch(0.684 0.00275 159);
-  --color-foreground-muted: oklch(0.684 0.00275 159);
-  --color-muted-foreground: oklch(0.798 0.00275 159);
   --color-ink: oklch(0.95 0.00275 159);
   --color-ink-muted: oklch(0.798 0.00275 159);
   --color-ink-secondary: oklch(0.684 0.00275 159);
+  --color-foreground-light: var(--color-ink-muted);
+  --color-foreground-lighter: var(--color-ink-secondary);
+  --color-foreground-muted: var(--color-ink-secondary);
+  --color-muted-foreground: var(--color-ink-muted);
 
   /* Icons and other graphical marks, never text. An icon rendered at a text ink is
      optically louder than the prose beside it -- a filled shape carries more area than a

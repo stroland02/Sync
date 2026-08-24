@@ -172,8 +172,10 @@ information.*
 - **C5.** *(Landed `CI-W600` as enforcement.)* Measured rather than re-derived: the console's own
   screens already use the role names, and the ramp steps beneath them are the substrate the roles
   resolve onto rather than spare tokens. A guard now fails when a screen reaches past the roles.
-- **C6.** Deferred content restructuring: `WorkflowPage`'s disabled controls become prose;
-  `BindingSurfacePage` gets no exemption.
+- **C6.** *(Landed `CI-W601`.)* Both halves were already satisfied when surveyed -- the disabled
+  control was retired on 2026-08-21, and `BindingSurfacePage` is on the frame with no exemption.
+  What the survey found instead was six ink token names holding two colours, now declared once
+  each and read through `var()`.
 - **C7.** Terminal maximum-density pass across the migrated screens.
 
 The console typechecks green today (`npx tsc -b`, exit 0).

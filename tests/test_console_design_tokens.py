@@ -1395,3 +1395,84 @@ def test_the_consumer_guard_counts_only_screens_that_import_the_frame(tmp_path: 
     # The unmigrated screen is not counted, and neither is the test file beside the migrated one --
     # a promotion backed only by a test import is the bookkeeping this guard exists to refuse.
     assert [path.name for path in consumers] == ["migrated-page.tsx"]
+
+
+# --- one ink, one declaration ------------------------------------------------------
+
+
+#: Each group is one ink. The first name owns the value; the rest read it through `var()`.
+#:
+#: The `ink-` names are the console's own and the substrate's are what the vendored and shadcn
+#: primitives are authored in, so both sets stay -- re-authoring a working primitive to change a
+#: class name is polish. What must not stay is one colour spelled twice: six names carried two
+#: values byte-identically, and a value written twice disagrees with itself the first time
+#: somebody adjusts one copy.
+_INK_GROUPS = (
+    ("--color-ink-muted", ("--color-foreground-light", "--color-muted-foreground")),
+    ("--color-ink-secondary", ("--color-foreground-lighter", "--color-foreground-muted")),
+)
+
+
+def _declaration_of(css: str, token: str) -> str | None:
+    matched = re.search(re.escape(token) + r":\s*([^;]+);", css)
+    return matched.group(1).strip() if matched else None
+
+
+def _ink_violations(css: str) -> list[str]:
+    """Every ink token declaring a colour where it should read one, and every owner that has
+    stopped holding a colour of its own."""
+    found: list[str] = []
+    for owner, aliases in _INK_GROUPS:
+        owned = _declaration_of(css, owner)
+        if owned is None:
+            found.append(owner + " is not declared")
+        elif not owned.startswith("oklch("):
+            found.append(owner + " holds " + owned + ", not a colour of its own")
+        for alias in aliases:
+            value = _declaration_of(css, alias)
+            if value is None:
+                found.append(alias + " is not declared")
+            elif value != "var(" + owner + ")":
+                found.append(alias + " holds " + value + " rather than var(" + owner + ")")
+    return found
+
+
+def test_each_ink_is_declared_once_and_read_everywhere_else():
+    _require_web_src()
+
+    assert _ink_violations((_WEB_SRC / "index.css").read_text(encoding="utf-8")) == []
+
+
+def test_the_ink_guard_sees_a_second_copy_of_a_colour() -> None:
+    """The state this replaced: two names, one colour, spelled out twice."""
+    css = "\n".join([
+        ":root {",
+        "  --color-ink-muted: oklch(0.798 0.00275 159);",
+        "  --color-foreground-light: oklch(0.798 0.00275 159);",
+        "  --color-muted-foreground: var(--color-ink-muted);",
+        "  --color-ink-secondary: oklch(0.684 0.00275 159);",
+        "  --color-foreground-lighter: var(--color-ink-secondary);",
+        "  --color-foreground-muted: var(--color-ink-secondary);",
+        "}",
+    ])
+
+    violations = _ink_violations(css)
+
+    assert len(violations) == 1
+    assert "--color-foreground-light" in violations[0]
+
+
+def test_the_ink_guard_sees_an_owner_that_has_become_an_alias() -> None:
+    """An alias chain reads as tidy and moves the value somewhere this guard is not looking."""
+    css = "\n".join([
+        ":root {",
+        "  --color-ink-muted: var(--color-foreground-light);",
+        "  --color-foreground-light: oklch(0.798 0.00275 159);",
+        "  --color-muted-foreground: var(--color-ink-muted);",
+        "  --color-ink-secondary: oklch(0.684 0.00275 159);",
+        "  --color-foreground-lighter: var(--color-ink-secondary);",
+        "  --color-foreground-muted: var(--color-ink-secondary);",
+        "}",
+    ])
+
+    assert any("not a colour of its own" in line for line in _ink_violations(css))
