@@ -15,9 +15,17 @@ from __future__ import annotations
 from typing import Callable, Mapping
 
 from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as _stripe_openapi
+from sync.signals.generated.symbols_twilio_oai import build_symbol_map as _twilio_oai
 
 SpecSymbolRule = Callable[..., Mapping[str, Mapping[str, object]]]
 
 SPEC_SYMBOL_RULES: dict[str, SpecSymbolRule] = {
     "stripe-openapi": _stripe_openapi,
+    # Reads one document per product and takes the mount its symbols hang from, because a chain
+    # is `<domain>.<version>.<resource>.<verb>` and neither half is derivable from the path.
+    "twilio-oai": _twilio_oai,
 }
+
+# Rules that read one document per mount rather than one document per vendor. The registry runs
+# these once per declared document and merges, passing the mount each row states.
+PER_DOCUMENT_RULES = frozenset({"twilio-oai"})

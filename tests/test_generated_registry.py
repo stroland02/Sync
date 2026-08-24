@@ -451,8 +451,8 @@ def test_a_direct_row_resolves_a_versioned_url_per_version(tmp_path, monkeypatch
     _direct_config(tmp_path, monkeypatch)
     vendor = registry._generated_vendors()["acme"]
 
-    base = registry._spec_source(vendor, "v2320")
-    head = registry._spec_source(vendor, "v2330")
+    (base,) = registry._spec_source(vendor, "v2320")
+    (head,) = registry._spec_source(vendor, "v2330")
 
     assert base.spec_url == "https://raw.githubusercontent.com/acme/openapi/v2320/openapi/spec3.json"
     assert head.spec_url != base.spec_url
@@ -471,7 +471,7 @@ def test_a_direct_row_fetches_no_manifest_at_all(tmp_path, monkeypatch):
 
     monkeypatch.setattr(registry, "fetch_manifest", _never_fetched)
 
-    assert registry._spec_source(vendor, "v2330").is_fetchable
+    assert registry._spec_source(vendor, "v2330")[0].is_fetchable
 
 
 # --- a row that names the rule which builds its symbol map -------------------------
@@ -577,4 +577,50 @@ def test_a_symbol_rule_rooted_at_another_vendor_is_refused(tmp_path, monkeypatch
         registry.prepare_vendor("notstripe", _context(cache, "v2320", "v2330"))
 
     assert "resolve to nothing" in str(raised.value)
+
+
+# --- a row whose specification is several documents --------------------------------
+
+
+def _multi_config(tmp_path, monkeypatch):
+    row = {
+        "vendor_id": "twilio",
+        "repo": "twilio/twilio-oai",
+        "spec": [
+            {"path": "spec/json/twilio_insights_v1.json", "domain": "insights", "version": "v1"},
+            {"path": "spec/json/twilio_verify_v2.json", "domain": "verify", "version": "v2"},
+        ],
+        "symbols": "twilio-oai",
+        "sdk_bindings": {"python": {"distribution": "twilio", "module": "twilio"}},
+    }
+    config = tmp_path / "vendors.yaml"
+    config.write_text(yaml.safe_dump([row]), encoding="utf-8")
+    monkeypatch.setenv(registry.GENERATED_VENDORS_VARIABLE, str(config))
+
+
+def test_a_row_may_name_several_documents(tmp_path, monkeypatch):
+    """One vendor publishes sixty per version and a customer calls two.
+
+    `CI-W582` taught the adapter to hold several; this is the row saying which. Each carries the
+    mount its symbols hang from, because a chain is `<domain>.<version>.<resource>.<verb>` and
+    neither half is derivable from the path alone.
+    """
+    _multi_config(tmp_path, monkeypatch)
+
+    sources = registry._spec_source(registry._generated_vendors()["twilio"], "2.3.0")
+
+    assert isinstance(sources, tuple) and len(sources) == 2
+    assert sources[0].label == "insights"
+    assert sources[0].spec_url.endswith("2.3.0/spec/json/twilio_insights_v1.json")
+    assert sources[1].label == "verify"
+
+
+def test_a_single_document_row_still_answers_one_source(tmp_path, monkeypatch):
+    """Every row that names one document keeps working, and the adapter normalises either."""
+    _direct_config(tmp_path, monkeypatch)
+
+    source = registry._spec_source(registry._generated_vendors()["acme"], "v2330")
+
+    assert isinstance(source, tuple) and len(source) == 1
+    assert source[0].label == ""
 

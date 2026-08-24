@@ -62,10 +62,10 @@ from sync.signals.generated.adapter import (
     http_fetch,
 )
 from sync.signals.generated.manifest import SpecSource, parse_manifest
-from sync.signals.generated.spec_rules import SPEC_SYMBOL_RULES
+from sync.signals.generated.spec_rules import PER_DOCUMENT_RULES, SPEC_SYMBOL_RULES
 from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
-from sync.signals.twilio.symbols import build_symbol_map as build_twilio_symbols
+from sync.signals.generated.symbols_twilio_oai import build_symbol_map as build_twilio_symbols
 
 # Where every vendor's symbol map is written, relative to the cache. One name across vendors
 # because the map's shape is the same -- symbol to operation metadata -- whatever derived it,
@@ -144,6 +144,24 @@ class PreparedVendor:
 
 
 @dataclass(frozen=True)
+class SpecDocument:
+    """One document of a vendor's specification, and where its symbols hang from.
+
+    `domain` and `version` are the mount a per-document rule needs: a chain is
+    `<domain>.<version>.<resource>.<verb>` and neither half can be read off the path.
+    """
+
+    path: str
+    domain: str = ""
+    version: str = ""
+
+    @property
+    def label(self) -> str:
+        """What names this document in a cache filename and on a record it produced."""
+        return self.domain
+
+
+@dataclass(frozen=True)
 class GeneratedVendor:
     """One vendor served by reading the manifest its SDK generator commits.
 
@@ -159,7 +177,7 @@ class GeneratedVendor:
     manifest: str | None = None
     """The generator manifest to discover a specification through, for a vendor that commits one."""
 
-    spec: str | None = None
+    spec: str | tuple[SpecDocument, ...] | None = None
     """A path in `repo` holding the specification itself, for a vendor that commits no manifest
     this deployment can read.
 
@@ -206,6 +224,17 @@ class GeneratedVendor:
     """
 
 
+def _spec_documents(declared):
+    """A row's `spec`, as written. One path stays a string; a list becomes documents."""
+    if not isinstance(declared, list):
+        return declared
+    return tuple(
+        SpecDocument(path=entry["path"], domain=entry.get("domain", ""),
+                     version=entry.get("version", ""))
+        for entry in declared
+    )
+
+
 def _generated_vendors() -> dict[str, GeneratedVendor]:
     """Every configured generated-SDK vendor, keyed by id.
 
@@ -226,7 +255,7 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
         configured = [
             GeneratedVendor(
                 vendor_id=entry["vendor_id"], repo=entry["repo"],
-                manifest=entry.get("manifest"), spec=entry.get("spec"),
+                manifest=entry.get("manifest"), spec=_spec_documents(entry.get("spec")),
                 symbols=entry.get("symbols"), sdk_spec=entry.get("sdk_spec"),
                 noise_kinds=frozenset(entry.get("noise_kinds") or ()),
                 sdk_bindings=entry.get("sdk_bindings") or {},
@@ -353,7 +382,7 @@ def _prepare_mcp_server(server: WatchedServer, context: VendorContext) -> Prepar
     return PreparedVendor(adapter=_load_mcp_server(server, context), documents=())
 
 
-def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
+def _spec_source(vendor: GeneratedVendor, ref: str) -> tuple[SpecSource, ...]:
     """What the vendor's manifest says about its specification at one commit of the SDK.
 
     Both failures raise naming the repository and the path, and neither resolves to a default.
@@ -369,9 +398,14 @@ def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
         # Nothing to discover, so nothing is fetched: the row already answers the question a
         # manifest read exists to ask. The ref sits in the path, so two versions are two
         # documents rather than one document fetched twice.
-        return SpecSource(
-            generator=DIRECT_SPECIFICATION,
-            spec_url=_RAW_CONTENT.format(repo=vendor.repo, ref=ref, path=vendor.spec),
+        declared = vendor.spec if isinstance(vendor.spec, tuple) else (SpecDocument(vendor.spec),)
+        return tuple(
+            SpecSource(
+                generator=DIRECT_SPECIFICATION,
+                spec_url=_RAW_CONTENT.format(repo=vendor.repo, ref=ref, path=document.path),
+                label=document.label,
+            )
+            for document in declared
         )
 
     url = _RAW_CONTENT.format(repo=vendor.repo, ref=ref, path=vendor.manifest)
@@ -389,7 +423,9 @@ def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
             f"{vendor.repo} manifest {vendor.manifest} at {ref} names no usable specification "
             f"({url})"
         )
-    return source
+    # Always a tuple, so nothing downstream asks which shape a row produced. A manifest names
+    # one document; a row may name several.
+    return (source,)
 
 
 def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> PreparedVendor:
@@ -417,7 +453,7 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
         context.to_version: _spec_source(vendor, context.to_version),
     }
 
-    if not sources[context.to_version].has_cheap_change_trigger:
+    if not all(source.has_cheap_change_trigger for source in sources[context.to_version]):
         # The one place this is knowable and worth saying. A configured vendor whose manifest
         # publishes no hash cannot be asked whether its specification moved, so `changed_from`
         # answers "changed" and every scan pays for two specification fetches -- correct, and
@@ -426,7 +462,7 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
         log.info(
             "%s: %s publishes no specification hash, so every scan pays for a fetch rather "
             "than a comparison",
-            vendor.vendor_id, vendor.manifest,
+            vendor.vendor_id, vendor.manifest or vendor.spec,
         )
 
     if vendor.symbols is not None:
@@ -446,6 +482,22 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
         ),
         documents=(),
     )
+
+
+def _refuse_foreign_root(vendor: GeneratedVendor, mapping) -> None:
+    """A rule roots every key at the vendor it was written for.
+
+    Pairing it with a row of another id stages a map whose every key misses, and the reader
+    strips a root that is not there -- so the run resolves nothing, reports zero findings, and
+    raises no error anywhere.
+    """
+    root = f"{vendor.vendor_id}."
+    foreign = sorted(key for key in mapping if not key.startswith(root))[:3]
+    if foreign:
+        raise ValueError(
+            f"{vendor.vendor_id} names symbol rule {vendor.symbols!r}, which emits keys rooted "
+            f"elsewhere ({', '.join(foreign)}); every call site would resolve to nothing"
+        )
 
 
 def _staged_sdk_source(context: VendorContext) -> Path | None:
@@ -476,13 +528,18 @@ def _generated_adapter_cls(context: VendorContext):
 
 
 def _stage_symbol_map(
-    vendor: GeneratedVendor, context: VendorContext, source: SpecSource
+    vendor: GeneratedVendor, context: VendorContext, sources: tuple[SpecSource, ...]
 ) -> None:
-    """Build this vendor's symbol map from the document its row names, once per cache."""
+    """Build this vendor's symbol map from the documents its row names, once per cache."""
     destination = context.cache_dir / SYMBOL_MAP_FILENAME
     if destination.exists() and destination.stat().st_size > 0:
         return
 
+    if vendor.symbols in PER_DOCUMENT_RULES:
+        _stage_per_document_map(vendor, context, sources, destination)
+        return
+
+    source = sources[0]
     assert source.spec_url is not None, f"{vendor.vendor_id} names a symbol rule and no spec"
     document = json.loads(fetch_specification(source.spec_url))
 
@@ -504,17 +561,33 @@ def _stage_symbol_map(
 
     mapping = SPEC_SYMBOL_RULES[vendor.symbols](document, sdk_document)
 
-    # A rule roots every key at the vendor it was written for. Pairing it with a row of another
-    # id stages a map whose every key misses, and the reader strips a root that is not there --
-    # so the run resolves nothing, reports zero findings, and raises no error anywhere.
-    root = f"{vendor.vendor_id}."
-    foreign = sorted(key for key in mapping if not key.startswith(root))[:3]
-    if foreign:
-        raise ValueError(
-            f"{vendor.vendor_id} names symbol rule {vendor.symbols!r}, which emits keys rooted "
-            f"elsewhere ({', '.join(foreign)}); every call site would resolve to nothing"
-        )
+    _refuse_foreign_root(vendor, mapping)
 
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(mapping), encoding="utf-8")
+
+
+def _stage_per_document_map(
+    vendor: GeneratedVendor,
+    context: VendorContext,
+    sources: tuple[SpecSource, ...],
+    destination: Path,
+) -> None:
+    """One map across every document, because a call site names a symbol and not a product.
+
+    The chain already carries the product -- `<domain>.<version>.<resource>.<verb>` -- so one map
+    per document would key the same lookup several ways and leave the caller choosing.
+    """
+    declared = vendor.spec if isinstance(vendor.spec, tuple) else ()
+    rule = SPEC_SYMBOL_RULES[vendor.symbols]
+
+    mapping: dict = {}
+    for document, source in zip(declared, sources):
+        assert source.spec_url is not None
+        body = json.loads(fetch_specification(source.spec_url))
+        mapping.update(rule(body, domain=document.domain, version=document.version))
+
+    _refuse_foreign_root(vendor, mapping)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(mapping), encoding="utf-8")
 

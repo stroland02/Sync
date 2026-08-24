@@ -22,7 +22,7 @@ import pytest
 
 from scripts.symbol_map_pin import symbol_map_digest
 from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_map
-from sync.signals.twilio.symbols import build_symbol_map as build_twilio_map
+from sync.signals.generated.symbols_twilio_oai import build_symbol_map as build_twilio_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -80,7 +80,8 @@ symbols would dispatch to the wrong reader with every test still green.
 | A12a | The tier replaces `StripeAdapter` in every fixture that only wanted a resolver | **landed** |
 | A12b | The stripe rule moves to the rules directory, digests proving nothing changed | **landed** |
 | A12c | Stripe is a row; the hand-written adapter is deleted | **landed** |
-| A13 | Twilio is a row; the registry names no vendor at all | next |
+| A13a | A row may name several documents; the twilio rule relocates | **landed** |
+| A13b | Twilio is a row; the registry names no vendor at all | next |
 | A14 | A stale row is found by a check, not by a person | |
 
 ### Two rulings against the adjudicated sequence, 2026-08-23
