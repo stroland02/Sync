@@ -300,17 +300,19 @@ def test_an_adapter_with_no_sdk_source_still_answers_none():
 
 
 def test_the_hand_written_stripe_map_is_unaffected():
-    """This adds a path for configured vendors. A vendor with its own symbol map must resolve
-    exactly as it did, and the regression is worth pinning here because the two paths now answer
-    the same question."""
-    from sync.signals.stripe.adapter import StripeAdapter
+    """A vendor resolving from a map somebody built must answer exactly as it did.
+
+    It used to be pinned against `StripeAdapter`; `CI-W586` retired that adapter and the
+    property moved to the tier, which is now the only thing that reads a staged map.
+    """
+    from conftest import symbol_resolver
     from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     spec = {"paths": {"/v1/charges": {"post": {"operationId": "PostCharges"}}}}
     map_path = FIXTURES / "stripe-map-unused.json"
     try:
         map_path.write_text(json.dumps(build_symbol_map(spec)), encoding="utf-8")
-        adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=map_path)
+        adapter = symbol_resolver(map_path)
         reference = adapter.operation_for_symbol("stripe.charges.create", language="typescript")
     finally:
         map_path.unlink(missing_ok=True)

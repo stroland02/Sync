@@ -64,11 +64,13 @@ def _change(**kw) -> VendorChange:
 # --- the registry side: what is configured, without touching a vendor --------
 
 
-def test_the_two_hand_written_adapters_are_reported_as_coded():
+def test_the_remaining_hand_written_adapter_is_reported_as_coded():
     coded = {entry.vendor_id: entry for entry in registered_adapters() if entry.kind == "coded"}
 
-    assert set(coded) >= {"stripe", "twilio"}
-    assert coded["stripe"].source is None
+    # One, since `CI-W586` made stripe a configuration row. `A13` retires the last of them, at
+    # which point this set is empty and the `coded` kind goes with it.
+    assert set(coded) == {"twilio"}
+    assert coded["twilio"].source is None
 
 
 def test_a_configured_generated_vendor_reports_the_repository_it_reads(tmp_path, monkeypatch):

@@ -1,6 +1,6 @@
 # Stripe
 
-> Status: **supported** -- a registered `coded` adapter serves `stripe`.
+> Status: **supported** -- a registered `generated` adapter serves `stripe`.
 
 ## Quickstart
 
@@ -17,9 +17,9 @@ The console then shows every call site bound to Stripe operations, each finding 
 
 ## What Sync watches
 
-Sync stages this vendor's versioned OpenAPI specification and diffs two pinned versions with oasdiff. A hand-written adapter resolves the vendor's own symbol scheme, so a changed operation is matched to the SDK call your code actually makes.
+Sync reads the manifest this vendor's SDK generator commits to `stripe/openapi`, fetches the specification the manifest names when its hash moves, and diffs pinned versions with oasdiff. No agreement with the vendor is required and none can be withdrawn: the manifest is what the generator writes for its own reasons.
 
-Source: [`src/sync/signals/stripe/`](../../../src/sync/signals/stripe/)
+Source: [`src/sync/signals/generated/`](../../../src/sync/signals/generated/), configured by one entry in [`generated-vendors.yaml`](../../../generated-vendors.yaml)
 
 ## What Sync does not watch
 

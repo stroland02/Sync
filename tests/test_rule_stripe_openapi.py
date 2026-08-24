@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 
 from sync.core import VendorAdapter
-from sync.signals.stripe import adapter as adapter_module
-from sync.signals.stripe.adapter import StripeAdapter
+from conftest import symbol_resolver
 from sync.signals.generated.symbols_stripe_openapi import SymbolCollision, build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures" / "specs"
@@ -347,198 +346,41 @@ def test_v1_account_still_derives_a_resource_name_the_sdk_does_not_expose():
     assert mapping["stripe.accounts.retrieve"]["path"] == "/v1/accounts/{account}"
 
 
-def test_adapter_satisfies_the_vendor_protocol(tmp_path):
+def test_the_rule_resolves_a_known_call_through_the_tier(tmp_path):
+    """What the retired adapter's `operation_for_symbol` tests asserted, through the adapter that
+    replaced it. The rule builds the map; the tier reads it."""
     (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
-    assert isinstance(adapter, VendorAdapter)
-    assert adapter.vendor_id == "stripe"
+    resolver = symbol_resolver(tmp_path / "map.json")
+
+    operation = resolver.operation_for_symbol("stripe.charges.retrieve")
+
+    assert operation is not None
+    assert operation.operation_id == "GetChargesCharge"
+    assert operation.path == "/v1/charges/{charge}"
 
 
-def test_operation_for_symbol_resolves_a_known_call(tmp_path):
+def test_a_symbol_the_rule_never_emitted_resolves_to_nothing(tmp_path):
     (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
-    ref = adapter.operation_for_symbol("stripe.charges.create")
-    assert ref is not None
-    assert ref.operation_id == "PostCharges"
-    assert ref.http_method == "post"
-    assert ref.path == "/v1/charges"
+
+    assert symbol_resolver(tmp_path / "map.json").operation_for_symbol("stripe.nope.create") is None
 
 
-def test_operation_for_symbol_returns_none_for_unknown(tmp_path):
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
-    assert adapter.operation_for_symbol("stripe.nonexistent.create") is None
-
-
-def test_fetch_changes_reads_two_local_specs(tmp_path):
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    adapter = StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
-    changes = list(adapter.fetch_changes("charges_base", "charges_revision"))
-    assert changes
-    assert all(c.vendor_id == "stripe" for c in changes)
-
-
-def test_fetch_changes_filters_noise_records_before_they_become_vendor_changes(monkeypatch, tmp_path):
-    """A noise-kind record must never reach a VendorChange, not just an intermediate list.
-
-    Stubs `run_oasdiff_breaking` at module scope -- the same substitution point
-    `test_agent_patch.py` uses for `query` -- so the assertion is on what
-    `StripeAdapter.fetch_changes` actually returns, not on filtering logic
-    exercised in isolation from the method that is supposed to apply it.
-    """
-
-    def fake_run_oasdiff_breaking(base, revision):
-        # `level` is present because every real record carries it: `to_vendor_changes` reads
-        # oasdiff's own grading rather than stamping a constant, and refuses a record it cannot
-        # grade. Both of these are `2`, oasdiff's warning, which is what the binary reports for
-        # both of these rule ids.
-        return [
-            {"id": "response-property-enum-value-added", "text": "added `mastercard_compliance`",
-             "level": 2, "operationId": "PostCharges", "path": "/v1/charges"},
-            {"id": "response-optional-property-removed", "text": "removed the optional property `status`",
-             "level": 2, "operationId": "PostCharges", "path": "/v1/charges"},
-        ]
-
-    monkeypatch.setattr(adapter_module, "run_oasdiff_breaking", fake_run_oasdiff_breaking)
-
-    (tmp_path / "map.json").write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    (tmp_path / "base.json").write_text("{}", encoding="utf-8")
-    (tmp_path / "revision.json").write_text("{}", encoding="utf-8")
-    stripe_adapter = StripeAdapter(spec_dir=tmp_path, symbol_map_path=tmp_path / "map.json")
-
-    changes = list(stripe_adapter.fetch_changes("base", "revision"))
-
-    assert len(changes) == 1
-    assert changes[0].kind == "response-optional-property-removed"
-
-
-def test_fetch_spec_returns_the_cached_file_without_invoking_gh(tmp_path, monkeypatch):
-    """A tag names an immutable commit, so a populated cache entry is already
-    byte-identical to whatever `gh` would return -- refetching it would only
-    spend 8 MB of network for the same bytes. Asserting on the recorded call
-    list, not just the return value, is the point: the return value would
-    look the same whether `gh` ran or not.
-    """
-    calls = []
-    monkeypatch.setattr(adapter_module.subprocess, "run", lambda *a, **k: calls.append((a, k)))
-
-    dest = tmp_path / "v2330.json"
-    dest.write_bytes(b'{"openapi": "3.0.0"}')
-
-    result = adapter_module.fetch_spec("v2330", dest)
-
-    assert result == dest
-    assert calls == []
-    assert dest.read_bytes() == b'{"openapi": "3.0.0"}'
-
-
-def test_fetch_spec_refetches_when_the_cached_file_is_empty(tmp_path, monkeypatch):
-    """A zero-byte file is what an interrupted or failed previous write
-    leaves behind, not a valid cache hit -- treating it as one would hand a
-    truncated spec to oasdiff instead of a fetch failure.
-    """
-    calls = []
-
-    def fake_run(args, **kwargs):
-        calls.append(args)
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout=b'{"openapi": "3.0.0"}', stderr=b"")
-
-    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
-
-    dest = tmp_path / "v2330.json"
-    dest.write_bytes(b"")
-
-    result = adapter_module.fetch_spec("v2330", dest)
-
-    assert result == dest
-    assert len(calls) == 1
-    assert dest.read_bytes() == b'{"openapi": "3.0.0"}'
-
-
-def test_fetch_spec_fetches_when_the_file_is_missing_entirely(tmp_path, monkeypatch):
-    calls = []
-
-    def fake_run(args, **kwargs):
-        calls.append(args)
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout=b'{"openapi": "3.0.0"}', stderr=b"")
-
-    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
-
-    dest = tmp_path / "specs" / "v2330.json"
-
-    result = adapter_module.fetch_spec("v2330", dest)
-
-    assert result == dest
-    assert len(calls) == 1
-    assert dest.read_bytes() == b'{"openapi": "3.0.0"}'
-
-
-def test_fetch_sdk_spec_asks_github_for_the_sdk_document(tmp_path, monkeypatch):
-    """Asserting on the argv, not the return value, is the point.
-
-    Both documents live in the same repository at the same tags and both would
-    write bytes to `dest`, so a call that fetched the wrong one would return a
-    result indistinguishable from a correct run.
-    """
-    calls = []
-
-    def fake_run(args, **kwargs):
-        calls.append(args)
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout=b'{"openapi": "3.0.0"}', stderr=b"")
-
-    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
-
-    result = adapter_module.fetch_sdk_spec("v2330", tmp_path / "v2330.sdk.json")
-
-    assert result == tmp_path / "v2330.sdk.json"
-    assert len(calls) == 1
-    assert "openapi/spec3.sdk.json" in calls[0][2]
-    assert "openapi/spec3.json?" not in calls[0][2]
-
-
-def test_fetch_sdk_spec_returns_none_when_the_tag_has_no_sdk_document():
-    """The sdk document is an enhancement, so its absence must not end a run.
-
-    A tag that predates it, or a fork that never published it, has to degrade to
-    the HTTP-verb derivation. This swallows every `gh` failure rather than only
-    a 404, which is affordable because the base specification is fetched first
-    and still raises — a real outage surfaces there, not here.
-    """
-    def fake_run(args, **kwargs):
-        return subprocess.CompletedProcess(args=args, returncode=1, stdout=b"", stderr=b"gh: Not Found (HTTP 404)")
-
-    original = adapter_module.subprocess.run
-    adapter_module.subprocess.run = fake_run
-    try:
-        assert adapter_module.fetch_sdk_spec("v0001", Path("does-not-exist") / "v0001.sdk.json") is None
-    finally:
-        adapter_module.subprocess.run = original
-
-
-def test_fetch_sdk_spec_returns_the_cached_file_without_invoking_gh(tmp_path, monkeypatch):
-    """The sdk document is 10 MB, larger than the specification it accompanies.
-
-    Fetching a second document per version doubles the download, so the cache
-    has to hold for it exactly as it does for the first.
-    """
-    calls = []
-    monkeypatch.setattr(adapter_module.subprocess, "run", lambda *a, **k: calls.append((a, k)))
-
-    dest = tmp_path / "v2330.sdk.json"
-    dest.write_bytes(b'{"openapi": "3.0.0"}')
-
-    assert adapter_module.fetch_sdk_spec("v2330", dest) == dest
-    assert calls == []
+# `test_adapter_satisfies_the_vendor_protocol`, `test_fetch_changes_reads_two_local_specs` and
+# `test_fetch_changes_filters_noise_records_before_they_become_vendor_changes` retired with the
+# adapter in `CI-W586`. Each asserted a property of the adapter rather than of this rule, and each
+# is now held against the tier that serves every vendor: the protocol in
+# `test_generated_adapter.py`, the diff in `test_generated_observability.py`, and the noise filter
+# in `test_generated_adapter_noise.py`, where it is per-row rather than hard-coded.
 
 
 # --- the language axis, added by B39 ------------------------------------------------
 
 
-def _adapter(tmp_path, mapping=None) -> StripeAdapter:
+def _adapter(tmp_path, mapping=None):
     (tmp_path / "map.json").write_text(
         json.dumps(build_symbol_map(SPEC) if mapping is None else mapping), encoding="utf-8"
     )
-    return StripeAdapter(spec_dir=FIXTURES, symbol_map_path=tmp_path / "map.json")
+    return symbol_resolver(tmp_path / "map.json")
 
 
 def test_the_python_spelling_reaches_the_same_operation_as_the_typescript_one():

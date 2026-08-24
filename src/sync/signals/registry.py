@@ -2,8 +2,8 @@
 
 `CLAUDE.md` states the boundary as a non-negotiable: vendor-specific knowledge lives in
 adapters, and the moment core knows a vendor's name the plugin story is dead. A second adapter
-existed to prove the interface generalises past Stripe -- and `cli.py` constructed
-`StripeAdapter` by name in two places, so no run could reach the second one. What was
+existed to prove the interface generalises past one vendor -- and `cli.py` constructed that
+vendor's adapter by name in two places, so no run could reach the second one. What was
 unreachable there was not a feature but the claim the project rests on.
 
 What a vendor is handed, and why none of it belongs to one vendor
@@ -12,19 +12,19 @@ What a vendor is handed, and why none of it belongs to one vendor
 version strings `VendorAdapter.fetch_changes` already takes. Nothing in it names a file layout.
 
 That is the constraint worth defending, because the obvious way to re-hardcode is to give this
-module a union of every adapter's parameters. `StripeAdapter` takes `spec_dir` and
-`symbol_map_path`, one specification at a git tag; `TwilioAdapter` takes a directory per tag and
-a list of the products to read out of it. A context carrying either shape would be the vendor
-knowledge just removed from `cli.py`, moved one file over -- and the third vendor would add a
-third field that two adapters ignore.
+module a union of every adapter's parameters. `TwilioAdapter` takes a directory per tag and a
+list of the products to read out of it; the adapter retired in `CI-W586` took a single
+specification and a symbol map. A context carrying either shape would be the vendor knowledge
+just removed from `cli.py`, moved one file over -- and the third vendor would add a third field
+that two adapters ignore.
 
 So the shapes stay behind the builders. Each builder receives the neutral context and is the one
 place that knows what its vendor's artifacts look like.
 
 Staging and loading are two entry points, not a flag
 -----------------------------------------------------
-`prepare_vendor` stages what a scan needs -- for Stripe that is two specification downloads and
-a symbol map derived from them. `load_vendor` builds over what is already staged and reaches no
+`prepare_vendor` stages what a scan needs -- for a row naming a symbol rule that is one
+specification download and the map built from it. `load_vendor` builds over what is already staged and reaches no
 network, which is what `sync ingest` needs: it reads a cache a previous run produced, and a
 fetch there would turn an offline command into an online one on a code path nobody would think
 to look at.
@@ -62,9 +62,8 @@ from sync.signals.generated.adapter import (
     http_fetch,
 )
 from sync.signals.generated.manifest import SpecSource, parse_manifest
+from sync.signals.generated.spec_rules import SPEC_SYMBOL_RULES
 from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
-from sync.signals.stripe.adapter import StripeAdapter, fetch_sdk_spec, fetch_spec
-from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_symbols
 
@@ -170,6 +169,23 @@ class GeneratedVendor:
     each case the specification is still there to be diffed.
     """
 
+    sdk_spec: str | None = None
+    """A second document in `repo` naming the SDK method for each operation, where one exists.
+
+    Optional and degradable. The retired stripe adapter read one and fell back to the HTTP-verb
+    derivation when a tag published none -- and the difference is observable: with it
+    `subscriptions.cancel` resolves, without it `subscriptions.del` does. Dropping it silently
+    was a real regression this commit nearly shipped, caught by `test_cli`.
+    """
+
+    symbols: str | None = None
+    """Which specification-reading rule builds this vendor's symbol map, where the tier must.
+
+    Named rather than derived, and validated at load. A vendor whose call sites resolve from a
+    map somebody built -- rather than from a staged SDK checkout -- says which rule builds it;
+    `sync.signals.generated.spec_rules` carries why that registry is separate from `EXTRACTORS`.
+    """
+
     noise_kinds: frozenset[str] = frozenset()
     """oasdiff rule ids this vendor's releases produce in volume without meaning.
 
@@ -211,6 +227,7 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
             GeneratedVendor(
                 vendor_id=entry["vendor_id"], repo=entry["repo"],
                 manifest=entry.get("manifest"), spec=entry.get("spec"),
+                symbols=entry.get("symbols"), sdk_spec=entry.get("sdk_spec"),
                 noise_kinds=frozenset(entry.get("noise_kinds") or ()),
                 sdk_bindings=entry.get("sdk_bindings") or {},
             )
@@ -225,6 +242,11 @@ def _generated_vendors() -> dict[str, GeneratedVendor]:
         # Refused here rather than where the specification is reached. The two are alternative
         # answers to one question, so a row naming both leaves the winner to whichever branch is
         # read first, and a row naming neither is a vendor that appears configured and is not.
+        if vendor.symbols is not None and vendor.symbols not in SPEC_SYMBOL_RULES:
+            raise ValueError(
+                f"{path}: {vendor.vendor_id} names symbol rule {vendor.symbols!r}; "
+                f"this deployment builds maps with {sorted(SPEC_SYMBOL_RULES)}"
+            )
         if bool(vendor.manifest) == bool(vendor.spec):
             raise ValueError(
                 f"{path}: {vendor.vendor_id} names "
@@ -371,7 +393,7 @@ def _spec_source(vendor: GeneratedVendor, ref: str) -> SpecSource:
 
 
 def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> PreparedVendor:
-    """Read both manifests and build over them. No specification is fetched here.
+    """Read both manifests and build over them. No specification is fetched unless one is owed.
 
     That is the whole economic argument and it is easy to lose at exactly this point. A manifest
     is a text file in a public repository, so reading two of them is the cost of asking whether
@@ -383,6 +405,12 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
 
     `documents` is empty for the same reason. It carries the parsed specification for the drift
     detector, and holding one would mean having downloaded it.
+
+    The one exception is a row naming a symbol rule. Building a map means reading the document
+    the map describes, so that vendor pays for one fetch here -- which is what its hand-written
+    predecessor paid, and it is owed rather than speculative: without the map nothing it declares
+    resolves. Every row naming no rule is unchanged, and
+    `test_a_row_naming_no_symbol_rule_fetches_no_specification` is what holds that.
     """
     sources = {
         context.from_version: _spec_source(vendor, context.from_version),
@@ -401,25 +429,94 @@ def _prepare_generated(vendor: GeneratedVendor, context: VendorContext) -> Prepa
             vendor.vendor_id, vendor.manifest,
         )
 
-    sdk_source = context.cache_dir / "sdk_source"
-    sdk_source_path = sdk_source if sdk_source.exists() else None
-    generator_file = context.cache_dir / "sdk_generator.txt"
-    generator = generator_file.read_text(encoding="utf-8").strip() if generator_file.exists() else DEFAULT_GENERATOR
-    adapter_cls = CorrelatingGeneratedSpecAdapter if sdk_source_path is not None else GeneratedSpecAdapter
+    if vendor.symbols is not None:
+        _stage_symbol_map(vendor, context, sources[context.to_version])
 
     return PreparedVendor(
-        adapter=adapter_cls(
+        adapter=_generated_adapter_cls(context)(
             vendor_id=vendor.vendor_id,
             sources=sources,
             fetch=fetch_specification,
             cache_dir=context.cache_dir,
             sdk_bindings=vendor.sdk_bindings,
-            sdk_source=sdk_source_path,
+            sdk_source=_staged_sdk_source(context),
+            symbol_map_path=_staged_symbol_map(context),
             noise_kinds=vendor.noise_kinds,
-            sdk_source_generator=generator,
+            sdk_source_generator=_staged_generator(context),
         ),
         documents=(),
     )
+
+
+def _staged_sdk_source(context: VendorContext) -> Path | None:
+    staged = context.cache_dir / "sdk_source"
+    return staged if staged.exists() else None
+
+
+def _staged_symbol_map(context: VendorContext) -> Path | None:
+    staged = context.cache_dir / SYMBOL_MAP_FILENAME
+    return staged if staged.exists() else None
+
+
+def _staged_generator(context: VendorContext) -> str:
+    named = context.cache_dir / "sdk_generator.txt"
+    return named.read_text(encoding="utf-8").strip() if named.exists() else DEFAULT_GENERATOR
+
+
+def _generated_adapter_cls(context: VendorContext):
+    """Correlating wherever there is something to correlate against.
+
+    A staged symbol map carries route templates just as a checkout does, so a vendor resolving
+    from one answers `operation_for_request`. Choosing on the checkout alone left such a vendor
+    unable to correlate a span it had every route for.
+    """
+    if _staged_sdk_source(context) is not None or _staged_symbol_map(context) is not None:
+        return CorrelatingGeneratedSpecAdapter
+    return GeneratedSpecAdapter
+
+
+def _stage_symbol_map(
+    vendor: GeneratedVendor, context: VendorContext, source: SpecSource
+) -> None:
+    """Build this vendor's symbol map from the document its row names, once per cache."""
+    destination = context.cache_dir / SYMBOL_MAP_FILENAME
+    if destination.exists() and destination.stat().st_size > 0:
+        return
+
+    assert source.spec_url is not None, f"{vendor.vendor_id} names a symbol rule and no spec"
+    document = json.loads(fetch_specification(source.spec_url))
+
+    # Degrades rather than fails, exactly as the adapter this replaced did: a tag that publishes
+    # no SDK document falls back to the HTTP-verb derivation, and a run that abandoned the vendor
+    # over an optional document would be worse than one that derived slightly coarser names.
+    sdk_document = None
+    if vendor.sdk_spec is not None:
+        sdk_url = _RAW_CONTENT.format(
+            repo=vendor.repo, ref=context.to_version, path=vendor.sdk_spec
+        )
+        try:
+            sdk_document = json.loads(fetch_specification(sdk_url))
+        except Exception:  # noqa: BLE001 -- an absent optional document is not a failed run
+            log.info(
+                "%s publishes no SDK document at %s; symbol names fall back to the HTTP verbs",
+                vendor.vendor_id, context.to_version,
+            )
+
+    mapping = SPEC_SYMBOL_RULES[vendor.symbols](document, sdk_document)
+
+    # A rule roots every key at the vendor it was written for. Pairing it with a row of another
+    # id stages a map whose every key misses, and the reader strips a root that is not there --
+    # so the run resolves nothing, reports zero findings, and raises no error anywhere.
+    root = f"{vendor.vendor_id}."
+    foreign = sorted(key for key in mapping if not key.startswith(root))[:3]
+    if foreign:
+        raise ValueError(
+            f"{vendor.vendor_id} names symbol rule {vendor.symbols!r}, which emits keys rooted "
+            f"elsewhere ({', '.join(foreign)}); every call site would resolve to nothing"
+        )
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(mapping), encoding="utf-8")
 
 
 def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> GeneratedSpecAdapter:
@@ -430,21 +527,16 @@ def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> Generate
     it returns `CorrelatingGeneratedSpecAdapter` which satisfies `RequestCorrelator` and correlates
     observed HTTP spans against extracted SDK routes.
     """
-    sdk_source = context.cache_dir / "sdk_source"
-    sdk_source_path = sdk_source if sdk_source.exists() else None
-    generator_file = context.cache_dir / "sdk_generator.txt"
-    generator = generator_file.read_text(encoding="utf-8").strip() if generator_file.exists() else DEFAULT_GENERATOR
-    adapter_cls = CorrelatingGeneratedSpecAdapter if sdk_source_path is not None else GeneratedSpecAdapter
-
-    return adapter_cls(
+    return _generated_adapter_cls(context)(
         vendor_id=vendor.vendor_id,
         sources={},
         fetch=fetch_specification,
         cache_dir=context.cache_dir,
         sdk_bindings=vendor.sdk_bindings,
-        sdk_source=sdk_source_path,
+        sdk_source=_staged_sdk_source(context),
+        symbol_map_path=_staged_symbol_map(context),
         noise_kinds=vendor.noise_kinds,
-        sdk_source_generator=generator,
+        sdk_source_generator=_staged_generator(context),
     )
 
 
@@ -478,13 +570,6 @@ def _twilio_products(context: VendorContext) -> tuple[ProductDocument, ...]:
     )
 
 
-def _load_stripe(context: VendorContext) -> VendorAdapter:
-    return StripeAdapter(
-        spec_dir=context.cache_dir,
-        symbol_map_path=context.cache_dir / SYMBOL_MAP_FILENAME,
-    )
-
-
 def _load_twilio(context: VendorContext) -> VendorAdapter:
     symbol_map = context.cache_dir / SYMBOL_MAP_FILENAME
     return TwilioAdapter(
@@ -492,27 +577,6 @@ def _load_twilio(context: VendorContext) -> VendorAdapter:
         symbol_map_path=symbol_map if symbol_map.exists() else None,
         documents=_twilio_products(context),
     )
-
-
-def _prepare_stripe(context: VendorContext) -> PreparedVendor:
-    """Download both pinned specifications and derive the symbol map from the newer one.
-
-    The generator input names the SDK method for each operation, which is where the map's verbs
-    come from when it is published. A tag that publishes none degrades to the HTTP-verb
-    derivation rather than abandoning the run, so `sdk_spec` stays None instead of raising.
-    """
-    cache = context.cache_dir
-    fetch_spec(context.from_version, cache / f"{context.from_version}.json")
-    head_spec = fetch_spec(context.to_version, cache / f"{context.to_version}.json")
-
-    sdk_spec_path = fetch_sdk_spec(context.to_version, cache / f"{context.to_version}.sdk.json")
-    sdk_spec = json.loads(sdk_spec_path.read_text(encoding="utf-8")) if sdk_spec_path else None
-
-    head = json.loads(head_spec.read_text(encoding="utf-8"))
-    (cache / SYMBOL_MAP_FILENAME).write_text(
-        json.dumps(build_stripe_symbols(head, sdk_spec)), encoding="utf-8"
-    )
-    return PreparedVendor(adapter=_load_stripe(context), documents=(head,))
 
 
 def _prepare_twilio(context: VendorContext) -> PreparedVendor:
@@ -547,7 +611,6 @@ def _prepare_twilio(context: VendorContext) -> PreparedVendor:
 
 _BUILDERS: dict[str, tuple[Callable[[VendorContext], PreparedVendor],
                            Callable[[VendorContext], VendorAdapter]]] = {
-    "stripe": (_prepare_stripe, _load_stripe),
     "twilio": (_prepare_twilio, _load_twilio),
 }
 
@@ -562,7 +625,6 @@ _BUILDERS: dict[str, tuple[Callable[[VendorContext], PreparedVendor],
 # `test_every_coded_adapter_is_offered_a_binding_lookup` holds the two in step -- an adapter
 # added to one and not the other would silently stop being matchable against a manifest.
 _CODED_ADAPTERS: dict[str, type] = {
-    "stripe": StripeAdapter,
     "twilio": TwilioAdapter,
 }
 

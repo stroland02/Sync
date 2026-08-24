@@ -152,9 +152,9 @@ def test_a_vendor_that_declared_nothing_gets_its_id_as_the_symbol_root():
 
 def test_stripe_emits_the_symbol_it_has_always_emitted():
     """A default that silently altered these fails here rather than in an acceptance run."""
-    from sync.signals.stripe.adapter import StripeAdapter
+    from sync.signals.registry import vendor_sdk_bindings
 
-    vendor = StubVendor("stripe", StripeAdapter.sdk_bindings)
+    vendor = StubVendor("stripe", vendor_sdk_bindings()["stripe"])
     list(TypeScriptAdapter(vendor).index(_repo(TS, "simple")))
 
     assert vendor.asked == ["stripe.charges.create"]
@@ -178,18 +178,20 @@ def test_twilio_emits_the_symbol_it_has_always_emitted():
     assert vendor is not None
 
 
-@pytest.mark.parametrize(
-    "adapter_name,expected_root",
-    [("stripe", "stripe"), ("twilio", "twilio")],
-)
-def test_the_hand_written_adapters_root_where_they_always_did(adapter_name, expected_root):
-    import importlib
+@pytest.mark.parametrize("vendor_id,expected_root", [("stripe", "stripe"), ("twilio", "twilio")])
+def test_the_two_original_vendors_root_where_they_always_did(vendor_id, expected_root):
+    """Read from wherever each vendor declares it today rather than from a class.
 
-    module = importlib.import_module(f"sync.signals.{adapter_name}.adapter")
-    bindings = getattr(module, f"{adapter_name.capitalize()}Adapter").sdk_bindings
+    `CI-W586` moved stripe's declaration from `StripeAdapter.sdk_bindings` to its configuration
+    row, and this asserts the root is unchanged by that move -- which is the only thing about it
+    a call site can observe.
+    """
+    from sync.signals.registry import vendor_sdk_bindings
 
-    assert TypeScriptAdapter(StubVendor(adapter_name, bindings))._symbol_root == expected_root
-    assert PythonAdapter(StubVendor(adapter_name, bindings))._symbol_root == expected_root
+    bindings = vendor_sdk_bindings()[vendor_id]
+
+    assert TypeScriptAdapter(StubVendor(vendor_id, bindings))._symbol_root == expected_root
+    assert PythonAdapter(StubVendor(vendor_id, bindings))._symbol_root == expected_root
 
 
 # --- Python: the same field, a different default, and the reason ---------------------

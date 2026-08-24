@@ -210,10 +210,10 @@ def test_a_module_declared_with_a_hyphen_finds_nothing_because_nothing_imports_o
 
 
 def test_stripe_still_declares_both_languages():
-    from sync.signals.stripe.adapter import StripeAdapter
+    from sync.signals.registry import vendor_sdk_bindings
 
-    assert StripeAdapter.sdk_bindings["typescript"] == {"package": "stripe"}
-    assert StripeAdapter.sdk_bindings["python"] == {
+    assert vendor_sdk_bindings()["stripe"]["typescript"] == {"package": "stripe"}
+    assert vendor_sdk_bindings()["stripe"]["python"] == {
         "distribution": "stripe", "module": "stripe",
     }
 

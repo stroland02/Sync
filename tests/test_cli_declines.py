@@ -414,8 +414,27 @@ def _shape_args(cache: Path, payload: str, vendor: str = VENDOR, fmt: str = "sen
     )
 
 
+def _cannot_correlate(monkeypatch) -> None:
+    """A vendor whose adapter is not a `RequestCorrelator`.
+
+    Provoked rather than found. Until `CI-W586` no generated vendor could correlate, so naming
+    one was enough; a staged symbol map now carries route templates and confers it, which is the
+    point of that change. The refusal is a protocol check, so this hands the command the plain
+    adapter -- the state a vendor with neither a map nor a checkout is genuinely in -- rather
+    than relying on whichever vendor happens to lack the capability this week.
+    """
+    from sync.signals.generated.adapter import GeneratedSpecAdapter
+
+    def plain(vendor_id, context):
+        return GeneratedSpecAdapter(
+            vendor_id=vendor_id, sources={}, fetch=lambda url: "", cache_dir=context.cache_dir,
+        )
+
+    monkeypatch.setattr(cli, "load_vendor", plain)
+
+
 def test_shapes_refuses_a_vendor_whose_adapter_cannot_correlate_a_request(
-    staged_cache, tmp_path, capsys
+    staged_cache, tmp_path, capsys, monkeypatch
 ):
     """Four vendors this deployment offers are served by `GeneratedSpecAdapter`, which
     implements no `operation_for_request`. `sync shapes --vendor anthropic` is therefore an
@@ -428,6 +447,7 @@ def test_shapes_refuses_a_vendor_whose_adapter_cannot_correlate_a_request(
     """
     payload = tmp_path / "event.json"
     payload.write_text(json.dumps(_SENTRY_EVENT), encoding="utf-8")
+    _cannot_correlate(monkeypatch)
 
     assert shapes(_shape_args(staged_cache, str(payload), vendor="anthropic")) == 2
 
@@ -437,11 +457,13 @@ def test_shapes_refuses_a_vendor_whose_adapter_cannot_correlate_a_request(
     assert "correlate" in printed.err
 
 
-def test_shapes_refuses_before_it_reads_the_payload(staged_cache, tmp_path, capsys):
+def test_shapes_refuses_before_it_reads_the_payload(staged_cache, tmp_path, capsys, monkeypatch):
     """The ordering, and it is the operator-facing half: a payload is a captured production
     response, so a command that reads one and then discovers it has nowhere to fold it has held
     customer data for no reason. The refusal fires against a payload that is not there at all.
     """
+    _cannot_correlate(monkeypatch)
+
     assert shapes(_shape_args(staged_cache, str(tmp_path / "absent.json"), "anthropic")) == 2
 
     assert "correlate" in capsys.readouterr().err

@@ -30,7 +30,6 @@ from sync.signals.registry import (
     load_vendor,
     prepare_vendor,
 )
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.twilio.adapter import TwilioAdapter
 
 MANIFESTS = Path(__file__).parent / "fixtures" / "manifests"
@@ -147,7 +146,9 @@ def test_the_hand_written_adapters_still_resolve_to_themselves(tmp_path):
         json.dumps([{"filename": "x.json", "domain": "d", "version": "v1"}]), encoding="utf-8"
     )
 
-    assert isinstance(load_vendor("stripe", _context(cache)), StripeAdapter)
+    # Stripe is a configuration row since `CI-W586`, so the discrimination this test exists for
+    # now runs the other way: the one remaining coded vendor must not resolve to the tier.
+    assert isinstance(load_vendor("stripe", _context(cache)), GeneratedSpecAdapter)
     assert isinstance(load_vendor("twilio", _context(cache)), TwilioAdapter)
 
 
@@ -162,7 +163,7 @@ def test_configuration_cannot_shadow_a_hand_written_adapter(tmp_path, monkeypatc
     """
     config = tmp_path / "vendors.yaml"
     config.write_text(
-        yaml.safe_dump([{"vendor_id": "stripe", "repo": "someone/stripe-sdk",
+        yaml.safe_dump([{"vendor_id": "twilio", "repo": "someone/twilio-sdk",
                          "manifest": STAINLESS_MANIFEST}]),
         encoding="utf-8",
     )
@@ -170,8 +171,11 @@ def test_configuration_cannot_shadow_a_hand_written_adapter(tmp_path, monkeypatc
     cache = tmp_path / "cache"
     cache.mkdir()
     (cache / registry.SYMBOL_MAP_FILENAME).write_text("{}", encoding="utf-8")
+    (cache / registry.TWILIO_PRODUCTS_FILENAME).write_text(
+        json.dumps([{"filename": "x.json", "domain": "d", "version": "v1"}]), encoding="utf-8"
+    )
 
-    assert isinstance(load_vendor("stripe", _context(cache)), StripeAdapter)
+    assert isinstance(load_vendor("twilio", _context(cache)), TwilioAdapter)
 
 
 def test_a_configured_vendor_is_offered_on_the_command_line(configured):
@@ -183,8 +187,10 @@ def test_a_configured_vendor_is_offered_on_the_command_line(configured):
 
     for entry in CONFIG:
         assert entry["vendor_id"] in offered
-    # The hand-written adapters are not displaced by configuration arriving.
-    assert {"stripe", "twilio"} <= set(offered)
+    # The one remaining hand-written adapter is not displaced by configuration arriving.
+    # Stripe left this set in `CI-W586`: it is a row now, so under a test configuration that
+    # does not declare it, it is correctly absent rather than coded.
+    assert "twilio" in offered
 
 
 def test_no_configured_vendor_is_named_in_the_registry_itself():
@@ -466,4 +472,109 @@ def test_a_direct_row_fetches_no_manifest_at_all(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "fetch_manifest", _never_fetched)
 
     assert registry._spec_source(vendor, "v2330").is_fetchable
+
+
+# --- a row that names the rule which builds its symbol map -------------------------
+
+
+def _symbols_config(tmp_path, monkeypatch, **over):
+    row = {
+        "vendor_id": "stripe",
+        "repo": "acme/openapi",
+        "spec": "openapi/spec3.json",
+        "symbols": "stripe-openapi",
+        "sdk_bindings": {"python": {"distribution": "acme", "module": "acme"}},
+    }
+    row.update(over)
+    config = tmp_path / "vendors.yaml"
+    config.write_text(yaml.safe_dump([row]), encoding="utf-8")
+    monkeypatch.setenv(registry.GENERATED_VENDORS_VARIABLE, str(config))
+    return config
+
+
+def test_a_row_naming_a_symbol_rule_stages_the_map_it_builds(tmp_path, monkeypatch):
+    """The last thing a hand-written adapter did that a row could not.
+
+    Both retired adapters resolve symbols from a `symbols.json` their own preparer wrote. A row
+    has to be able to say which rule writes it, or moving a vendor onto the tier resolves nothing
+    and the run reports zero findings rather than an error.
+    """
+    _symbols_config(tmp_path, monkeypatch)
+    spec = (Path("tests") / "fixtures" / "specs" / "stripe_v2330_shape.json").read_text(
+        encoding="utf-8"
+    )
+    monkeypatch.setattr(registry, "fetch_specification", lambda url: spec)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    prepared = registry.prepare_vendor("stripe", _context(cache, "v2320", "v2330"))
+
+    assert (cache / registry.SYMBOL_MAP_FILENAME).exists()
+    operation = prepared.adapter.operation_for_symbol("stripe.charges.retrieve")
+    assert operation is not None and operation.operation_id == "GetChargesCharge"
+
+
+def test_a_row_naming_a_symbol_rule_correlates_requests_without_a_checkout(tmp_path, monkeypatch):
+    """A staged map is enough to correlate, so the correlating adapter is chosen for it.
+
+    Until `CI-W586` that choice was made only by the presence of an SDK checkout, so a vendor
+    resolving from a map answered `operation_for_request` not at all.
+    """
+    _symbols_config(tmp_path, monkeypatch)
+    spec = (Path("tests") / "fixtures" / "specs" / "stripe_v2330_shape.json").read_text(
+        encoding="utf-8"
+    )
+    monkeypatch.setattr(registry, "fetch_specification", lambda url: spec)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    adapter = registry.prepare_vendor("stripe", _context(cache, "v2320", "v2330")).adapter
+
+    operation = adapter.operation_for_request("GET", "/v1/charges/ch_1")
+    assert operation is not None and operation.operation_id == "GetChargesCharge"
+
+
+def test_a_row_naming_no_symbol_rule_fetches_no_specification(tmp_path, monkeypatch):
+    """The economic argument, which this commit must not spend.
+
+    A manifest is a text file and a specification is megabytes; only a vendor whose hash actually
+    moved should pay for two of those. A row that names no rule has no map to build, so nothing
+    is fetched during prepare -- exactly as before.
+    """
+    _direct_config(tmp_path, monkeypatch)
+
+    def _never(url: str) -> str:
+        raise AssertionError(f"prepare fetched a specification: {url}")
+
+    monkeypatch.setattr(registry, "fetch_specification", _never)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    registry.prepare_vendor("acme", _context(cache, "v2320", "v2330"))
+
+
+def test_a_row_naming_an_unknown_symbol_rule_is_refused(tmp_path, monkeypatch):
+    _symbols_config(tmp_path, monkeypatch, symbols="no-such-rule")
+
+    with pytest.raises(ValueError) as raised:
+        registry._generated_vendors()
+
+    assert "no-such-rule" in str(raised.value)
+
+
+def test_a_symbol_rule_rooted_at_another_vendor_is_refused(tmp_path, monkeypatch):
+    """The silent shape this guards: a map whose every key misses stages successfully, the
+    reader strips a root that is not there, and the run reports zero findings without an error."""
+    _symbols_config(tmp_path, monkeypatch, vendor_id="notstripe")
+    spec = (Path("tests") / "fixtures" / "specs" / "stripe_v2330_shape.json").read_text(
+        encoding="utf-8"
+    )
+    monkeypatch.setattr(registry, "fetch_specification", lambda url: spec)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    with pytest.raises(ValueError) as raised:
+        registry.prepare_vendor("notstripe", _context(cache, "v2320", "v2330"))
+
+    assert "resolve to nothing" in str(raised.value)
 

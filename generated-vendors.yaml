@@ -11,6 +11,8 @@
 #   repo          owner/name of the repository the generated SDK lives in
 #   manifest      `.stats.yml` for Stainless, `.speakeasy/workflow.yaml` for Speakeasy
 #   spec          a path in `repo` holding the specification itself
+#   sdk_spec      an optional second document naming the SDK method for each operation
+#   symbols       which specification-reading rule builds this vendor's symbol map
 #   sdk_bindings  which package a customer imports to reach this vendor, per language
 #   noise_kinds   oasdiff rule ids this vendor's releases produce in volume without meaning
 #
@@ -256,3 +258,22 @@
       # Distribution `retell-sdk`, import `retell` (the package's own README).
       distribution: retell-sdk
       module: retell
+
+# The first vendor to move off a hand-written adapter (`CI-W586`). Everything `StripeAdapter`
+# knew is here: the specification is one document pinned at a git tag -- verified served by
+# raw.githubusercontent.com at 7,866,866 bytes unauthenticated, so the `gh` subprocess it used
+# went rather than generalised -- the symbol map is built by the rule the adapter carried, and
+# `noise_kinds` is the judgement its module comment made about this vendor's release habits.
+- vendor_id: stripe
+  repo: stripe/openapi
+  spec: openapi/spec3.json
+  sdk_spec: openapi/spec3.sdk.json
+  symbols: stripe-openapi
+  noise_kinds:
+    - response-property-enum-value-added
+  sdk_bindings:
+    typescript:
+      package: stripe
+    python:
+      distribution: stripe
+      module: stripe

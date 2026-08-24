@@ -1485,7 +1485,8 @@ def shapes(args: argparse.Namespace) -> int:
     symbol_map_path = cache / SYMBOL_MAP_FILENAME
     if not symbol_map_path.exists():
         print(
-            f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            f"{args.vendor}: no symbol map at {symbol_map_path}; "
+            f"run `sync run` against this cache first",
             file=sys.stderr,
         )
         return 2
@@ -1590,7 +1591,8 @@ def sentry_errors(args: argparse.Namespace) -> int:
     symbol_map_path = cache / SYMBOL_MAP_FILENAME
     if not symbol_map_path.exists():
         print(
-            f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            f"{args.vendor}: no symbol map at {symbol_map_path}; "
+            f"run `sync run` against this cache first",
             file=sys.stderr,
         )
         return 2
@@ -1684,7 +1686,8 @@ def ingest(args: argparse.Namespace) -> int:
     symbol_map_path = cache / SYMBOL_MAP_FILENAME
     if not symbol_map_path.exists():
         print(
-            f"no symbol map at {symbol_map_path}; run `sync run` against this cache first",
+            f"{args.vendor}: no symbol map at {symbol_map_path}; "
+            f"run `sync run` against this cache first",
             file=sys.stderr,
         )
         return 2

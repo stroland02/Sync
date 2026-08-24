@@ -361,12 +361,19 @@ def test_an_unresolvable_vendor_yields_no_adapter_rather_than_a_fabricated_one()
     def _no_network(*args, **kwargs):
         raise RuntimeError("network refused")
 
+    # Both routes, which is what "unresolvable" means. Patching only `prepare_vendor` stopped
+    # proving anything once stripe became a configuration row in `CI-W586`: `load_vendor`
+    # builds the tier over an empty cache by design and reaches no network, so it succeeded
+    # and the fallback was never taken.
     original = codebase.prepare_vendor
+    original_load = codebase.load_vendor
     codebase.prepare_vendor = _no_network
+    codebase.load_vendor = _no_network
     try:
         adapter = _load_or_create_vendor_adapter("stripe", Path(tempfile.mkdtemp()))
     finally:
         codebase.prepare_vendor = original
+        codebase.load_vendor = original_load
 
     assert adapter is None
 
@@ -453,13 +460,20 @@ def test_falling_back_says_why_rather_than_swallowing_the_reason(tmp_path, caplo
     def _no_network(*args, **kwargs):
         raise RuntimeError("network refused")
 
+    # Both routes, which is what "unresolvable" means. Patching only `prepare_vendor` stopped
+    # proving anything once stripe became a configuration row in `CI-W586`: `load_vendor`
+    # builds the tier over an empty cache by design and reaches no network, so it succeeded
+    # and the fallback was never taken.
     original = codebase.prepare_vendor
+    original_load = codebase.load_vendor
     codebase.prepare_vendor = _no_network
+    codebase.load_vendor = _no_network
     try:
         with caplog.at_level(logging.WARNING):
             adapter = _load_or_create_vendor_adapter("stripe", empty)
     finally:
         codebase.prepare_vendor = original
+        codebase.load_vendor = original_load
 
     assert adapter is None
     text = caplog.text

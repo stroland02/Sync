@@ -30,7 +30,7 @@ from sync.signals.registry import (
     load_vendor,
     prepare_vendor,
 )
-from sync.signals.stripe.adapter import StripeAdapter
+from sync.signals.generated.adapter import GeneratedSpecAdapter
 from sync.signals.twilio.adapter import TwilioAdapter
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
@@ -89,19 +89,14 @@ class _Store:
 def _stub_run(monkeypatch, cache: Path) -> list:
     """Everything a run touches before it has selected a vendor, and nothing after.
 
-    `fetch_spec` and `fetch_sdk_spec` are patched on the registry rather than on `cli`, because
-    staging a vendor's artifacts moved there with the selection -- which is the change under
-    test. Patching them where they no longer live would leave the suite reaching the network.
+    `fetch_specification` is patched on the registry rather than on `cli`, because staging a
+    vendor's artifacts moved there with the selection -- which is the change under test. Patching
+    it where it no longer lives would leave the suite reaching the network. It replaced the two
+    stripe-specific fetchers when `CI-W586` retired that adapter.
     """
     from sync.signals import registry
 
-    def fake_fetch_spec(tag, dest, *args, **kwargs):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(EMPTY_SPEC), encoding="utf-8")
-        return dest
-
-    monkeypatch.setattr(registry, "fetch_spec", fake_fetch_spec)
-    monkeypatch.setattr(registry, "fetch_sdk_spec", lambda tag, dest: None)
+    monkeypatch.setattr(registry, "fetch_specification", lambda url: json.dumps(EMPTY_SPEC))
     monkeypatch.setattr(cli, "TypeScriptAdapter", _RecordingIndexer)
     monkeypatch.setattr(cli, "GraphStore", _Store)
     monkeypatch.setattr(
@@ -143,7 +138,7 @@ def test_a_stripe_run_still_reaches_the_stripe_adapter(monkeypatch, tmp_path):
 
     run(_run_args(cache, "stripe"))
 
-    assert selected and isinstance(selected[-1], StripeAdapter)
+    assert selected and isinstance(selected[-1], GeneratedSpecAdapter)
 
 
 def test_an_unknown_vendor_names_what_is_available_and_never_becomes_stripe():
@@ -258,15 +253,14 @@ def test_loading_a_staged_vendor_fetches_nothing(monkeypatch, tmp_path):
     def refuse(*args, **kwargs):
         raise AssertionError("loading a staged vendor must not fetch")
 
-    monkeypatch.setattr(registry, "fetch_spec", refuse)
-    monkeypatch.setattr(registry, "fetch_sdk_spec", refuse)
+    monkeypatch.setattr(registry, "fetch_specification", refuse)
     (tmp_path / "symbols.json").write_text("{}", encoding="utf-8")
 
     vendor = load_vendor(
         "stripe", VendorContext(cache_dir=tmp_path, from_version="v1", to_version="v2")
     )
 
-    assert isinstance(vendor, StripeAdapter)
+    assert isinstance(vendor, GeneratedSpecAdapter)
 
 
 def test_the_ingest_refuses_a_vendor_that_cannot_correlate_a_request(tmp_path, capsys):
@@ -278,7 +272,9 @@ def test_the_ingest_refuses_a_vendor_that_cannot_correlate_a_request(tmp_path, c
     """
     cache = tmp_path / "cache"
     cache.mkdir(parents=True, exist_ok=True)
-    (cache / "symbols.json").write_text("{}", encoding="utf-8")
+    # Deliberately nothing staged. Since `CI-W586` a staged symbol map carries route templates
+    # and so confers correlation, which is the point of that change -- so writing one here would
+    # give this vendor the correlation story the test exists to find it without.
     payload = tmp_path / "spans.json"
     payload.write_text(json.dumps({"resourceSpans": []}), encoding="utf-8")
 

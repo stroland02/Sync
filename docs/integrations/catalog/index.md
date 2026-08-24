@@ -23,7 +23,7 @@ Missing a vendor entirely? [Writing a vendor adapter](../../writing-a-vendor-ada
 | [Perplexity](perplexity.md) | generated | dev-tools, ai |
 | [Ragie](ragie.md) | generated | dev-tools, ai |
 | [Retell AI](retell-ai.md) | generated | dev-tools, ai |
-| [Stripe](stripe.md) | coded | payment |
+| [Stripe](stripe.md) | generated | payment |
 | [Twilio](twilio.md) | coded | communication |
 | [Vercel](vercel.md) | generated | infrastructure |
 

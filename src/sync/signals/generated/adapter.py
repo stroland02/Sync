@@ -352,10 +352,14 @@ class GeneratedSpecAdapter:
 
         `operation_for_symbol` answering `None` is per symbol and is an ordinary answer -- a
         chain the SDK does not state resolves to nothing and should. This is the other quantity:
-        whether *any* symbol could have resolved. Without a staged checkout the map is never
-        built, so every call site declines, and a repository that calls this vendor produces the
-        same output as one that has never heard of it. The caller reporting a count needs the
-        difference, and holding only the count it cannot recover it.
+        whether *any* symbol could have resolved. With neither a checkout to read nor a map
+        somebody built, every call site declines, and a repository that calls this vendor
+        produces the same output as one that has never heard of it. The caller reporting a count
+        needs the difference, and holding only the count it cannot recover it.
+
+        A staged map counts as much as a checkout, and reading only the checkout was a defect the
+        moment a vendor could resolve from a map: the qualification appeared over a real
+        measurement, which is the failure this property's own last paragraph names.
 
         Derived from what this instance was given rather than from which vendor it serves. The
         four vendors `generated-vendors.yaml` configures are in this state today and none of them
@@ -368,11 +372,11 @@ class GeneratedSpecAdapter:
         ordinary case in the same direction those take: an adapter that binds says nothing, and a
         gap is something an adapter asserts.
         """
-        if self._sdk_source is not None:
+        if self._sdk_source is not None or self._symbol_map_path is not None:
             return None
         return (
-            "no checkout of this vendor's generated SDK is staged, so no symbol map was built "
-            "and every call site resolves to nothing"
+            "neither a checkout of this vendor's generated SDK nor a built symbol map is staged, "
+            "so every call site resolves to nothing"
         )
 
     @property

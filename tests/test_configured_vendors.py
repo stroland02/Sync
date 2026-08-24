@@ -36,7 +36,10 @@ MANIFESTS = Path(__file__).parent / "fixtures" / "manifests"
 # What the file's own header documents, and the whole of what the loader reads. Spelled out
 # because the check is that a row carries exactly these: `_generated_vendors` reads `sdk_bindings`
 # with `.get`, so a row misspelling it loses every binding it meant to declare and raises nothing.
-DOCUMENTED_FIELDS = {"vendor_id", "repo", "manifest", "spec", "sdk_bindings", "noise_kinds"}
+DOCUMENTED_FIELDS = {
+    "vendor_id", "repo", "manifest", "spec", "sdk_spec", "symbols",
+    "sdk_bindings", "noise_kinds",
+}
 
 # Present on every row. `manifest` and `spec` are the alternation and are checked separately,
 # because a row carries exactly one and equality against the documented set would demand both.

@@ -37,7 +37,11 @@ from pathlib import Path
 import pytest
 
 from sync.signals.oasdiff import to_vendor_changes
-from sync.signals.stripe.adapter import NOISE_KINDS
+from sync.signals.registry import _generated_vendors
+
+# Read from the row that now carries it, so this measurement follows the judgement
+# rather than a copy of it. `CI-W586` moved it out of the retired adapter.
+NOISE_KINDS = _generated_vendors()["stripe"].noise_kinds
 
 SPECS = Path(".cache/specs")
 BASE = SPECS / "v2320.json"

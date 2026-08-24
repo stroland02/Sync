@@ -343,14 +343,12 @@ PROPERTY_REMOVED = dict(
 
 def _python_adapter(root: Path):
     from sync.index.python_lang import PythonAdapter
-    from sync.signals.stripe.adapter import StripeAdapter
+    from conftest import symbol_resolver
     from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     map_path = root / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    vendor = StripeAdapter(
-        spec_dir=Path(__file__).parent / "fixtures" / "specs", symbol_map_path=map_path
-    )
+    vendor = symbol_resolver(map_path)
     return PythonAdapter(vendor_adapter=vendor)
 
 
@@ -721,14 +719,12 @@ def _drive_read_seed(root: Path) -> None:
 
 def _drive_ts_manifest(root: Path) -> None:
     from sync.index.typescript import TypeScriptAdapter
-    from sync.signals.stripe.adapter import StripeAdapter
+    from conftest import symbol_resolver
     from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     map_path = root / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    vendor = StripeAdapter(
-        spec_dir=Path(__file__).parent / "fixtures" / "specs", symbol_map_path=map_path
-    )
+    vendor = symbol_resolver(map_path)
     adapter = TypeScriptAdapter(vendor_adapter=vendor)
     manifest = root / "package.json"
 
@@ -767,14 +763,12 @@ def _drive_python_sources(root: Path) -> None:
 def _drive_typescript_sources(root: Path) -> None:
     """The same gate on the other language, reached the same way."""
     from sync.index.typescript import TypeScriptAdapter
-    from sync.signals.stripe.adapter import StripeAdapter
+    from conftest import symbol_resolver
     from sync.signals.generated.symbols_stripe_openapi import build_symbol_map
 
     map_path = root / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    adapter = TypeScriptAdapter(vendor_adapter=StripeAdapter(
-        spec_dir=Path(__file__).parent / "fixtures" / "specs", symbol_map_path=map_path
-    ))
+    adapter = TypeScriptAdapter(vendor_adapter=symbol_resolver(map_path))
     (root / "package.json").write_text(
         json.dumps({"dependencies": {"stripe": "^14.0.0"}}), encoding="utf-8"
     )
@@ -1108,6 +1102,12 @@ _WHOLE_STAGE_CATCH_ALL = (
     # failed, retries next tick" for every due subscription rather than ending the tick.
     # The reads that decode bytes live inside `spec_source` and carry their own handlers.
     "sync/watch/tick.py::_tick_generated::Exception",
+    # Wraps the fetch of an optional second document -- the one naming each operation's SDK
+    # method. A tag that publishes none degrades to the HTTP-verb derivation, which is exactly
+    # what the adapter this replaced did; abandoning a vendor over an absent optional document
+    # would be worse than deriving slightly coarser names. `fetch_specification` decodes, and
+    # carries its own handling.
+    "sync/signals/registry.py::_stage_symbol_map::Exception",
     "sync/cli.py::_decline_line::Exception",
     "sync/cli.py::_model_deprecations::Exception",
     "sync/cli.py::_parameter_deprecations::Exception",

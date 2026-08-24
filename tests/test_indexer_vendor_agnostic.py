@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from conftest import symbol_resolver
 
-from sync.signals.stripe.adapter import StripeAdapter
+from sync.signals.registry import vendor_sdk_bindings
 
 import ast
 import json
@@ -345,7 +345,7 @@ def test_the_binding_each_language_reads_is_declared_by_the_vendor():
     the manifest key and the import specifier, and Python needs a distribution name for the
     manifest and a module name for the import, because those are different strings in general.
     """
-    stripe_binding = StripeAdapter.sdk_bindings
+    stripe_binding = vendor_sdk_bindings()["stripe"]
     twilio_binding = TwilioAdapter.sdk_bindings
 
     assert stripe_binding[typescript.TypeScriptAdapter.language_id]["package"] == "stripe"

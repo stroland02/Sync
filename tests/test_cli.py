@@ -938,18 +938,12 @@ def test_the_run_builds_its_symbol_map_from_the_sdk_document(monkeypatch, tmp_pa
 
     store = _RecordingStore()
 
-    def fake_fetch_spec(tag, dest):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(_SUBSCRIPTION_SPEC), encoding="utf-8")
-        return dest
+    def fake_fetch(url: str) -> str:
+        # The row names both documents; the SDK one is what decides `cancel` over `del`.
+        payload = _SUBSCRIPTION_SDK if url.endswith("spec3.sdk.json") else _SUBSCRIPTION_SPEC
+        return json.dumps(payload)
 
-    def fake_fetch_sdk_spec(tag, dest):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(_SUBSCRIPTION_SDK), encoding="utf-8")
-        return dest
-
-    monkeypatch.setattr(registry, "fetch_spec", fake_fetch_spec)
-    monkeypatch.setattr(registry, "fetch_sdk_spec", fake_fetch_sdk_spec)
+    monkeypatch.setattr(registry, "fetch_specification", fake_fetch)
     _stub_run_collaborators(monkeypatch, cli, store)
 
     assert run(_run_args(tmp_path)) == 0
@@ -973,13 +967,12 @@ def test_the_run_completes_on_a_version_that_publishes_no_sdk_document(monkeypat
 
     store = _RecordingStore()
 
-    def fake_fetch_spec(tag, dest):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(_SUBSCRIPTION_SPEC), encoding="utf-8")
-        return dest
+    def fake_fetch(url: str) -> str:
+        if url.endswith("spec3.sdk.json"):
+            raise FileNotFoundError("this tag publishes no SDK document")
+        return json.dumps(_SUBSCRIPTION_SPEC)
 
-    monkeypatch.setattr(registry, "fetch_spec", fake_fetch_spec)
-    monkeypatch.setattr(registry, "fetch_sdk_spec", lambda tag, dest: None)
+    monkeypatch.setattr(registry, "fetch_specification", fake_fetch)
     _stub_run_collaborators(monkeypatch, cli, store)
 
     assert run(_run_args(tmp_path)) == 0
