@@ -26,7 +26,7 @@
  *
  * **The title is an `h2`, written here rather than taken from the vendored `CardTitle`.** That
  * component renders an `h3` and accepts no `asChild`, and a panel is the level directly under the
- * page: `PageHeader`'s `h1`, then a panel, then whatever a panel's own body headings are —
+ * page: the screen's own `h1`, then a panel, then whatever a panel's own body headings are —
  * `precedent-summary.tsx`'s three tally headings are `h3` and are contained by their panel, so a
  * panel at `h3` would put a container and its contents on one outline level and leave the document
  * with no `h2` at all. Screen-reader outline and visual weight are two different decisions and this
@@ -38,7 +38,7 @@
  * on its header, with nothing between them saying which contained which. A panel heads a region a
  * reader enters; a column header names the values under it. `DESIGN.md`'s *Type* section carries
  * that boundary and `tests/test_console_design_tokens.py` holds this heading to the section side
- * of it. The display step stays `PageHeader`'s alone: this is the step between the two, not a
+ * of it. The display step stays the screen's own: this is the step between the two, not a
  * second focal point.
  */
 

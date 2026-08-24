@@ -161,8 +161,10 @@ information.*
 - **C2.** *(Landed `CI-W597`.)* Delete `RouteEntry.question`: 22 route entries, three consumers (`App.tsx:66,77`,
   `workflow-grid.tsx:58`, `page-header.tsx`), two tests (`routes-question.test.ts`,
   `page-header.test.tsx`).
-- **C3.** Delete `PageHeader` (10 files) and `UnknownRoute` (22 files), both superseded by the
-  four-band skeleton.
+- **C3.** *(Landed `CI-W598`.)* `PageHeader` deleted. **`UnknownRoute` kept** and migrated onto
+  the skeleton instead: it is the router's fallback and the early return twelve screens make
+  for a missing route parameter, so deleting it would have meant twelve screens inventing
+  their own no-such-thing screen.
 - **C4.** shadcn catalogue migration. 24 primitives are in `web/src/components/ui/`; the remaining
   bespoke components move onto them, phased with the chassis per ruling 4.
 - **C5.** Token re-derivation. 143 custom properties in `web/src/index.css`, to be re-derived once

@@ -14,7 +14,7 @@
  * `tests/test_console_hierarchy.py` checks `GRAPH_LEVELS` against, and a display rename is not a
  * hierarchy change.
  *
- * **No page-level action.** `PageHeader`'s `actions` slot carried "Review proposed patch", pointing
+ * **No page-level action.** The retired `PageHeader` carried "Review proposed patch" in an `actions` slot, pointing
  * at whichever run happened to be the newest with an opened pull request. With nine change units
  * open that reads as *the* patch, which is a claim about priority the data does not make. The
  * action belongs on the change-unit row it acts on, beside that row's own standing and checkpoint
