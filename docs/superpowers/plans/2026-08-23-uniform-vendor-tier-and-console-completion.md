@@ -72,8 +72,8 @@ symbols would dispatch to the wrong reader with every test still green.
 | A4 | The packages are named for what they hold | **deferred to after A13** |
 | A5 | The rule contract is checked where a rule registers | **landed `bef14cb9`** |
 | A6 | The tier resolves symbols from a staged map, not only a checkout | **landed** |
-| A7 | Every registered vendor's bindings come from its row | next |
-| A8 | A row may name its specification instead of discovering one | |
+| A7 | Every registered vendor's bindings come from its row | **landed** |
+| A8 | A row may name its specification instead of discovering one | next |
 | A9 | OpenAI's row names the specification it actually publishes | |
 | A10 | A row may name several documents (twilio) | |
 | A11 | A row declares which oasdiff kinds are noise | |

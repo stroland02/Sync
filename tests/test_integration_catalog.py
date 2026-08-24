@@ -103,3 +103,17 @@ def test_the_knowledge_base_file_is_valid_and_unique():
         assert entry["docs_url"].startswith("https://"), (
             f"{entry['vendor_id']}: docs_url must be an https URL"
         )
+
+
+def test_a_python_distribution_reaches_the_page_as_well_as_an_npm_package():
+    """The two ecosystems name a lockfile entry differently -- `package` on npm,
+    `distribution` on PyPI -- and reading only the first dropped every Python distribution
+    from every page without failing anything."""
+    from scripts.build_integration_docs import _registry_packages
+
+    packages = _registry_packages("stripe")
+
+    assert packages is not None
+    assert packages["typescript"] == ["stripe"]
+    assert packages["python"] == ["stripe"]
+

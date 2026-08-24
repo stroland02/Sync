@@ -110,10 +110,12 @@ def _registry_packages(vendor_id: str) -> dict | None:
     bindings = vendor_sdk_bindings().get(vendor_id)
     if not bindings:
         return None
+    # `package` on npm, `distribution` on PyPI -- the two ecosystems name the thing a lockfile
+    # lists differently, and reading only the first dropped every Python distribution silently.
     return {
-        language: [binding["package"]]
+        language: [binding["package"] if binding.get("package") else binding["distribution"]]
         for language, binding in bindings.items()
-        if binding.get("package")
+        if binding.get("package") or binding.get("distribution")
     }
 
 

@@ -31,5 +31,6 @@ Stated because absence claimed as coverage is the failure this product replaces:
 
 ## What your lockfile declares
 
+- **python**: `twilio`
 - **typescript**: `twilio`
 Official documentation: [https://www.twilio.com/docs](https://www.twilio.com/docs)

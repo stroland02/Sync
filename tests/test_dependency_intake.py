@@ -82,25 +82,25 @@ def test_five_declared_sdks_produce_a_three_way_split():
     """The spec's closing condition, with every landing justified rather than asserted.
 
     `stripe` and `twilio` are watched: both adapters declare an npm binding, so a call site in
-    this repository reaches an operation. `@vercel/sdk` is generated from `vercel/sdk`, which
-    `generated-vendors.yaml` configures as vendor `vercel`, so its specification is diffable and
-    nothing declares which package a customer imports -- the missing configuration is the
-    binding, and its scoped name is why the join is on the repository rather than on a name.
-    `orb-billing` is generated from `orbcorp/orb-node`, which commits a Stainless manifest and
-    which nothing configures, so the missing configuration is a line in that file. `plaid`
-    publishes no manifest under either convention and no vendor declares it, so there is nothing
-    for a tier to read.
+    this repository reaches an operation. `@vercel/sdk` joins them as of `CI-W579`: its row in
+    `generated-vendors.yaml` declares the binding, and its scoped name is why that join is on the
+    repository rather than on a name. `orb-billing` is generated from `orbcorp/orb-node`, which
+    commits a Stainless manifest and which nothing configures, so the missing configuration is a
+    line in that file -- and it is now the only member of the middle category here, which is why
+    `test_the_two_middle_reasons_are_told_apart` withholds a binding rather than relying on a
+    vendor to be missing one. `plaid` publishes no manifest under either convention and no vendor
+    declares it, so there is nothing for a tier to read.
     """
     report = _report("five_sdks")
     split = {name: item.category for name, item in _by_name(report).items()}
 
     assert split["stripe"] == WATCHED
     assert split["twilio"] == WATCHED
-    assert split["@vercel/sdk"] == WATCHABLE
+    assert split["@vercel/sdk"] == WATCHED
     assert split["orb-billing"] == WATCHABLE
     assert split["plaid"] == NOT_WATCHABLE
 
-    assert report.counts() == {WATCHED: 2, WATCHABLE: 2, NOT_WATCHABLE: 3}
+    assert report.counts() == {WATCHED: 3, WATCHABLE: 1, NOT_WATCHABLE: 3}
 
 
 def test_a_watched_dependency_names_the_vendor_it_resolves_to():
@@ -122,11 +122,15 @@ def test_the_two_middle_reasons_are_told_apart():
     A dependency missing an SDK binding is a change to an adapter; one missing a registry entry
     is a line in a configuration file. A reader who cannot tell them apart can act on neither.
     """
+    # Withheld deliberately. Every shipped row declares a binding since `CI-W579`, so a test
+    # that waited for one to be missing would be asserting a property of the configuration file
+    # rather than of the classifier, and would go quiet the day the file was completed.
+    withheld = _by_name(_report("five_sdks", bindings={}))
     items = _by_name(_report("five_sdks"))
 
-    assert items["@vercel/sdk"].missing == "sdk-binding"
+    assert withheld["@vercel/sdk"].missing == "sdk-binding"
     assert items["orb-billing"].missing == "registry-entry"
-    assert items["@vercel/sdk"].missing != items["orb-billing"].missing
+    assert withheld["@vercel/sdk"].missing != items["orb-billing"].missing
 
 
 def test_a_dependency_moves_between_watched_and_watchable_with_its_binding():
@@ -144,7 +148,7 @@ def test_a_dependency_moves_between_watched_and_watchable_with_its_binding():
     assert bound.category == WATCHED
     assert bound.vendor_id == "vercel"
 
-    unbound = _by_name(_report("five_sdks"))["@vercel/sdk"]
+    unbound = _by_name(_report("five_sdks", bindings={}))["@vercel/sdk"]
     assert unbound.category == WATCHABLE
     assert unbound.missing == "sdk-binding"
     assert unbound.vendor_id == "vercel"
@@ -224,8 +228,7 @@ def test_a_python_manifest_is_read_as_its_own_ecosystem():
 
     assert items["stripe"].category == WATCHED
     assert items["stripe"].dependency.ecosystem == "pypi"
-    assert items["openai"].category == WATCHABLE
-    assert items["openai"].missing == "sdk-binding"
+    assert items["openai"].category == WATCHED
     assert items["openai"].vendor_id == "openai"
     assert items["requests"].category == NOT_WATCHABLE
 
@@ -328,8 +331,11 @@ def test_both_python_manifests_are_read_when_a_project_carries_both():
     items = _by_name(_report("python_both"))
 
     assert items["stripe"].category == WATCHED
-    assert items["orb-billing"].category == WATCHABLE
-    assert items["openai"].missing == "sdk-binding"
+    # Watched on PyPI where the same project's npm package is not: `orb-billing` is the
+    # distribution the row declares, and the scoped npm name it does not is why the join is on
+    # the repository. `test_five_declared_sdks_produce_a_three_way_split` holds the other side.
+    assert items["orb-billing"].category == WATCHED
+    assert items["openai"].category == WATCHED
     assert items["requests"].category == NOT_WATCHABLE
     assert {"stripe", "orb-billing", "openai", "requests"} <= set(items)
 
@@ -344,7 +350,7 @@ def test_an_unparseable_pyproject_is_reported_and_the_other_manifest_is_still_re
     report = _report("python_half_broken")
 
     assert any("pyproject.toml could not be read" in problem for problem in report.unreadable)
-    assert _by_name(report)["openai"].category == WATCHABLE
+    assert _by_name(report)["openai"].category == WATCHED
 
 
 def test_a_non_string_in_the_dependency_array_is_dropped_and_the_rest_still_read():
@@ -449,21 +455,28 @@ def test_the_bindings_reported_are_the_ones_the_adapters_declare():
     assert bindings["twilio"]["python"]["distribution"] == "twilio"
 
 
-def test_a_registered_vendor_that_declares_no_binding_is_visible_as_such():
-    """The finding this task surfaces rather than fixes: most registered vendors resolve
-    through the registry and can bind no call site, so they can be watched in principle and not
-    in fact. Asserted so the number cannot quietly drift in either direction unnoticed --
-    the drift it caught: the generated-adapter fleet took the unbound set from four to sixteen,
-    and this count moved a landing rather than moving silently."""
+def test_every_registered_vendor_that_declares_a_binding_reports_it():
+    """The gap this replaces was real and recorded: sixteen configured vendors each declared
+    `sdk_bindings` in their row, and `vendor_sdk_bindings` read `_CODED_ADAPTERS` alone, so every
+    one of them was watchable in principle and bound nothing in fact.
+
+    The count is still asserted rather than merely reported, because it is the number that moved
+    silently before -- a vendor added without a binding must move this and land, not slip."""
     bound = set(vendor_sdk_bindings())
     registered = {vendor for vendor in available_vendors() if not vendor.startswith("mcp:")}
 
-    assert bound == {"stripe", "twilio"}
-    assert registered - bound == {
-        "anthropic", "browserbase", "cloudflare", "finch", "groq", "increase", "lithic",
-        "mistral", "modern-treasury", "openai", "openlayer", "orb", "perplexity", "ragie",
-        "retell-ai", "vercel",
-    }
+    assert registered - bound == set(), "a registered vendor that binds nothing indexes nothing"
+    assert {"stripe", "twilio"} <= bound
+    assert "anthropic" in bound and "openai" in bound
+
+
+def test_a_configured_rows_declared_binding_is_what_gets_reported():
+    """Declared, never derived. The row states `anthropic` on PyPI and `@anthropic-ai/sdk` on
+    npm, and no rule for guessing one from the vendor id is right for both."""
+    bindings = vendor_sdk_bindings()
+
+    assert bindings["anthropic"]["python"]["distribution"] == "anthropic"
+    assert bindings["anthropic"]["typescript"]["package"] == "@anthropic-ai/sdk"
 
 
 def test_reading_a_manifest_reaches_no_network(monkeypatch):
@@ -487,7 +500,7 @@ def test_the_report_serialises_for_an_operator(tmp_path):
     shape is the artifact and the formatting is not."""
     payload = json.loads(_report("five_sdks").to_json())
 
-    assert payload["counts"][WATCHED] == 2
+    assert payload["counts"][WATCHED] == 3
     entries = {item["name"]: item for item in payload["dependencies"]}
     assert entries["orb-billing"]["category"] == WATCHABLE
     assert entries["orb-billing"]["missing"] == "registry-entry"

@@ -516,19 +516,31 @@ _CODED_ADAPTERS: dict[str, type] = {
 
 
 def vendor_sdk_bindings() -> dict[str, dict[str, dict[str, str]]]:
-    """Which package each vendor is imported as, for the vendors whose adapter says.
+    """Which package each vendor is imported as, wherever the vendor says so.
 
-    Only coded adapters appear. A configured vendor is served by `GeneratedSpecAdapter` or
-    `McpServerAdapter`, and neither declares a binding: their specifications are discoverable
-    and their call sites are not, so they resolve through this registry and can bind nothing.
-    That is a real gap rather than an omission here, and `sync.signals.intake` reports it as
-    the missing configuration it is instead of hiding it behind a vendor that appears served.
+    Declared in both places and derived in neither. A configuration row states it and a coded
+    adapter states it as a class attribute; deriving one from a vendor id is what this refuses,
+    because a vendor's distribution name and its scoped npm name are routinely unrelated and no
+    rule is right for both. The worked example lives beside the row that needs it, in the
+    configuration file, because naming a vendor here is what `test_no_configured_vendor_is_named_
+    in_the_registry_itself` forbids.
+
+    This read `_CODED_ADAPTERS` alone until `CI-W579`, while every configured row already carried
+    a binding -- so those vendors were watchable in principle and bound no call site in fact,
+    which is a scan that reports zero rather than reporting a gap.
     """
-    return {
-        vendor_id: dict(getattr(adapter, "sdk_bindings", {}))
-        for vendor_id, adapter in _CODED_ADAPTERS.items()
-        if getattr(adapter, "sdk_bindings", None)
+    bindings: dict[str, dict[str, dict[str, str]]] = {
+        vendor_id: {language: dict(spec) for language, spec in row.sdk_bindings.items()}
+        for vendor_id, row in _generated_vendors().items()
+        if row.sdk_bindings
     }
+    # A coded adapter wins where both name the same vendor, because the class is the narrower
+    # declaration and this is the collision a vendor being migrated to a row passes through.
+    for vendor_id, adapter in _CODED_ADAPTERS.items():
+        declared = getattr(adapter, "sdk_bindings", None)
+        if declared:
+            bindings[vendor_id] = dict(declared)
+    return bindings
 
 
 def configured_generated_repos() -> dict[str, str]:

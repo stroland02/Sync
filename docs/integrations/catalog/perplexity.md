@@ -29,4 +29,8 @@ Stated because absence claimed as coverage is the failure this product replaces:
 - **Anything requiring this vendor's credentials.** Sync holds no customer secrets, so nothing here calls the vendor's API on your behalf.
 - **Versions outside the two you pin.** A diff is between the versions a run names; Sync does not interpolate what happened between them.
 
+## What your lockfile declares
+
+- **python**: `perplexityai`
+- **typescript**: `@perplexity-ai/perplexity_ai`
 Official documentation: [https://docs.perplexity.ai](https://docs.perplexity.ai)

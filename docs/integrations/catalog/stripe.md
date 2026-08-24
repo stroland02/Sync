@@ -31,5 +31,6 @@ Stated because absence claimed as coverage is the failure this product replaces:
 
 ## What your lockfile declares
 
+- **python**: `stripe`
 - **typescript**: `stripe`
 Official documentation: [https://docs.stripe.com](https://docs.stripe.com)
