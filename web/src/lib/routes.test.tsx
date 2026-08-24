@@ -355,9 +355,8 @@ describe("a destination that is not a level", () => {
     for (const entry of DESTINATIONS) expect(levelPaths.has(entry.path)).toBe(false)
   })
 
-  it("carries a question, the same as a level does, because the header renders one either way", () => {
-    for (const entry of DESTINATIONS) expect(entry.question.length).toBeGreaterThan(0)
-  })
+  // `carries a question, the same as a level does` retired with the field in `CI-W597`.
+  // `routes-no-question.test.ts` now asserts the opposite, which is the owner's ruling.
 })
 
 describe("which screens the reading cap applies to", () => {

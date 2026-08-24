@@ -18,17 +18,19 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { PageHeader } from "@/layouts/page-header"
-import { ROUTES } from "@/lib/routes"
 
 afterEach(cleanup)
 
 describe("PageHeader", () => {
-  it("renders the question the registry holds for the route", () => {
-    const route = ROUTES[0]
+  it("renders the sentence it is handed", () => {
+    // A literal since `CI-W597` deleted `RouteEntry.question`. `PageHeader` takes the sentence
+    // as a prop and never looked it up, so what this asserts is unchanged; only the source of
+    // the string moved, and the last caller -- `UnknownRoute` -- always passed a literal.
+    const sentence = "Which workspace do you want to look at?"
 
-    render(<PageHeader title="Fleet" question={route.question} />)
+    render(<PageHeader title="Fleet" question={sentence} />)
 
-    expect(screen.getByText(route.question)).toBeTruthy()
+    expect(screen.getByText(sentence)).toBeTruthy()
   })
 
   it("renders exactly one level-one heading, so the screen is one document", () => {

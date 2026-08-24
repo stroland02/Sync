@@ -29,7 +29,7 @@ function GridCard({ title, does, children }: { title: string; does: string; chil
   )
 }
 
-function DoorRow({ to, label, question }: { to: string; label: string; question: string }) {
+function DoorRow({ to, label, detail }: { to: string; label: string; detail?: string }) {
   return (
     <li>
       <Link
@@ -37,7 +37,12 @@ function DoorRow({ to, label, question }: { to: string; label: string; question:
         className="flex flex-col gap-field rounded-control px-row py-row transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <span className="text-body text-ink">{label}</span>
-        <span className="text-meta leading-snug text-ink-muted">{question}</span>
+        {/* Optional since `CI-W597`. The stage doors carried `RouteEntry.question` and no longer
+            do; the settings prerequisites below carry their own `why`, which is a local
+            explanation rather than a sentence the registry held. */}
+        {detail ? (
+          <span className="text-meta leading-snug text-ink-muted">{detail}</span>
+        ) : null}
       </Link>
     </li>
   )
@@ -55,7 +60,7 @@ export function WorkflowGrid({ repoId }: { repoId: string }) {
               const href = destinationHref(route, { repoId })
               if (href === null) return null
               return (
-                <DoorRow key={route.path} to={href} label={route.label} question={route.question} />
+                <DoorRow key={route.path} to={href} label={route.label} />
               )
             })}
           </GridCard>
@@ -73,7 +78,7 @@ export function WorkflowGrid({ repoId }: { repoId: string }) {
             const group = SETTING_GROUPS.find((entry) => entry.id === id)
             if (group === undefined) return null
             return (
-              <DoorRow key={id} to="/settings" label={group.label} question={why} />
+              <DoorRow key={id} to="/settings" label={group.label} detail={why} />
             )
           })}
         </GridCard>

@@ -125,8 +125,6 @@ export interface RouteEntry {
    * holds that — and meaningless elsewhere, since only the rail draws the grouping.
    */
   stage?: WorkflowStage
-  /** What an operator opens this screen to find out, in one sentence. */
-  question: string
   /**
    * Which subject supplies this route's parameters, in the operator's words — `null` on a route
    * that needs none. The sidebar renders it beside an unlinkable destination so a reader learns
@@ -169,7 +167,6 @@ export const ROUTES: readonly RouteEntry[] = [
     stage: "Index",
     label: "Overview",
     level: "Codebase",
-    question: "What does Sync see in this workspace, and what does it not?",
     params: ["repoId"],
     element: CodebasePage,
   },
@@ -181,7 +178,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "File tree",
     level: "Codebase",
-    question: "How is this codebase laid out, and what is it made of?",
     params: ["repoId"],
     element: FileTreePage,
   },
@@ -194,7 +190,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Integration changes",
     level: "API Services",
-    question: "What have the integrations this codebase uses published, newest first?",
     params: ["repoId"],
     element: IntegrationChangesPage,
   },
@@ -210,7 +205,6 @@ export const ROUTES: readonly RouteEntry[] = [
     stage: "Index",
     label: "Call sites",
     level: "Binding surface",
-    question: "Where does this codebase call an integration's API, and what did each call bind to?",
     params: ["repoId"],
     element: CallSitesPage,
   },
@@ -223,7 +217,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Trends",
     level: "Codebase",
-    question: "What are this workspace's measured trends -- findings over time, observed volume?",
     params: ["repoId"],
     element: MetricsPage,
   },
@@ -238,7 +231,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Corpus",
     level: "Solution Workflow",
-    question: "What has the remediation loop actually produced, and which measurements have no sample yet?",
     params: ["repoId"],
     element: PrecedentPage,
   },
@@ -253,7 +245,6 @@ export const ROUTES: readonly RouteEntry[] = [
     stage: "Remediate",
     label: "Solutions",
     level: "Solution Workflow",
-    question: "Which remediations reached the forge, and where is each one's evidence?",
     params: ["repoId"],
     element: SolutionsPage,
   },
@@ -266,7 +257,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Dependency graph",
     level: "Codebase",
-    question: "What does this workspace's whole indexed call graph look like, file by file?",
     params: ["repoId"],
     element: IndexGraphPage,
   },
@@ -289,8 +279,6 @@ export const ROUTES: readonly RouteEntry[] = [
     stage: "Remediate",
     label: "Runs",
     level: "Solution Workflow",
-    question:
-      "What did the remediation pipeline attempt, what did it abandon, and which change kinds does it not handle mechanically?",
     params: ["repoId"],
     element: RunsPage,
   },
@@ -313,7 +301,6 @@ export const ROUTES: readonly RouteEntry[] = [
     // was labelled as charts. The charts stay one tab over, as Trends.
     label: "Findings",
     level: "Finding",
-    question: "What is broken in this workspace, and what is each finding bound to?",
     params: ["repoId"],
     element: FindingsPage,
   },
@@ -330,8 +317,6 @@ export const ROUTES: readonly RouteEntry[] = [
     // presentation vocabulary renames freely, levels do not.
     label: "Services",
     level: "API Services",
-    question:
-      "Which of its vendors' APIs does this workspace actually call, and how much of each?",
     params: ["repoId"],
     element: RepositoryServicesPage,
   },
@@ -347,8 +332,6 @@ export const ROUTES: readonly RouteEntry[] = [
     stage: "Signal",
     label: "Vendors",
     level: "API Services",
-    question:
-      "Which vendors does this workspace call, what can Sync watch about each, and how many of their APIs does it use?",
     params: ["repoId"],
     element: RepositoryVendorsPage,
   },
@@ -366,8 +349,6 @@ export const ROUTES: readonly RouteEntry[] = [
     // page under the wrong verb. The LEVEL keeps the specification's word.
     label: "Telemetry",
     level: "Signals",
-    question:
-      "What vendor, signal source and human surface does this workspace have attached, and what has each reported?",
     params: ["repoId"],
     element: SignalsPage,
   },
@@ -382,7 +363,6 @@ export const ROUTES: readonly RouteEntry[] = [
     stage: "Detect",
     label: "Detectors",
     level: "Errors & Incidents",
-    question: "Which detector is producing this workspace's false positives?",
     params: ["repoId"],
     element: DetectorsPage,
   },
@@ -392,7 +372,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Vendor",
     level: "API Services",
-    question: "What is at risk from this vendor in this workspace, and what did it change?",
     params: ["repoId", "vendorId"],
     element: VendorPage,
   },
@@ -402,7 +381,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Binding surface",
     level: "Binding surface",
-    question: "Which call sites bind this operation, and what rung established each?",
     params: ["repoId", "vendorId", "operationId"],
     element: BindingSurfacePage,
   },
@@ -412,7 +390,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Finding",
     level: "Finding",
-    question: "What is this finding, and what binding does it rest on?",
     params: ["repoId", "findingId"],
     element: FindingPage,
   },
@@ -422,7 +399,6 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Solution workflow",
     level: "Solution Workflow",
-    question: "What did Sync's remediation graph do about this finding, node by node?",
     params: ["repoId", "findingId"],
     element: WorkflowPage,
   },
@@ -432,33 +408,10 @@ export const ROUTES: readonly RouteEntry[] = [
     nav: false,
     label: "Pull request",
     level: "Pull Request",
-    question: "Did Sync open a pull request for this finding, and what evidence went with it?",
     params: ["repoId", "findingId"],
     element: PullRequestPage,
   },
 ] as const
-
-/**
- * The sentence `layouts/page-header.tsx` renders for a route, read out of the registry.
- *
- * `PageHeader` takes the question as a prop rather than looking it up — its own docstring carries
- * why, and it is so a header rendered outside the router still has one. This is how a screen
- * supplies it without writing a second copy: the registry's sentence is what the sidebar's tooltip
- * and the command palette already show, and a screen that restated it would eventually disagree
- * with both.
- *
- * It throws rather than falling back to an empty string. A path this does not know is a typo in a
- * screen, and a header quietly rendering nothing at the display step is precisely the flatness the
- * step was added to fix — it would look like a styling problem for as long as it took somebody to
- * open the registry.
- */
-export function routeQuestion(path: string): string {
-  const entry = ROUTES.find((route) => route.path === path)
-  if (entry === undefined) {
-    throw new Error(`no route is declared at ${path}, so it has no question to render`)
-  }
-  return entry.question
-}
 
 /**
  * Whether a navigation item is the one the current address is inside.
@@ -551,8 +504,6 @@ export function destinationHref(
 export interface DestinationEntry {
   path: string
   label: string
-  /** What an operator opens this screen to find out, in one sentence. The header renders it. */
-  question: string
   element: ComponentType
 }
 
@@ -560,9 +511,6 @@ export const DESTINATIONS: readonly DestinationEntry[] = [
   {
     path: "/settings",
     label: "Settings",
-    question:
-      "What does this deployment watch, what has each adapter actually delivered, and what " +
-      "policy is in force when a patch is ready?",
     element: SettingsPage,
   },
 ] as const

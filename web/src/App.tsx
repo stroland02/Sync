@@ -17,8 +17,6 @@ import { DESTINATIONS, ROUTES } from "@/lib/routes"
 import { FleetPage } from "@/features/fleet/fleet-page"
 
 /** What the index asks, since it is no longer a registry entry with a question of its own. */
-const WORKSPACE_PICKER_QUESTION =
-  "Which workspace do you want to look at? Everything else in this console is one workspace's."
 import { AppFrame } from "@/layouts/app-frame"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
@@ -31,17 +29,11 @@ import { UnknownRoute } from "@/layouts/unknown-route"
  * recovery, including between two findings, which react-router otherwise renders through the
  * same mounted element.
  */
-function RoutedScreen({
-  element: Screen,
-  question,
-}: {
-  element: ComponentType<{ question?: string }>
-  question?: string
-}) {
+function RoutedScreen({ element: Screen }: { element: ComponentType }) {
   const location = useLocation()
   return (
     <ErrorBoundary key={location.pathname}>
-      <Screen question={question} />
+      <Screen />
     </ErrorBoundary>
   )
 }
@@ -57,13 +49,13 @@ export default function App() {
             somewhere that can give them one. */}
         <Route
           index
-          element={<RoutedScreen element={FleetPage} question={WORKSPACE_PICKER_QUESTION} />}
+          element={<RoutedScreen element={FleetPage} />}
         />
         {ROUTES.map((route) => (
           <Route
             key={route.path}
             path={route.path.slice(1)}
-            element={<RoutedScreen element={route.element} question={route.question} />}
+            element={<RoutedScreen element={route.element} />}
           />
         ))}
         {/* A destination is not a level, and the router does not care: both arrays declare a
@@ -74,7 +66,7 @@ export default function App() {
             key={destination.path}
             path={destination.path.slice(1)}
             element={
-              <RoutedScreen element={destination.element} question={destination.question} />
+              <RoutedScreen element={destination.element} />
             }
           />
         ))}
