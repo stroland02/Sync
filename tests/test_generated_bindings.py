@@ -219,10 +219,10 @@ def test_stripe_still_declares_both_languages():
 
 
 def test_twilio_still_declares_both_languages():
-    from sync.signals.twilio.adapter import TwilioAdapter
+    from sync.signals.registry import vendor_sdk_bindings
 
-    assert TwilioAdapter.sdk_bindings["typescript"] == {"package": "twilio"}
-    assert TwilioAdapter.sdk_bindings["python"] == {
+    assert vendor_sdk_bindings()["twilio"]["typescript"] == {"package": "twilio"}
+    assert vendor_sdk_bindings()["twilio"]["python"] == {
         "distribution": "twilio", "module": "twilio",
     }
 

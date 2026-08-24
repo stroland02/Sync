@@ -290,12 +290,16 @@ def test_the_shipped_configuration_declares_no_noise_kinds():
         if row.noise_kinds
     }
 
-    # Stripe carries the judgement its retired adapter made about its own releases, and nothing
-    # else does. The measurement this guard protects was taken over the vendors reached through a
-    # generator manifest, and it says the filtered kind is the sole route to their affected
-    # operations -- it is not a statement about stripe, whose adapter measured its own releases
-    # separately and dropped this kind before `CI-W586` moved the decision into its row.
-    assert declaring == {"stripe": ["response-property-enum-value-added"]}, (
+    # Both retired adapters carried this judgement about their own releases, measured separately
+    # -- 92% of one twilio release against roughly 80% of a stripe one -- and `CI-W586` and
+    # `CI-W588` moved each into its own row rather than promoting it to shared code. The
+    # measurement this guard protects was taken over the vendors reached through a generator
+    # manifest, and says the kind is the sole route to *their* affected operations. It is not a
+    # statement about these two, and none of the sixteen declares anything.
+    assert declaring == {
+        "stripe": ["response-property-enum-value-added"],
+        "twilio": ["response-property-enum-value-added"],
+    }, (
         "a configured vendor's noise filter changed. Re-read "
         "`2026-07-29-generated-vendor-noise.md` before accepting it: for one openai window the "
         f"filtered kind was every record and every operation. {declaring}"

@@ -64,13 +64,17 @@ def _change(**kw) -> VendorChange:
 # --- the registry side: what is configured, without touching a vendor --------
 
 
-def test_the_remaining_hand_written_adapter_is_reported_as_coded():
+def test_no_registered_adapter_is_served_by_code():
+    """The closing condition of Track A: every vendor this deployment serves is a row.
+
+    The `coded` kind stays in the vocabulary rather than going with the last member. `_BUILDERS`
+    is the extension point this module's own docstring offers a third party -- one line and a
+    readable diff -- and an empty registry is that offer standing open, not dead code.
+    """
     coded = {entry.vendor_id: entry for entry in registered_adapters() if entry.kind == "coded"}
 
-    # One, since `CI-W586` made stripe a configuration row. `A13` retires the last of them, at
-    # which point this set is empty and the `coded` kind goes with it.
-    assert set(coded) == {"twilio"}
-    assert coded["twilio"].source is None
+    assert coded == {}
+    assert {entry.vendor_id for entry in registered_adapters()} >= {"stripe", "twilio"}
 
 
 def test_a_configured_generated_vendor_reports_the_repository_it_reads(tmp_path, monkeypatch):

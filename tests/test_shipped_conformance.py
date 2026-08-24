@@ -87,9 +87,9 @@ from sync.signals.deprecations import (
     parameters_to_vendor_changes,
     to_vendor_changes,
 )
+from sync.signals import staging
 from sync.signals.registry import (
     SYMBOL_MAP_FILENAME,
-    TWILIO_PRODUCTS_FILENAME,
     VendorContext,
     available_vendors,
     load_vendor,
@@ -143,7 +143,7 @@ def _stage_twilio(cache_dir: Path) -> None:
         (FIXTURES / "twilio" / "insights_v1_shape.json").read_text(encoding="utf-8")
     )
     (cache_dir / "insights_v1.json").write_text(json.dumps(shape), encoding="utf-8")
-    (cache_dir / TWILIO_PRODUCTS_FILENAME).write_text(
+    (cache_dir / staging.TWILIO_PRODUCTS_FILENAME).write_text(
         json.dumps([{"filename": "insights_v1.json", "domain": "insights", "version": "v1"}]),
         encoding="utf-8",
     )

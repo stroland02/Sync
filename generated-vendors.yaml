@@ -277,3 +277,35 @@
     python:
       distribution: stripe
       module: stripe
+
+# The last vendor off a hand-written adapter (`CI-W588`), after which `registry.py` names no
+# vendor at all. Its retired preparer read a directory something else populated and said
+# downloading 61 documents was outside an adapter's business; verified on 2026-08-23 that
+# `twilio/twilio-oai` serves each product at a tag unauthenticated, so the four this deployment
+# reads are a row like any other. Each carries the mount its symbols hang from -- a chain is
+# `twilio.<domain>.<version>.<resource>.<verb>` and neither half is derivable from the path.
+- vendor_id: twilio
+  repo: twilio/twilio-oai
+  spec:
+    - path: spec/json/twilio_messaging_v1.json
+      domain: messaging
+      version: v1
+    - path: spec/json/twilio_verify_v2.json
+      domain: verify
+      version: v2
+    - path: spec/json/twilio_conversations_v1.json
+      domain: conversations
+      version: v1
+    - path: spec/json/twilio_lookups_v2.json
+      domain: lookups
+      version: v2
+  symbols: twilio-oai
+  noise_kinds:
+    - response-property-enum-value-added
+  sdk_bindings:
+    typescript:
+      package: twilio
+    python:
+      distribution: twilio
+      module: twilio
+

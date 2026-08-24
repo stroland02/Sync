@@ -12,11 +12,15 @@ What a vendor is handed, and why none of it belongs to one vendor
 version strings `VendorAdapter.fetch_changes` already takes. Nothing in it names a file layout.
 
 That is the constraint worth defending, because the obvious way to re-hardcode is to give this
-module a union of every adapter's parameters. `TwilioAdapter` takes a directory per tag and a
-list of the products to read out of it; the adapter retired in `CI-W586` took a single
-specification and a symbol map. A context carrying either shape would be the vendor knowledge
-just removed from `cli.py`, moved one file over -- and the third vendor would add a third field
-that two adapters ignore.
+module a union of every adapter's parameters. The two adapters retired in `CI-W586` and
+`CI-W588` wanted incompatible things -- one specification at a tag and a symbol map, against a
+directory per tag and a list of products to read out of it. A context carrying either shape
+would be the vendor knowledge just removed from `cli.py`, moved one file over, and the third
+vendor would add a third field the other two ignore.
+
+Both are rows now, and this module names no vendor. `_BUILDERS` stays as the extension point a
+third party's adapter registers through -- one line and a readable diff -- and its being empty
+is that offer standing open rather than dead code.
 
 So the shapes stay behind the builders. Each builder receives the neutral context and is the one
 place that knows what its vendor's artifacts look like.
@@ -64,8 +68,6 @@ from sync.signals.generated.adapter import (
 from sync.signals.generated.manifest import SpecSource, parse_manifest
 from sync.signals.generated.spec_rules import PER_DOCUMENT_RULES, SPEC_SYMBOL_RULES
 from sync.signals.mcp_server.adapter import VENDOR_ID_PREFIX, McpServerAdapter
-from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
-from sync.signals.generated.symbols_twilio_oai import build_symbol_map as build_twilio_symbols
 
 # Where every vendor's symbol map is written, relative to the cache. One name across vendors
 # because the map's shape is the same -- symbol to operation metadata -- whatever derived it,
@@ -75,7 +77,6 @@ SYMBOL_MAP_FILENAME = "symbols.json"
 # Where a vendor whose specification is split per product declares which products this
 # deployment reads. Named per vendor rather than shared, because a vendor that publishes one
 # document has nothing to put in it.
-TWILIO_PRODUCTS_FILENAME = "twilio-products.json"
 
 # Which vendors are served by reading a generator's manifest, as a committed file rather than as
 # entries in this module. A vendor id appearing in shared code is the knowledge the plugin
@@ -190,8 +191,8 @@ class GeneratedVendor:
     sdk_spec: str | None = None
     """A second document in `repo` naming the SDK method for each operation, where one exists.
 
-    Optional and degradable. The retired stripe adapter read one and fell back to the HTTP-verb
-    derivation when a tag published none -- and the difference is observable: with it
+    Optional and degradable. The adapter retired in `CI-W586` read one and fell back to the
+    HTTP-verb derivation when a tag published none -- and the difference is observable: with it
     `subscriptions.cancel` resolves, without it `subscriptions.del` does. Dropping it silently
     was a real regression this commit nearly shipped, caught by `test_cli`.
     """
@@ -615,90 +616,21 @@ def _load_generated(vendor: GeneratedVendor, context: VendorContext) -> Generate
 
 
 
-def _twilio_products(context: VendorContext) -> tuple[ProductDocument, ...]:
-    """The products this deployment reads, from the manifest it staged.
-
-    Twilio publishes 61 documents per tag and which of them a customer depends on is a
-    scheduling decision the adapter's own docstring declines to make. Nothing in the repository
-    ships a default list, so an absent manifest raises naming the path rather than resolving to
-    the empty list -- a vendor that silently reports no changes is the failure the product
-    exists to catch, arriving from our own side.
-
-    `domain` and `version` come from the manifest rather than from the filename because they are
-    not reliably in it: `twilio_iam_organizations.json` carries no version segment, and a split
-    on the last underscore would mount every operation in that product under a symbol nobody can
-    write.
-    """
-    manifest = context.cache_dir / TWILIO_PRODUCTS_FILENAME
-    if not manifest.exists():
-        raise FileNotFoundError(
-            f"no product manifest at {manifest}; twilio publishes one specification per product "
-            f"and this deployment has not said which of them it reads"
-        )
-    return tuple(
-        ProductDocument(
-            filename=entry["filename"], domain=entry["domain"], version=entry["version"]
-        )
-        for entry in json.loads(manifest.read_text(encoding="utf-8"))
-    )
-
-
-def _load_twilio(context: VendorContext) -> VendorAdapter:
-    symbol_map = context.cache_dir / SYMBOL_MAP_FILENAME
-    return TwilioAdapter(
-        spec_dir=context.cache_dir,
-        symbol_map_path=symbol_map if symbol_map.exists() else None,
-        documents=_twilio_products(context),
-    )
-
-
-def _prepare_twilio(context: VendorContext) -> PreparedVendor:
-    """Derive one symbol map across every product this deployment reads.
-
-    Nothing is downloaded. Stripe's specification is one file at a git tag and fetching it is
-    three lines; the Twilio equivalent is 61 files per tag, which the adapter's docstring places
-    outside an adapter's business. This reads a directory something else populated, and says so
-    by failing on a document that is not there.
-
-    One map rather than one per product, because a call site names a symbol and not a product:
-    `twilio.<domain>.<version>.<chain>` already carries the product in the symbol itself.
-    """
-    documents = _twilio_products(context)
-    head_dir = context.cache_dir / context.to_version
-
-    symbols: dict[str, dict[str, str]] = {}
-    parsed: list[dict[str, Any]] = []
-    for document in documents:
-        path = head_dir / document.filename
-        if not path.exists():
-            raise FileNotFoundError(f"specification not found: {path}")
-        head = json.loads(path.read_text(encoding="utf-8"))
-        parsed.append(head)
-        symbols.update(build_twilio_symbols(head, document.domain, document.version))
-
-    (context.cache_dir / SYMBOL_MAP_FILENAME).write_text(
-        json.dumps(symbols), encoding="utf-8"
-    )
-    return PreparedVendor(adapter=_load_twilio(context), documents=tuple(parsed))
-
-
 _BUILDERS: dict[str, tuple[Callable[[VendorContext], PreparedVendor],
                            Callable[[VendorContext], VendorAdapter]]] = {
-    "twilio": (_prepare_twilio, _load_twilio),
 }
 
 # The adapter class behind each coded vendor, so a caller can read what the adapter *declares*
 # without constructing one. `sync.signals.intake` needs the SDK package a vendor is imported as
 # in order to match it against a customer's manifest, and constructing an adapter to ask is the
-# wrong shape twice over: it reads files a scan has not staged yet -- `_load_twilio` raises
-# without a product manifest -- and it does IO to answer a question about configuration.
+# wrong shape twice over: it reads files a scan has not staged yet, and it does IO to answer a
+# question about configuration.
 #
 # Naming the classes is this module's job and nowhere else's; `sync/signals/__init__.py` states
 # that as the rule. Keyed the same way `_BUILDERS` is, and
 # `test_every_coded_adapter_is_offered_a_binding_lookup` holds the two in step -- an adapter
 # added to one and not the other would silently stop being matchable against a manifest.
 _CODED_ADAPTERS: dict[str, type] = {
-    "twilio": TwilioAdapter,
 }
 
 
@@ -769,7 +701,7 @@ class RegisteredAdapter:
     manifest is read from, the directory an MCP server's captures are kept in -- and is `None` for
     a coded adapter, whose source is this repository.
 
-    Nothing here constructs an adapter or reads a staged artifact. `_load_twilio` raises without a
+    Nothing here constructs an adapter or reads a staged artifact. A loader can raise without a
     product manifest, so a reader that built one to ask what it is would report a deployment as
     broken for the ordinary state of having not scanned yet.
     """

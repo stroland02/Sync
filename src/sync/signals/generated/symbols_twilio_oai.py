@@ -159,19 +159,54 @@ def build_symbol_map(spec: dict[str, Any], domain: str, version: str) -> dict[st
             if method_name is None:
                 continue
 
-            symbol = ".".join(["twilio", domain, version, *chain, method_name])
-            existing = mapping.get(symbol)
-            if existing is not None:
-                raise SymbolCollision(
-                    f"{symbol} derives from two operations: "
-                    f"{existing['operation_id']} ({existing['http_method'].upper()} {existing['path']}) "
-                    f"and {operation_id} ({http_method.upper()} {path})"
-                )
-            mapping[symbol] = {
-                "operation_id": operation_id,
-                "http_method": http_method.lower(),
-                "path": path,
-                "service_id": service_id,
-            }
+            # Both spellings, each carrying the language that writes it. `twilio-python` exposes
+            # `call_summaries` and `twilio-node` exposes `callSummaries` -- the same operation
+            # under two names, and only the mount chain differs between the SDKs.
+            #
+            # Recorded at build time rather than rewritten at lookup time, which is what the
+            # retired adapter did. A rewrite is invisible to anything holding the map, so a
+            # caller reading it could not tell the two spellings apart; and the tier that now
+            # serves every vendor filters on `languages`, which is machinery stripe's rule
+            # already used. `CI-W588` re-pinned the digest for this deliberately.
+            base = ["twilio", domain, version]
+            for spelling, languages in _spellings(chain, method_name).items():
+                symbol = ".".join([*base, spelling])
+                existing = mapping.get(symbol)
+                if existing is not None:
+                    raise SymbolCollision(
+                        f"{symbol} derives from two operations: "
+                        f"{existing['operation_id']} "
+                        f"({existing['http_method'].upper()} {existing['path']}) "
+                        f"and {operation_id} ({http_method.upper()} {path})"
+                    )
+                mapping[symbol] = {
+                    "operation_id": operation_id,
+                    "http_method": http_method.lower(),
+                    "path": path,
+                    "service_id": service_id,
+                    "languages": languages,
+                }
 
     return mapping
+
+
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])([A-Z])")
+
+
+def _spellings(chain: list[str], method_name: str) -> dict[str, list[str]]:
+    """Each SDK's spelling of one chain, as spelling to the languages that write it.
+
+    Only the mount chain differs between the two SDKs -- vendor, domain, version and method
+    segments are identical -- so this varies the middle. Where the two agree there is one key
+    serving both languages, because emitting it twice would be one entry wearing two names.
+    """
+    snake = ".".join([*chain, method_name])
+    camel = ".".join([_camel(segment) for segment in chain] + [method_name])
+    if snake == camel:
+        return {snake: ["python", "typescript"]}
+    return {snake: ["python"], camel: ["typescript"]}
+
+
+def _camel(segment: str) -> str:
+    head, *rest = segment.split("_")
+    return head + "".join(part[:1].upper() + part[1:] for part in rest)

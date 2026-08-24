@@ -153,7 +153,11 @@ def test_an_unresolvable_chain_costs_its_own_path_and_no_other():
         }
     )
 
-    assert set(mapping) == {"twilio.insights.v1.conferences.list"}
+    # `twilio-python`'s spelling. `CI-W588` records `twilio-node`'s beside it, and
+    # `test_rule_twilio_oai.py` holds that each is the other's camel-cased twin.
+    assert {s for s, e in mapping.items() if "python" in e["languages"]} == {
+        "twilio.insights.v1.conferences.list"
+    }
 
 
 def test_the_real_vendor_document_carries_path_item_keys_that_are_not_operations():
@@ -177,7 +181,9 @@ def test_the_real_vendor_document_carries_path_item_keys_that_are_not_operations
 
     mapping = build_twilio_map(document, domain="insights", version="v1")
 
-    assert set(mapping) == {
+    # `twilio-python`'s four. `CI-W588` records `twilio-node`'s spelling beside each, and
+    # `test_rule_twilio_oai.py` holds that every camel-cased key is one of these camel-cased.
+    assert {s for s, e in mapping.items() if "python" in e["languages"]} == {
         "twilio.insights.v1.conferences.list",
         "twilio.insights.v1.conferences.fetch",
         "twilio.insights.v1.conferences.conference_participants.list",

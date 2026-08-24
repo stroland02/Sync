@@ -34,7 +34,6 @@ from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.signals.registry import available_vendors
 from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbols
-from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.generated.symbols_twilio_oai import build_symbol_map as build_twilio_symbols
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -42,7 +41,6 @@ TS = FIXTURES / "ts"
 PY = FIXTURES / "py"
 TWILIO_SHAPE = FIXTURES / "twilio" / "insights_v1_shape.json"
 
-INSIGHTS_V1 = ProductDocument(filename="insights_v1.json", domain="insights", version="v1")
 
 STRIPE_SPEC = {
     "paths": {
@@ -61,23 +59,21 @@ def _repo(root: Path, name: str) -> RepoRef:
     )
 
 
-def _twilio_vendor(tmp_path) -> TwilioAdapter:
-    """The real adapter over the real product document, not a stub.
+def _twilio_vendor(tmp_path):
+    """The real rule over the real product document, not a stub.
 
     A stub answering `operation_for_symbol` would prove the indexer calls something. The point
     of the closing condition is that a symbol the indexer builds from a customer's source
     reaches an operation id the vendor's own specification declares, so the map is derived here
-    the way `registry._prepare_twilio` derives it.
+    the way the registry derives it -- through the rule, and read back through the tier.
     """
     shape = json.loads(TWILIO_SHAPE.read_text(encoding="utf-8"))
     map_path = tmp_path / "twilio-symbols.json"
     map_path.write_text(
-        json.dumps(build_twilio_symbols(shape, INSIGHTS_V1.domain, INSIGHTS_V1.version)),
+        json.dumps(build_twilio_symbols(shape, domain="insights", version="v1")),
         encoding="utf-8",
     )
-    return TwilioAdapter(
-        spec_dir=tmp_path, symbol_map_path=map_path, documents=[INSIGHTS_V1]
-    )
+    return symbol_resolver(map_path, vendor_id="twilio", cache_dir=tmp_path / "cache")
 
 
 def _stripe_vendor(tmp_path) -> object:
@@ -130,7 +126,7 @@ def test_a_twilio_call_site_in_python_resolves_to_a_twilio_operation(tmp_path):
 def test_a_camel_cased_mount_resolves_through_the_vendors_own_spelling_rule(tmp_path):
     """`callSummaries` in TypeScript is `call_summaries` in the map.
 
-    The rewrite is `TwilioAdapter._spelled`'s and the indexer knows nothing about it -- it
+    The rewrite is the twilio rule's `_spelled` and the indexer knows nothing about it -- it
     hands over the symbol the source spells and takes back an operation or None. Asserted
     because it is the case that proves the indexer is not quietly normalising on the vendor's
     behalf.
@@ -346,7 +342,7 @@ def test_the_binding_each_language_reads_is_declared_by_the_vendor():
     manifest and a module name for the import, because those are different strings in general.
     """
     stripe_binding = vendor_sdk_bindings()["stripe"]
-    twilio_binding = TwilioAdapter.sdk_bindings
+    twilio_binding = vendor_sdk_bindings()["twilio"]
 
     assert stripe_binding[typescript.TypeScriptAdapter.language_id]["package"] == "stripe"
     assert twilio_binding[typescript.TypeScriptAdapter.language_id]["package"] == "twilio"

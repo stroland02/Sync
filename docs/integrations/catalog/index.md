@@ -24,7 +24,7 @@ Missing a vendor entirely? [Writing a vendor adapter](../../writing-a-vendor-ada
 | [Ragie](ragie.md) | generated | dev-tools, ai |
 | [Retell AI](retell-ai.md) | generated | dev-tools, ai |
 | [Stripe](stripe.md) | generated | payment |
-| [Twilio](twilio.md) | coded | communication |
+| [Twilio](twilio.md) | generated | communication |
 | [Vercel](vercel.md) | generated | infrastructure |
 
 ## Recognized

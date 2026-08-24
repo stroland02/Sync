@@ -161,15 +161,15 @@ def test_stripe_emits_the_symbol_it_has_always_emitted():
 
 
 def test_twilio_emits_the_symbol_it_has_always_emitted():
-    from sync.signals.twilio.adapter import TwilioAdapter
+    from sync.signals.registry import vendor_sdk_bindings
 
-    vendor = StubVendor("twilio", TwilioAdapter.sdk_bindings)
+    vendor = StubVendor("twilio", vendor_sdk_bindings()["twilio"])
     asked = []
     for language, root, fixture in (
         (TypeScriptAdapter, TS, "twilio"),
         (PythonAdapter, PY, "twilio"),
     ):
-        probe = StubVendor("twilio", TwilioAdapter.sdk_bindings)
+        probe = StubVendor("twilio", vendor_sdk_bindings()["twilio"])
         list(language(probe).index(_repo(root, fixture)))
         asked.append(probe.asked)
 

@@ -12,6 +12,8 @@ through it, which is precisely the defect being fixed.
 
 from __future__ import annotations
 
+import re
+
 import argparse
 import dataclasses
 import inspect
@@ -31,7 +33,6 @@ from sync.signals.registry import (
     prepare_vendor,
 )
 from sync.signals.generated.adapter import GeneratedSpecAdapter
-from sync.signals.twilio.adapter import TwilioAdapter
 
 DSN = os.environ.get("SYNC_DSN", "postgresql://sync:sync@localhost:5433/sync")
 
@@ -116,7 +117,7 @@ def _run_args(cache: Path, vendor: str) -> argparse.Namespace:
 
 
 def test_a_twilio_run_reaches_the_twilio_adapter(monkeypatch, tmp_path):
-    """The claim the project rests on, and the one that was false. `TwilioAdapter` implements
+    """The claim the project rests on, and the one that was false. The twilio adapter implemented
     both halves of `VendorAdapter` and had no path by which a run could reach it, so the
     generality lived in the type system and not in the product.
     """
@@ -126,7 +127,7 @@ def test_a_twilio_run_reaches_the_twilio_adapter(monkeypatch, tmp_path):
 
     run(_run_args(cache, "twilio"))
 
-    assert selected and isinstance(selected[-1], TwilioAdapter)
+    assert selected and isinstance(selected[-1], GeneratedSpecAdapter)
 
 
 def test_a_stripe_run_still_reaches_the_stripe_adapter(monkeypatch, tmp_path):
@@ -180,6 +181,7 @@ def test_cli_imports_no_vendor_adapter_class():
 
     assert "StripeAdapter" not in source
     assert "TwilioAdapter" not in source
+    assert "StripeAdapter" not in source
 
 
 def test_the_registry_is_handed_nothing_that_belongs_to_one_vendor():
@@ -287,7 +289,7 @@ def test_the_ingest_refuses_a_vendor_that_cannot_correlate_a_request(tmp_path, c
 
 
 def test_the_ingest_accepts_twilio_as_correlator(tmp_path, capsys):
-    """TwilioAdapter implements RequestCorrelator, so ingest proceeds over its staged symbols."""
+    """A staged symbol map makes the tier a `RequestCorrelator`, so ingest proceeds."""
     cache = tmp_path / "cache"
     _stage_twilio(cache)
     (cache / "symbols.json").write_text("{}", encoding="utf-8")
@@ -299,4 +301,33 @@ def test_the_ingest_accepts_twilio_as_correlator(tmp_path, capsys):
     ))
 
     assert code == 0
+
+
+def test_the_registry_names_no_vendor_at_all():
+    """Track A's closing condition, asserted rather than described.
+
+    `CLAUDE.md` states it as a non-negotiable: the moment shared code knows a vendor's name, the
+    plugin story is dead. It was true of `_BUILDERS` for two vendors and of the module's own
+    prose for longer -- `test_no_configured_vendor_is_named_in_the_registry_itself` checked the
+    configured ones and could not see the two that were coded.
+
+    Every registered id, including the ones a test configuration adds, so a vendor moved into
+    this module tomorrow fails here rather than in review.
+    """
+    from sync.signals.registry import available_vendors
+
+    source = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "sync" / "signals" / "registry.py"
+    ).read_text(encoding="utf-8")
+
+    # On word boundaries. A substring search reports `orb` inside "forbids", and a guard that
+    # cries wolf is one somebody eventually loosens rather than reads.
+    named = sorted(
+        vendor for vendor in available_vendors()
+        if not vendor.startswith("mcp:")
+        and re.search(rf"{re.escape(vendor)}", source, re.IGNORECASE)
+    )
+
+    assert named == [], f"registry.py names {named}; a vendor's name belongs in its row"
 

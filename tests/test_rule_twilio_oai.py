@@ -13,6 +13,8 @@ participants, fetch, list).
 
 from __future__ import annotations
 
+import re
+
 import json
 from pathlib import Path
 
@@ -21,13 +23,11 @@ import pytest
 from sync.core import RequestCorrelator, VendorAdapter
 from sync.core.conformance import check_request_correlator
 from sync.signals.generated.symbols_stripe_openapi import build_symbol_map as build_stripe_symbol_map
-from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.generated.symbols_twilio_oai import SymbolCollision, build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures" / "twilio"
 SHAPE_FIXTURE = FIXTURES / "insights_v1_shape.json"
 
-INSIGHTS_V1 = ProductDocument(filename="insights_v1.json", domain="insights", version="v1")
 
 
 def _shape_spec() -> dict:
@@ -70,14 +70,20 @@ SDK_GROUND_TRUTH = {
 def test_the_symbol_map_reproduces_the_generated_sdk_exactly():
     """Total coverage, asserted as a set rather than as a threshold.
 
-    Every operation the document declares resolves, and resolves to the symbol the
-    published library exposes. Equality both ways is deliberate: a subset assertion would
-    pass while the map invented extra symbols nobody can call, and those are the ones that
-    silently bind a call site to the wrong operation.
+    Every operation the document declares resolves, and resolves to the symbol the published
+    library exposes. Equality both ways is deliberate: a subset assertion would pass while the
+    map invented extra symbols nobody can call, and those are the ones that silently bind a call
+    site to the wrong operation.
+
+    The ground truth is `twilio-python`'s spelling, so the comparison is against the keys that
+    language writes. `CI-W588` added the `twilio-node` spelling beside each, and
+    `test_every_camel_cased_key_is_the_node_spelling_of_a_python_one` is what stops those being
+    the invented symbols this equality exists to catch.
     """
     mapping = build_symbol_map(_shape_spec(), domain="insights", version="v1")
+    python_keys = {s for s, e in mapping.items() if "python" in e["languages"]}
 
-    assert set(mapping) == set(SDK_GROUND_TRUTH)
+    assert python_keys == set(SDK_GROUND_TRUTH)
     for symbol, (operation_id, http_method, path) in SDK_GROUND_TRUTH.items():
         # `service_id` is None throughout because this shape document declares no `tags`, and a
         # document that names no product must not have one invented for it -- that null is the
@@ -87,7 +93,31 @@ def test_the_symbol_map_reproduces_the_generated_sdk_exactly():
             "http_method": http_method,
             "path": path,
             "service_id": None,
+            "languages": mapping[symbol]["languages"],
         }
+
+
+def test_every_camel_cased_key_is_the_node_spelling_of_a_python_one():
+    """The other half of the equality above: nothing is invented.
+
+    Each TypeScript-only key must be one Python key with its mount segments camel-cased and
+    everything else identical, resolving to the same operation.
+    """
+    mapping = build_symbol_map(_shape_spec(), domain="insights", version="v1")
+
+    for symbol, entry in mapping.items():
+        if entry["languages"] != ["typescript"]:
+            continue
+        snake = _snake_mount(symbol)
+        assert snake in mapping, symbol
+        assert mapping[snake]["operation_id"] == entry["operation_id"]
+
+
+def _snake_mount(symbol: str) -> str:
+    head, *chain, verb = symbol.split(".")
+    prefix, chain = chain[:2], chain[2:]
+    snaked = [re.sub(r"(?<=[a-z0-9])([A-Z])", lambda m: "_" + m.group(1).lower(), s) for s in chain]
+    return ".".join([head, *prefix, *snaked, verb])
 
 
 def test_the_vendors_own_tag_becomes_the_service_the_operation_belongs_to():
@@ -281,7 +311,14 @@ def test_the_derivation_holds_on_a_second_product_it_was_not_written_against():
     spec = json.loads((FIXTURES / "messaging_v1_shape.json").read_text(encoding="utf-8"))
 
     mapping = build_symbol_map(spec, domain="messaging", version="v1")
-    mounts = {symbol.split(".")[3] for symbol in mapping}
+    # `twilio-python`'s mounts, which is what `MESSAGING_V1_SDK_MOUNTS` records. The node
+    # spellings sit beside them since `CI-W588` and are held by
+    # `test_every_camel_cased_key_is_the_node_spelling_of_a_python_one`.
+    mounts = {
+        symbol.split(".")[3]
+        for symbol, entry in mapping.items()
+        if "python" in entry["languages"]
+    }
 
     assert mounts == MESSAGING_V1_SDK_MOUNTS
 
@@ -296,262 +333,10 @@ def test_stripes_derivation_reaches_no_twilio_path_at_all():
     """
     assert build_stripe_symbol_map(_shape_spec()) == {}
 
-
-def test_the_adapter_satisfies_the_vendor_protocol(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert isinstance(adapter, VendorAdapter)
-    assert adapter.vendor_id == "twilio"
-
-
-def _written_map(tmp_path: Path) -> Path:
-    destination = tmp_path / "map.json"
-    destination.write_text(
-        json.dumps(build_symbol_map(_shape_spec(), domain="insights", version="v1")), encoding="utf-8"
-    )
-    return destination
-
-
-def test_operation_for_symbol_resolves_a_call_a_customer_could_have_written(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-
-    ref = adapter.operation_for_symbol("twilio.insights.v1.calls.annotation.fetch")
-
-    assert ref is not None
-    assert ref.operation_id == "FetchAnnotation"
-    assert ref.http_method == "get"
-    assert ref.path == "/v1/Voice/{CallSid}/Annotation"
-
-
-def test_operation_for_symbol_returns_none_for_a_symbol_it_cannot_place(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert adapter.operation_for_symbol("twilio.insights.v1.nonexistent.fetch") is None
-
-
-def test_fetch_changes_reads_two_tags_of_one_product_document(tmp_path):
-    """Real vendor bytes, real records. 2.1.0 to 2.3.0 is a release that broke things.
-
-    The pair is not adjacent on purpose: 2.5.0 to 2.6.9 produces zero breaking changes for
-    this document, so a test built on the two newest tags would pass with an empty list and
-    prove nothing.
-    """
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-
-    changes = list(adapter.fetch_changes("2.1.0", "2.3.0"))
-
-    assert changes
-    assert all(change.vendor_id == "twilio" for change in changes)
-    assert all(change.from_version == "2.1.0" and change.to_version == "2.3.0" for change in changes)
-    assert all(change.source == "oasdiff" for change in changes)
-    assert {change.kind for change in changes} == {"request-parameter-type-changed"}
-    assert {change.operation_id for change in changes} == {"ListConference", "ListConferenceParticipant"}
-
-
-def test_fetch_changes_keeps_the_raw_oasdiff_record():
-    """`raw` is what lets a better extractor re-derive against stored history."""
-    adapter = TwilioAdapter(spec_dir=FIXTURES, symbol_map_path=None, documents=(INSIGHTS_V1,))
-
-    change = next(iter(adapter.fetch_changes("2.1.0", "2.3.0")))
-
-    assert change.raw["id"] == "request-parameter-type-changed"
-    assert "PageSize" in change.raw["text"]
-
-
-def test_fetch_changes_records_which_product_document_a_change_came_from():
-    """`VendorChange` has no product axis, so the adapter puts one in `raw`.
-
-    A Twilio version spans 61 documents and `operation_id` is unique across the five
-    sampled here, but nothing in the specification promises that and the graph keys on
-    `(vendor_id, operation_id)`. Recording the document is what makes a collision
-    diagnosable instead of silently merging two products' changes.
-    """
-    adapter = TwilioAdapter(spec_dir=FIXTURES, symbol_map_path=None, documents=(INSIGHTS_V1,))
-
-    change = next(iter(adapter.fetch_changes("2.1.0", "2.3.0")))
-
-    assert change.raw["sync_product_document"] == "insights_v1.json"
-
-
-def test_fetch_changes_spans_every_document_a_version_names():
-    """A Twilio version is a tag over 61 documents, not one file.
-
-    This is where the protocol stops fitting: `fetch_changes(from_version, to_version)`
-    takes two version strings, and for Stripe each names one file. Here each names a
-    directory, and the adapter has to fan out across it. Registering the same document
-    twice is the cheapest way to prove the fan-out is real rather than a loop that runs
-    once -- a single-document adapter returns half these records.
-    """
-    one = TwilioAdapter(spec_dir=FIXTURES, symbol_map_path=None, documents=(INSIGHTS_V1,))
-    two = TwilioAdapter(
-        spec_dir=FIXTURES,
-        symbol_map_path=None,
-        documents=(INSIGHTS_V1, ProductDocument("insights_v1.json", "insights", "v1")),
-    )
-
-    assert len(list(two.fetch_changes("2.1.0", "2.3.0"))) == 2 * len(list(one.fetch_changes("2.1.0", "2.3.0")))
-
-
-def test_a_missing_document_for_a_version_raises_rather_than_reporting_no_changes():
-    """An absent file must never read as a vendor who changed nothing.
-
-    That is the failure mode the whole product exists to catch, arriving from our own side.
-    """
-    adapter = TwilioAdapter(spec_dir=FIXTURES, symbol_map_path=None, documents=(INSIGHTS_V1,))
-
-    with pytest.raises(FileNotFoundError):
-        list(adapter.fetch_changes("2.1.0", "9.9.9"))
-
-
-def test_the_enum_noise_filter_is_applied_to_twilio_too():
-    """76 of 83 records in this real release are `response-property-enum-value-added`.
-
-    Stripe's adapter carries that kind as `NOISE_KINDS` with a comment calling it a
-    judgement about one vendor's release habits. Measured against Twilio it is 92% of the
-    release, against Stripe's roughly 80% -- so it is not a Stripe habit, and the constant
-    is duplicated knowledge rather than vendor knowledge. Asserted here so that the
-    duplication is visible in the suite rather than only in a report.
-    """
-    adapter = TwilioAdapter(spec_dir=FIXTURES, symbol_map_path=None, documents=(INSIGHTS_V1,))
-
-    kinds = {change.kind for change in adapter.fetch_changes("2.1.0", "2.3.0")}
-
-    assert "response-property-enum-value-added" not in kinds
-
-
-def test_a_node_spelling_resolves_only_when_the_language_says_node(tmp_path):
-    """`twilio-python` exposes `call_summaries`; `twilio-node` exposes `callSummaries`. Same
-    vendor, same operation, two spellings.
-
-    Every key this map produces is snake_case, so a call site indexed from TypeScript could
-    never resolve against it. Resolution failure is silent -- it yields no finding -- so a
-    polyglot repository lost those bindings with nothing saying so. The fix is to tell
-    `operation_for_symbol` which language it is resolving for rather than have it guess from
-    the string: a spelling that is right for one SDK must be wrong for the other, in both
-    directions, or the map is just accepting anything.
-    """
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    python_symbol = "twilio.insights.v1.call_summaries.list"
-    node_symbol = "twilio.insights.v1.callSummaries.list"
-
-    assert adapter.operation_for_symbol(python_symbol, language="python") is not None
-    assert adapter.operation_for_symbol(node_symbol, language="typescript") is not None
-    assert adapter.operation_for_symbol(node_symbol, language="python") is None
-    assert adapter.operation_for_symbol(python_symbol, language="typescript") is None
-
-
-# --- RequestCorrelator protocol ----------------------------------------------------
-
-
-def test_the_adapter_satisfies_the_correlator_protocol(tmp_path):
-    """The protocol is what `sync.telemetry` and `sync sentry-errors` depend on. If the
-    adapter drifts out of it, the ingest silently correlates nothing."""
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert isinstance(adapter, RequestCorrelator)
-
-
-def test_an_instance_path_resolves_through_its_template(tmp_path):
-    """`/v1/Voice/{Sid}` is the template. `CA1234567890abcdef1234567890abcdef` is an identifier
-    the specification never names. Matching it is the entire correlation."""
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    operation = adapter.operation_for_request(
-        "GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"
-    )
-
-    assert operation is not None
-    assert operation.operation_id == "FetchCall"
-    assert operation.http_method == "get"
-    assert operation.path == "/v1/Voice/{Sid}"
-
-
-def test_a_nested_subresource_path_resolves_through_its_template(tmp_path):
-    """Sub-resources like conferences participants have multiple placeholders in the path."""
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    operation = adapter.operation_for_request(
-        "GET", "/v1/Conferences/CF1234567890abcdef/Participants/PA1234567890abcdef"
-    )
-
-    assert operation is not None
-    assert operation.operation_id == "FetchConferenceParticipant"
-    assert operation.path == "/v1/Conferences/{ConferenceSid}/Participants/{ParticipantSid}"
-
-
-def test_the_returned_path_is_the_published_template_not_the_request(tmp_path):
-    """What gets stored. The template is Twilio's own published string and carries no customer
-    data; the request path carries a call SID. This is the privacy boundary."""
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    sid = "CA1234567890abcdef1234567890abcdef"
-    operation = adapter.operation_for_request("GET", f"/v1/Voice/{sid}")
-
-    assert operation is not None
-    assert operation.path == "/v1/Voice/{Sid}"
-    assert sid not in operation.path
-    assert sid not in operation.operation_id
-
-
-def test_the_method_selects_between_operations_on_one_path(tmp_path):
-    """`/v1/Voice/Settings` has both GET (FetchAccountSettings) and POST (UpdateAccountSettings)."""
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    get_op = adapter.operation_for_request("GET", "/v1/Voice/Settings")
-    post_op = adapter.operation_for_request("POST", "/v1/Voice/Settings")
-
-    assert get_op is not None and get_op.operation_id == "FetchAccountSettings"
-    assert post_op is not None and post_op.operation_id == "UpdateAccountSettings"
-
-
-def test_the_method_is_matched_case_insensitively(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert adapter.operation_for_request("get", "/v1/Voice/Settings").operation_id == "FetchAccountSettings"
-
-
-def test_a_trailing_slash_does_not_prevent_a_match(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert adapter.operation_for_request("GET", "/v1/Voice/Settings/").operation_id == "FetchAccountSettings"
-
-
-def test_an_unknown_path_correlates_to_nothing(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert adapter.operation_for_request("GET", "/v1/Unknown/Resource") is None
-
-
-def test_a_method_the_operation_does_not_support_correlates_to_nothing(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    assert adapter.operation_for_request("DELETE", "/v1/Voice/Settings") is None
-
-
-def test_the_adapter_passes_the_correlator_conformance_kit(tmp_path):
-    adapter = TwilioAdapter(
-        spec_dir=FIXTURES, symbol_map_path=_written_map(tmp_path), documents=(INSIGHTS_V1,)
-    )
-    check_request_correlator(
-        adapter,
-        known_request=("GET", "/v1/Voice/CA1234567890abcdef1234567890abcdef"),
-        identifier="CA1234567890abcdef1234567890abcdef",
-    )
-
+# Everything below this point tested `TwilioAdapter` -- construction, `fetch_changes` across
+# documents, the noise filter and request correlation -- and retired with it in `CI-W588`. Each
+# property is now held against the tier that serves every vendor: multi-document diffing and the
+# per-document cheap trigger in `test_generated_observability.py`, the noise filter in
+# `test_generated_adapter_noise.py` where it is per-row rather than a module constant, and
+# correlation from a staged map in `test_generated_adapter.py`. The derivation above is what is
+# specific to this rule, and it is unchanged.

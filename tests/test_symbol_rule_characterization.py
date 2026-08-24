@@ -39,7 +39,12 @@ TWILIO_SPEC = json.loads(
 # Measured by execution on 2026-08-23, not copied from a document.
 STRIPE_WITHOUT_SDK = "cf8641cca4e454d6023556f066c18db0a1893d8b249b4c89143985426bfa5527"
 STRIPE_WITH_SDK = "808500e370b7180645c5bd087deb20c4a391261d7c807b8b51d7d756feda5fcb"
-TWILIO_INSIGHTS_V1 = "3aa3ba31c7fc7abfb0ed68fc35799f205c88ed34701590079c6ac4a690bf6267"
+# Re-pinned by `CI-W588`, deliberately and once. Retiring `TwilioAdapter` retired the lookup-time
+# rewrite that turned a TypeScript `callSummaries` into the map's `call_summaries` key, so the rule
+# now records both spellings with the language that writes each -- which is what stripe's rule
+# already did, and what the tier filters on. Seventeen entries became twenty: three chains have a
+# camelCase variant. The old digest was 3aa3ba31.
+TWILIO_INSIGHTS_V1 = "19a347b4c3097d129467862006f7c1eac2a9f02a840113807589586bcba7325a"
 
 
 def test_the_stripe_rule_emits_what_it_emitted_before_the_move():
@@ -59,10 +64,27 @@ def test_the_stripe_rule_reads_the_sdk_document_and_answers_differently():
     assert STRIPE_WITH_SDK != STRIPE_WITHOUT_SDK
 
 
+def test_the_twilio_rule_records_both_spellings_of_a_camel_cased_chain():
+    """The capability that would otherwise have been lost with the adapter.
+
+    `twilio-python` writes `call_summaries` and `twilio-node` writes `callSummaries`. Nothing
+    else in the chain differs, and a caller offering one under the other language must not
+    resolve -- that is a call site in a file that does not contain the call.
+    """
+    mapping = build_twilio_map(TWILIO_SPEC, domain="insights", version="v1")
+
+    assert mapping["twilio.insights.v1.call_summaries.list"]["languages"] == ["python"]
+    assert mapping["twilio.insights.v1.callSummaries.list"]["languages"] == ["typescript"]
+    assert (
+        mapping["twilio.insights.v1.call_summaries.list"]["operation_id"]
+        == mapping["twilio.insights.v1.callSummaries.list"]["operation_id"]
+    )
+
+
 def test_the_twilio_rule_emits_what_it_emitted_before_the_move():
     mapping = build_twilio_map(TWILIO_SPEC, domain="insights", version="v1")
 
-    assert len(mapping) == 17
+    assert len(mapping) == 20
     assert symbol_map_digest(mapping) == TWILIO_INSIGHTS_V1
 
 
@@ -75,7 +97,7 @@ def test_the_twilio_rule_emits_what_it_emitted_before_the_move():
         ),
         (
             build_twilio_map(TWILIO_SPEC, domain="insights", version="v1"),
-            {"http_method", "operation_id", "path", "service_id"},
+            {"http_method", "languages", "operation_id", "path", "service_id"},
         ),
     ],
     ids=["stripe", "twilio"],
@@ -86,8 +108,9 @@ def test_each_rule_states_the_same_fields_for_every_symbol_it_emits(mapping, exp
     accident is a field quietly going missing for a subset of symbols -- the digests above would
     report that, and would not say what to look at.
 
-    The two rules differ here, which is the point: Stripe derives per-language spellings and
-    Twilio does not, so `languages` is present for one and absent for the other.
+    Both rules derive per-language spellings since `CI-W588`, so both carry `languages`. They
+    reached it from opposite directions -- stripe recorded it at build time from the start, twilio
+    rewrote at lookup time until the adapter that did the rewriting was retired.
     """
     assert mapping, "an empty mapping would satisfy every assertion below vacuously"
     for symbol, entry in mapping.items():

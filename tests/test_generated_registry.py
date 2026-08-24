@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from sync.signals import registry
+from sync.signals import registry, staging
 from sync.signals.generated import GeneratedSpecAdapter, STAINLESS_MANIFEST, SPEAKEASY_MANIFEST
 from sync.signals.registry import (
     VendorContext,
@@ -30,7 +30,6 @@ from sync.signals.registry import (
     load_vendor,
     prepare_vendor,
 )
-from sync.signals.twilio.adapter import TwilioAdapter
 
 MANIFESTS = Path(__file__).parent / "fixtures" / "manifests"
 
@@ -142,14 +141,15 @@ def test_the_hand_written_adapters_still_resolve_to_themselves(tmp_path):
     cache = tmp_path / "cache"
     cache.mkdir()
     (cache / registry.SYMBOL_MAP_FILENAME).write_text("{}", encoding="utf-8")
-    (cache / registry.TWILIO_PRODUCTS_FILENAME).write_text(
+    (cache / staging.TWILIO_PRODUCTS_FILENAME).write_text(
         json.dumps([{"filename": "x.json", "domain": "d", "version": "v1"}]), encoding="utf-8"
     )
 
-    # Stripe is a configuration row since `CI-W586`, so the discrimination this test exists for
-    # now runs the other way: the one remaining coded vendor must not resolve to the tier.
+    # Both are configuration rows since `CI-W588`, and no adapter is coded at all. What this
+    # test now says is that the tier serves them -- and that a staged map makes it the
+    # correlating one, which is what a call site and a span both need.
     assert isinstance(load_vendor("stripe", _context(cache)), GeneratedSpecAdapter)
-    assert isinstance(load_vendor("twilio", _context(cache)), TwilioAdapter)
+    assert isinstance(load_vendor("twilio", _context(cache)), GeneratedSpecAdapter)
 
 
 def test_configuration_cannot_shadow_a_hand_written_adapter(tmp_path, monkeypatch):
@@ -171,11 +171,11 @@ def test_configuration_cannot_shadow_a_hand_written_adapter(tmp_path, monkeypatc
     cache = tmp_path / "cache"
     cache.mkdir()
     (cache / registry.SYMBOL_MAP_FILENAME).write_text("{}", encoding="utf-8")
-    (cache / registry.TWILIO_PRODUCTS_FILENAME).write_text(
+    (cache / staging.TWILIO_PRODUCTS_FILENAME).write_text(
         json.dumps([{"filename": "x.json", "domain": "d", "version": "v1"}]), encoding="utf-8"
     )
 
-    assert isinstance(load_vendor("twilio", _context(cache)), TwilioAdapter)
+    assert isinstance(load_vendor("twilio", _context(cache)), GeneratedSpecAdapter)
 
 
 def test_a_configured_vendor_is_offered_on_the_command_line(configured):
@@ -187,10 +187,10 @@ def test_a_configured_vendor_is_offered_on_the_command_line(configured):
 
     for entry in CONFIG:
         assert entry["vendor_id"] in offered
-    # The one remaining hand-written adapter is not displaced by configuration arriving.
-    # Stripe left this set in `CI-W586`: it is a row now, so under a test configuration that
-    # does not declare it, it is correctly absent rather than coded.
-    assert "twilio" in offered
+    # No vendor is coded since `CI-W588`, so under a test configuration declaring only `CONFIG`
+    # the offered set is exactly what that file names. That every entry appears is asserted
+    # above; that nothing else does is what says configuration is now the whole story.
+    assert set(offered) == {entry["vendor_id"] for entry in CONFIG}
 
 
 def test_no_configured_vendor_is_named_in_the_registry_itself():
