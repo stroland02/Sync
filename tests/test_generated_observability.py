@@ -19,6 +19,7 @@ No test here touches the network. The fetch is injected and the manifests are co
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from sync.signals.generated.adapter import (
     NO_SPECIFICATION,
     ONE_DOCUMENT,
     SPEC_UNREACHABLE,
+    DOCUMENT_KEY,
     GeneratedSpecAdapter,
 )
 
@@ -64,7 +66,7 @@ class _CountingFetch:
         return self.bodies[url]
 
 
-def _stainless(url: str | None, spec_hash: str | None = None, endpoints: int = 42):
+def _stainless(url: str | None, spec_hash: str | None = None, endpoints: int = 42, label: str = ""):
     """Built by the real parser, so these cases exercise the chain a run exercises."""
     lines = [f"configured_endpoints: {endpoints}"]
     if url is not None:
@@ -73,7 +75,19 @@ def _stainless(url: str | None, spec_hash: str | None = None, endpoints: int = 4
         lines.append(f"openapi_spec_hash: {spec_hash}")
     source = parse_manifest(STAINLESS_MANIFEST, "\n".join(lines) + "\n")
     assert source is not None
-    return source
+    return dataclasses.replace(source, label=label) if label else source
+
+
+OTHER_BASE = "https://storage.googleapis.com/stainless-sdk-openapi-specs/acme/sms-base.json"
+OTHER_HEAD = "https://storage.googleapis.com/stainless-sdk-openapi-specs/acme/sms-head.json"
+
+
+class _TwoDocumentFetch:
+    """A different document per URL, so a diff that read the wrong cache file would
+    compare a document against itself and produce nothing."""
+
+    def __call__(self, url: str) -> str:
+        return BASE_SPEC if url in (MIRROR_BASE, OTHER_BASE) else HEAD_SPEC
 
 
 def _speakeasy(filename: str):
@@ -343,3 +357,66 @@ def test_naming_no_url_at_all_is_reported_as_its_own_failure(tmp_path):
     sources = {"v1": _stainless(None), "v2": _stainless(None)}
 
     assert _adapter(tmp_path, sources).observability("v1", "v2").reason == NO_SPECIFICATION
+
+
+# --- a vendor whose specification is several documents -----------------------------
+
+
+def test_a_vendor_with_two_documents_diffs_both_and_names_which_produced_each(tmp_path):
+    """One vendor publishes sixty documents per version and a customer calls two of them.
+
+    Until the tier can hold more than one per version, moving such a vendor onto it would diff
+    the first document and silently report nothing about the other fifty-nine -- which reads
+    exactly like a vendor that shipped no breaking change.
+    """
+    sources = {
+        "v1": (_stainless(MIRROR_BASE, "a", label="voice"), _stainless(OTHER_BASE, "a", label="sms")),
+        "v2": (_stainless(MIRROR_HEAD, "b", label="voice"), _stainless(OTHER_HEAD, "b", label="sms")),
+    }
+    adapter = _adapter(tmp_path, sources, fetch=_TwoDocumentFetch())
+
+    changes = list(adapter.fetch_changes("v1", "v2"))
+
+    assert changes, "two changed documents produced no records at all"
+    produced = {change.raw.get(DOCUMENT_KEY) for change in changes}
+    assert produced == {"voice", "sms"}
+
+
+def test_one_unfetchable_document_stops_the_pair_rather_than_half_reporting(tmp_path):
+    """Half a diff presented as a whole one is the failure mode this product exists to prevent:
+    the records that arrive look like the complete answer and nothing says otherwise."""
+    sources = {
+        "v1": (_stainless(MIRROR_BASE, "a", label="voice"), _stainless(None, "a", label="sms")),
+        "v2": (_stainless(MIRROR_HEAD, "b", label="voice"), _stainless(None, "b", label="sms")),
+    }
+    adapter = _adapter(tmp_path, sources)
+
+    verdict = adapter.observability("v1", "v2")
+
+    assert verdict.observable is False
+    assert "sms" in verdict.detail
+
+
+def test_a_single_source_is_still_accepted_unchanged(tmp_path):
+    """Every existing caller passes one `SpecSource` per version and must keep working."""
+    adapter = _adapter(
+        tmp_path,
+        {"v1": _stainless(MIRROR_BASE, "a"), "v2": _stainless(MIRROR_HEAD, "b")},
+    )
+
+    assert adapter.observability("v1", "v2").observable is True
+
+
+def test_two_documents_in_one_version_do_not_share_a_cache_file(tmp_path):
+    """The cache is keyed by version, and two documents in one version would collide -- the
+    second fetch would read the first document back and diff it against itself."""
+    fetch = _TwoDocumentFetch()
+    sources = {
+        "v1": (_stainless(MIRROR_BASE, "a", label="voice"), _stainless(OTHER_BASE, "a", label="sms")),
+        "v2": (_stainless(MIRROR_HEAD, "b", label="voice"), _stainless(OTHER_HEAD, "b", label="sms")),
+    }
+    list(_adapter(tmp_path, sources, fetch=fetch).fetch_changes("v1", "v2"))
+
+    cached = sorted(p.name for p in (tmp_path / "specs").glob("*.json"))
+    assert len(cached) == 4, cached
+

@@ -52,6 +52,14 @@ class SpecSource:
     as absent, because nothing downstream can resolve it.
     """
 
+    label: str = ""
+    """Which of a vendor's documents this is, for a vendor whose specification is several.
+
+    Empty for the ordinary case of one document per version. It is what keeps two documents in
+    one version from sharing a cache file, and what a record carries so a reader knows which
+    document produced it.
+    """
+
     spec_reference: str | None = None
     """A location the manifest names that this build cannot retrieve, recorded rather than dropped.
 

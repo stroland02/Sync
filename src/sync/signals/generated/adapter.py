@@ -159,6 +159,10 @@ NO_SPECIFICATION = "no-specification"
 ONE_DOCUMENT = "one-document"
 SPEC_UNREACHABLE = "spec-unreachable"
 
+# Where a record says which of a vendor's documents produced it. Namespaced beside
+# `PROVENANCE_KEY` for the same reason: it sits next to oasdiff's own record, not in it.
+DOCUMENT_KEY = "sync_source_document"
+
 
 @dataclass(frozen=True)
 class Observability:
@@ -280,7 +284,13 @@ class GeneratedSpecAdapter:
         sdk_source_generator: str = DEFAULT_GENERATOR,
     ) -> None:
         self._vendor_id = vendor_id
-        self._sources = sources
+        # A version may name several documents -- one vendor publishes sixty per version and
+        # a customer calls two of them. Normalised to a tuple here so every caller that passes
+        # one keeps working and nothing below has to ask which shape it received.
+        self._sources: dict[str, tuple[SpecSource, ...]] = {
+            version: (value,) if isinstance(value, SpecSource) else tuple(value)
+            for version, value in sources.items()
+        }
         self._fetch = fetch
         self._cache_dir = Path(cache_dir)
         self._vendor_spec_urls = vendor_spec_urls or {}
@@ -514,16 +524,36 @@ class GeneratedSpecAdapter:
         manifest said, so a deployment supplying a versioned URL per version restores a vendor
         its manifest cannot describe -- with no code change and no entry naming that vendor.
         """
-        base = self._sources.get(from_version)
-        head = self._sources.get(to_version)
+        base_documents = self._sources.get(from_version)
+        head_documents = self._sources.get(to_version)
 
-        if base is None or head is None:
-            missing = from_version if base is None else to_version
+        if not base_documents or not head_documents:
+            missing = from_version if not base_documents else to_version
             return Observability(
                 False, NO_MANIFEST,
                 f"no manifest parsed for {missing}, so there is nothing to compare",
             )
 
+        if len(base_documents) != len(head_documents):
+            return Observability(
+                False, NO_MANIFEST,
+                f"{from_version} names {len(base_documents)} documents and {to_version} names "
+                f"{len(head_documents)}, so there is no pairing to diff",
+            )
+
+        # Every document, not the first. A pair that reported on one and stayed silent about the
+        # rest would present half a diff as a whole one, which reads exactly like a vendor that
+        # shipped no breaking change.
+        for base, head in zip(base_documents, head_documents):
+            verdict = self._pair_observability(from_version, to_version, base, head)
+            if not verdict.observable:
+                return verdict
+        return OBSERVABLE
+
+    def _pair_observability(
+        self, from_version: str, to_version: str, base: SpecSource, head: SpecSource
+    ) -> Observability:
+        named = f" ({head.label})" if head.label else ""
         if not (base.is_fetchable and head.is_fetchable):
             # Two opposite states arrive here and used to leave under one name. A vendor that
             # named a location we cannot retrieve publishes a specification; telling its operator
@@ -532,16 +562,17 @@ class GeneratedSpecAdapter:
             if reference is not None:
                 return Observability(
                     False, SPEC_UNREACHABLE,
-                    f"the manifest names {reference}, which resolves only with the vendor's own "
-                    f"registry credential; the specification exists and this deployment cannot "
-                    f"retrieve it",
+                    f"the manifest names {reference}{named}, which resolves only with the "
+                    f"vendor's own registry credential; the specification exists and this "
+                    f"deployment cannot retrieve it",
                 )
             # Cloudflare and Orb publish an endpoint count and no URL. That is a coverage gap
             # this approach does not close, and it is reported rather than discarded: the vendor
             # still needs a hand-written adapter and still contributes a coverage denominator.
             return Observability(
                 False, NO_SPECIFICATION,
-                f"manifest names no spec to fetch ({head.endpoint_count} endpoints configured); "
+                f"manifest names no spec to fetch{named} "
+                f"({head.endpoint_count} endpoints configured); "
                 f"this vendor needs a hand-written adapter",
             )
 
@@ -569,38 +600,46 @@ class GeneratedSpecAdapter:
             log.info("%s: %s", self._vendor_id, verdict.detail)
             return []
 
-        base = self._sources[from_version]
-        head = self._sources[to_version]
+        collected: list[VendorChange] = []
+        for base, head in zip(self._sources[from_version], self._sources[to_version]):
+            if not head.changed_from(base):
+                # The whole economic argument, asked per document: two identical hashes mean this
+                # document did not move, and nothing is downloaded for it. Its siblings are still
+                # asked the same question rather than skipped with it.
+                log.debug(
+                    "%s: spec hash unmoved between %s and %s%s",
+                    self._vendor_id, from_version, to_version,
+                    f" ({head.label})" if head.label else "",
+                )
+                continue
 
-        if not head.changed_from(base):
-            # The whole economic argument. Two identical hashes mean the specification did not
-            # move, and nothing is downloaded.
-            log.debug("%s: spec hash unmoved between %s and %s", self._vendor_id, from_version, to_version)
-            return []
+            base_url, base_provenance = self._spec_url(from_version, base)
+            head_url, head_provenance = self._spec_url(to_version, head)
 
-        base_url, base_provenance = self._spec_url(from_version, base)
-        head_url, head_provenance = self._spec_url(to_version, head)
+            base_path = self._spec(from_version, base_url, base.label)
+            head_path = self._spec(to_version, head_url, head.label)
 
-        base_path = self._spec(from_version, base_url)
-        head_path = self._spec(to_version, head_url)
+            # Unfiltered, and the module docstring carries the measurement that says so. A kind
+            # list here would be one vendor's release habits applied to every configured vendor.
+            records = run_oasdiff_breaking(base_path, head_path)
+            changes = to_vendor_changes(
+                records, vendor_id=self._vendor_id,
+                from_version=from_version, to_version=to_version,
+            )
 
-        # Unfiltered, and the module docstring carries the measurement that says so. A kind list
-        # here would be one vendor's release habits applied to every configured vendor.
-        records = run_oasdiff_breaking(base_path, head_path)
-        changes = to_vendor_changes(
-            records, vendor_id=self._vendor_id, from_version=from_version, to_version=to_version
-        )
-
-        # The weaker of the two sides is what the diff is worth: a comparison against a mirror
-        # is a mirror-grade comparison even if the other end came from the vendor.
-        provenance = (
-            VENDOR_PUBLISHED
-            if base_provenance == head_provenance == VENDOR_PUBLISHED
-            else GENERATOR_MIRROR
-        )
-        for change in changes:
-            change.raw[PROVENANCE_KEY] = provenance
-        return changes
+            # The weaker of the two sides is what the diff is worth: a comparison against a
+            # mirror is a mirror-grade comparison even if the other end came from the vendor.
+            provenance = (
+                VENDOR_PUBLISHED
+                if base_provenance == head_provenance == VENDOR_PUBLISHED
+                else GENERATOR_MIRROR
+            )
+            for change in changes:
+                change.raw[PROVENANCE_KEY] = provenance
+                if head.label:
+                    change.raw[DOCUMENT_KEY] = head.label
+            collected.extend(changes)
+        return collected
 
     def _spec_url(self, version: str, source: SpecSource) -> tuple[str, str]:
         """The URL to fetch this version from, and what that artifact is worth.
@@ -614,7 +653,7 @@ class GeneratedSpecAdapter:
         assert source.spec_url is not None
         return source.spec_url, GENERATOR_MIRROR
 
-    def _spec(self, version: str, url: str) -> Path:
+    def _spec(self, version: str, url: str, label: str = "") -> Path:
         """A local copy of one version's specification.
 
         A version names an immutable artifact, so a populated cache file is already what a fresh
@@ -634,7 +673,10 @@ class GeneratedSpecAdapter:
         ever attempted when nothing is cached, which leaves the fallback unreachable rather than
         cautious.
         """
-        destination = self._cache_dir / f"{self._vendor_id}-{version}.json"
+        # The label is in the name because two documents in one version would otherwise share a
+        # file: the second fetch would read the first back and diff a document against itself.
+        stem = f"{self._vendor_id}-{version}" + (f"-{label}" if label else "")
+        destination = self._cache_dir / f"{stem}.json"
         if destination.exists() and destination.stat().st_size > 0:
             return destination
 
