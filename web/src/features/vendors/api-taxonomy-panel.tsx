@@ -2,7 +2,7 @@
  * The integration-surface catalogue: what kinds of API services the platform watches and
  * intends to watch, rendered on the Services page above the workspace's own indexed services.
  *
- * A capability catalogue, not graph data â€” `api-service-taxonomy.ts` carries the ruling. The
+ * A capability catalogue, not graph data — `api-service-taxonomy.ts` carries the ruling. The
  * status tag is the honest split: "watched today" is a class the pipeline genuinely binds in
  * this deployment, "planned" is declared scope. Examples are recognisable services of the
  * class, never claims this workspace calls them.
@@ -21,11 +21,11 @@ export function ApiTaxonomyPanel() {
         <InfoHint label="About integration surfaces">
           Every kind of API service the platform watches or intends to watch. A class marked
           watched-today is genuinely bound by this deployment&rsquo;s pipeline; planned is
-          declared scope. The examples name services of the class â€” they are not claims that
+          declared scope. The examples name services of the class — they are not claims that
           this workspace calls them, which is what the table below this panel answers.
         </InfoHint>
       }
-      caption="The taxonomy of API kinds â€” watched today, or declared scope. The services this workspace actually calls are in the table beneath."
+      caption="The taxonomy of API kinds — watched today, or declared scope. The services this workspace actually calls are in the table beneath."
     >
       <div className="grid gap-section md:grid-cols-2 xl:grid-cols-3">
         {API_SERVICE_CLASSES.map((cls) => (

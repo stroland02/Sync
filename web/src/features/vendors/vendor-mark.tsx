@@ -14,23 +14,23 @@
  *
  * - **It put third-party marks in the product**, each under its own licence, none reviewed.
  * - **It called a third party from the operator's browser on every render of every vendor.** That
- *   endpoint learns which integrations a customer watches, which is a fact about their codebase â€”
+ *   endpoint learns which integrations a customer watches, which is a fact about their codebase —
  *   and Sync's position is that it holds as little of that as it can.
  * - **It made the console's appearance depend on a network** it does not control. A mark that
  *   resolves at a desk and not in a locked-down deployment is a screen that looks broken there.
  *
- * Deleted rather than flagged off. `CLAUDE.md`: *delete rather than deprecate* â€” a disabled fetch
+ * Deleted rather than flagged off. `CLAUDE.md`: *delete rather than deprecate* — a disabled fetch
  * is one edit away from being a live one, and `fetchMarks` already defaulted to `true`.
  *
  * ## The colour is identity, not judgement
  *
- * `console-surface.md` lets three channels carry a claim, and none of them is this â€” a vendor's
+ * `console-surface.md` lets three channels carry a claim, and none of them is this — a vendor's
  * slot says *which vendor*, exactly as a series colour on a chart says which series. It is drawn
  * from `SERIES_SLOTS`, the categorical palette `DESIGN.md` already argues and whose contrast is
  * already proven there, so this introduces **no new token**. A ninth vendor takes `OTHER_INK`,
  * the contract's own answer for a member past the eighth.
  *
- * The letters carry the identity on their own, so the colour is never the only channel â€” the same
+ * The letters carry the identity on their own, so the colour is never the only channel — the same
  * rule a status colour follows.
  */
 
@@ -56,7 +56,7 @@ export function monogramFor(vendorId: string): string {
  * Which palette slot a vendor takes.
  *
  * Hashed from the id rather than assigned by position, so a vendor keeps its colour wherever it
- * appears and whatever else is on screen beside it â€” a mark that changed colour between two
+ * appears and whatever else is on screen beside it — a mark that changed colour between two
  * screens would be read as two different integrations.
  *
  * Deliberately not a generated hue: the slots are the contract's, and their contrast against the

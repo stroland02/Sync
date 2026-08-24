@@ -36,6 +36,7 @@ import type {
   FindingOrder,
   VendorFindingsPage,
   PatchResponse,
+  RunActivityResponse,
   WorkflowState,
   RepositoryGraphResponse,
 } from "@/api/types"
@@ -318,6 +319,21 @@ export function fetchDismissalTally(signal?: AbortSignal): Promise<DismissalTall
 export function fetchPatch(findingId: string, signal?: AbortSignal): Promise<PatchResponse> {
   return getJson<PatchResponse>(
     `/api/findings/${encodeURIComponent(findingId)}/patch`,
+    signal,
+  )
+}
+
+/**
+ * The live feed of one finding's patch run, oldest first. `{events: []}` is a 200 and an
+ * answer, never a 404 — the panel says which nothings it can and cannot tell apart.
+ */
+export function fetchRunActivity(
+  repoId: string,
+  findingId: string,
+  signal?: AbortSignal,
+): Promise<RunActivityResponse> {
+  return getJson<RunActivityResponse>(
+    `/api/repositories/${encodeURIComponent(repoId)}/findings/${encodeURIComponent(findingId)}/activity`,
     signal,
   )
 }

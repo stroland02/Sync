@@ -466,6 +466,27 @@ export interface DismissalTally {
   total: number
 }
 
+/**
+ * One recorded event of a patch run. `tool` is null on a note — prose names no tool. `seq` is
+ * the recorder's own counter and the only order; `summary` is untrusted evidence and renders
+ * as text, never as markup.
+ */
+export interface RunActivityEvent {
+  seq: number
+  at: string
+  kind: "tool" | "note" | "refusal"
+  tool: string | null
+  summary: string
+}
+
+/**
+ * The feed for one finding's run, oldest first. An empty list folds two nothings the payload
+ * cannot separate — a run predating activity capture and one not started — and the view says so.
+ */
+export interface RunActivityResponse {
+  events: RunActivityEvent[]
+}
+
 export interface WorkflowState {
   nodes: WorkflowNode[]
   outcome: WorkflowOutcome | null

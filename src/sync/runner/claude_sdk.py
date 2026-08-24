@@ -18,7 +18,14 @@ import asyncio
 from pathlib import Path
 from typing import Any, Callable
 
-from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, ResultMessage, query
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    HookMatcher,
+    ResultMessage,
+    TextBlock,
+    query,
+)
 
 from sync.runner.provider import require_provider
 
@@ -79,8 +86,14 @@ SETTING_SOURCES: list[str] = []
 
 # What a caller hands over: the run's identity, and the list a hook appends a refusal to.
 # The list is the runner's, because only the runner knows when the run is over and the
-# refusals are worth reading.
-HookFactory = Callable[[str, list[str]], dict[str, list[Any]]]
+# refusals are worth reading. A factory may additionally accept an `on_event` recorder as a
+# third positional -- the runner passes one only when its own caller supplied one, so a
+# two-argument factory keeps working for every run that records nothing.
+HookFactory = Callable[..., dict[str, list[Any]]]
+
+# The note ceiling matches `GraphStore.record_run_activity`'s summary ceiling: the cut happens
+# at this seam so every recorder receives the bounded form rather than each re-implementing it.
+NOTE_MAX_CHARS = 500
 
 
 def _subprocess_env(provider) -> dict[str, str]:
@@ -115,14 +128,37 @@ class ClaudeSdkRunner:
         # an ungated run reports as an ordinary success.
         self._hooks_for = hooks_for
 
-    def run(self, prompt: str, repo_path: Path, identity: str) -> None:
-        asyncio.run(self._drive(prompt, repo_path, identity))
+    def run(
+        self,
+        prompt: str,
+        repo_path: Path,
+        identity: str,
+        *,
+        on_event: Callable[[str, str | None, str], None] | None = None,
+        on_note: Callable[[str], None] | None = None,
+    ) -> None:
+        asyncio.run(self._drive(prompt, repo_path, identity, on_event, on_note))
 
-    async def _drive(self, prompt: str, repo_path: Path, identity: str) -> None:
+    async def _drive(
+        self,
+        prompt: str,
+        repo_path: Path,
+        identity: str,
+        on_event: Callable[[str, str | None, str], None] | None = None,
+        on_note: Callable[[str], None] | None = None,
+    ) -> None:
         # A hook cannot abandon a run -- an exception raised inside one is answered to the
         # CLI, not to this frame -- so the caller's hooks record their refusals here instead.
         refusals: list[str] = []
         provider = require_provider()
+        # Two call shapes on purpose: the two-argument one is the factory contract every
+        # existing caller and test double implements, and passing a third `None` through it
+        # would break each of them for a run that records nothing anyway.
+        hook_map = (
+            self._hooks_for(identity, refusals)
+            if on_event is None
+            else self._hooks_for(identity, refusals, on_event)
+        )
         options = ClaudeAgentOptions(
             cwd=repo_path,
             model=provider.model,
@@ -142,12 +178,18 @@ class ClaudeSdkRunner:
             env=_subprocess_env(provider),
             hooks={
                 event: [HookMatcher(matcher=None, hooks=callbacks)]
-                for event, callbacks in self._hooks_for(identity, refusals).items()
+                for event, callbacks in hook_map.items()
             },
         )
         result: ResultMessage | None = None
         try:
             async for message in query(prompt=prompt, options=options):
+                if on_note is not None and isinstance(message, AssistantMessage):
+                    text = "".join(
+                        block.text for block in message.content if isinstance(block, TextBlock)
+                    ).strip()
+                    if text:
+                        on_note(text[:NOTE_MAX_CHARS])
                 if isinstance(message, ResultMessage):
                     result = message
         except Exception as exc:

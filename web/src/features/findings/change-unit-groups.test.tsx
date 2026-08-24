@@ -3,13 +3,14 @@
  *
  * M15 Task 7. The claim is arithmetic: **twenty-four findings are thirteen change units**, and a
  * console listing them flat shows a reader twenty-four problems where there are thirteen. What is
- * under test is the pair of figures a reader compares â€” the unit count and the finding count â€”
+ * under test is the pair of figures a reader compares — the unit count and the finding count —
  * because a grouped view whose parts do not add to the whole is a worse answer than no grouping,
  * and it is the kind of wrong that reads as a rounding artefact.
  *
  * Scope is `console-dev-loop.md`'s: derivation and structure. Never class names.
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
@@ -59,10 +60,15 @@ function unit(overrides: Partial<ChangeUnitRow> = {}): ChangeUnitRow {
 }
 
 function renderGroups(units: ChangeUnitRow[], total = units.length) {
+  // The grouped view reads the workspace's tickets for its Solution cells; the read never
+  // resolves here, which is itself a state the cells must render honestly.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <ChangeUnitGroups repoId="demo" units={units} unitTotal={total} />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ChangeUnitGroups repoId="demo" units={units} unitTotal={total} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

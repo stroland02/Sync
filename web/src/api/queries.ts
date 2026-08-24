@@ -29,6 +29,7 @@ import {
   fetchVendorFindings,
   fetchWorkspaceFindings,
   fetchPatch,
+  fetchRunActivity,
   fetchWorkflow,
   fetchRepositoryGraph,
 } from "@/api/client"
@@ -238,6 +239,24 @@ export function useWorkflow(findingId: string) {
 }
 
 /**
+ * The agent-activity feed for one finding's run. `staleTime` is zero for the reason
+ * `useWorkflow`'s is; the caller owns the cadence through `refetchIntervalMs` because this
+ * hook cannot see the run's outcome and must not invent a liveness rule of its own.
+ */
+export function useRunActivity(
+  repoId: string,
+  findingId: string,
+  options: { refetchIntervalMs?: number | false } = {},
+) {
+  return useQuery({
+    queryKey: ["findings", findingId, "activity"],
+    queryFn: ({ signal }) => fetchRunActivity(repoId, findingId, signal),
+    staleTime: 0,
+    refetchInterval: options.refetchIntervalMs ?? false,
+  })
+}
+
+/**
  * Whether a page of runs still has one in flight.
  *
  * `outcome` is null on a run exactly while it has not reached `opened`, `abandoned` or
@@ -358,8 +377,16 @@ export function useRepositoryGraph(repoId: string) {
   })
 }
 
-/** What traffic this repository has shown, what shape it had, and how often it failed. */
-export function useRepositoryObserved(repoId: string, params: ObservedTelemetryParams = {}) {
+/**
+ * What traffic this repository has shown, what shape it had, and how often it failed.
+ * Polls only where a caller passes an interval — the Telemetry page does, while mounted,
+ * because live traffic is the one answer here that moves on its own.
+ */
+export function useRepositoryObserved(
+  repoId: string,
+  params: ObservedTelemetryParams = {},
+  options: { refetchIntervalMs?: number } = {},
+) {
   return useQuery({
     queryKey: [
       "repositories",
@@ -370,6 +397,7 @@ export function useRepositoryObserved(repoId: string, params: ObservedTelemetryP
       params.errorWindowsOffset ?? 0,
     ],
     queryFn: ({ signal }) => fetchRepositoryObserved(repoId, params, signal),
+    refetchInterval: options.refetchIntervalMs ?? false,
   })
 }
 

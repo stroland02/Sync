@@ -479,6 +479,49 @@ def test_the_run_loads_no_settings_from_the_filesystem(monkeypatch, tmp_path):
     assert set(captured["options"].hooks) == {"PreToolUse", "PostToolUse"}
 
 
+def test_assistant_prose_reaches_on_note_in_order(monkeypatch, tmp_path):
+    """The narration half of the live feed: what the agent said between tool calls, handed to
+    the caller's recorder as it streams. Empty prose is skipped -- a message that is only tool
+    blocks says nothing worth a row -- and long prose is cut at 500 characters at this seam so
+    every recorder gets the bounded form.
+    """
+    from claude_agent_sdk import AssistantMessage, TextBlock
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(content=[TextBlock(text="Reading the call site first.")], model="m")
+        yield AssistantMessage(content=[], model="m")
+        yield AssistantMessage(content=[TextBlock(text="   ")], model="m")
+        yield AssistantMessage(content=[TextBlock(text="y" * 900)], model="m")
+        yield _ok_result()
+
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
+    notes: list[str] = []
+
+    ClaudeSdkRunner(agent_patch.patch_hooks).run(
+        "do the patch", tmp_path, "finding=f-42 repo=acme-billing", on_note=notes.append,
+    )
+
+    assert notes[0] == "Reading the call site first."
+    assert len(notes) == 2
+    assert len(notes[1]) == 500
+
+
+def test_no_note_recorder_leaves_the_run_exactly_as_before(monkeypatch, tmp_path):
+    """`on_note=None` is the default, and the three-argument call every existing caller and
+    fake makes must keep working unchanged."""
+    from claude_agent_sdk import AssistantMessage, TextBlock
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(content=[TextBlock(text="narration nobody asked to keep")], model="m")
+        yield _ok_result()
+
+    monkeypatch.setattr(claude_sdk, "query", fake_query)
+
+    ClaudeSdkRunner(agent_patch.patch_hooks).run(
+        "do the patch", tmp_path, "finding=f-42 repo=acme-billing",
+    )
+
+
 def test_run_agent_raises_when_the_sdk_reports_a_failed_run(monkeypatch, tmp_path):
     async def fake_query(*, prompt, options):
         yield _ok_result(is_error=True, subtype="error_max_turns", errors=["hit max turns"])
@@ -614,6 +657,49 @@ def test_the_patch_carries_a_new_file_the_agent_staged(clone, monkeypatch):
     # The tracked edit has to survive the widening: a diff that reported only the
     # staged addition would satisfy the assertions above and describe half a patch.
     assert "src/billing.ts" in patch.diff
+
+
+def test_the_remediator_threads_a_finding_scoped_recorder_to_its_runner(clone, monkeypatch):
+    """`activity_for` follows `lessons_for` across the seam: the caller hands a per-finding
+    factory, the remediator resolves it against the finding it holds, and the runner receives
+    the recorder as `on_event` plus a note adapter that files prose under kind `"note"`.
+    """
+    captured: dict = {}
+
+    class RecordingRunner:
+        def run(self, prompt, repo_path, identity, *, on_event=None, on_note=None):
+            captured["on_event"] = on_event
+            captured["on_note"] = on_note
+
+    events: list[tuple] = []
+
+    def activity_for(finding_id):
+        assert finding_id == "f-42"
+        return lambda kind, tool, summary: events.append((kind, tool, summary))
+
+    AgentRemediator(runner=RecordingRunner(), activity_for=activity_for).propose(
+        SAVED_FINDING, CHANGE, SITE, REPO.model_copy(update={"local_path": str(clone)}),
+    )
+
+    captured["on_event"]("tool", "Read", "input=...")
+    captured["on_note"]("thinking aloud")
+    assert events == [("tool", "Read", "input=..."), ("note", None, "thinking aloud")]
+
+
+def test_without_activity_for_the_runner_is_called_the_way_it_always_was(clone, monkeypatch):
+    """The byte-identical guarantee: a runner with the historical three-argument signature --
+    the shape every existing fake and `StaticRunner` still have -- keeps working when nobody
+    records, so `None` everywhere costs nothing."""
+
+    class LegacyRunner:
+        def run(self, prompt, repo_path, identity):
+            pass
+
+    patch = AgentRemediator(runner=LegacyRunner()).propose(
+        SAVED_FINDING, CHANGE, SITE, REPO.model_copy(update={"local_path": str(clone)}),
+    )
+
+    assert patch.diff == ""
 
 
 def test_a_patch_that_is_only_a_new_file_is_not_read_as_a_remediator_that_changed_nothing(clone, monkeypatch):

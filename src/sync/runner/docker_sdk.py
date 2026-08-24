@@ -34,6 +34,7 @@ second; it does not touch the third.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import posixpath
 import tempfile
@@ -42,6 +43,8 @@ from pathlib import Path
 from sync.remediate import sandbox
 from sync.remediate.isolated_network import isolated_network
 from sync.remediate.sandbox_image import ensure_image_built
+
+log = logging.getLogger(__name__)
 
 # `AgentRemediator.__init__` reads this; "1" opts a deployment into `DockerSdkRunner` in place
 # of `ClaudeSdkRunner`. Unset (the default everywhere today), behaviour is unchanged.
@@ -114,7 +117,16 @@ class DockerSdkRunner:
         self._image = image
         self._credential = credential
 
-    def run(self, prompt: str, repo_path: Path, identity: str) -> None:
+    def run(
+        self, prompt: str, repo_path: Path, identity: str,
+        *, on_event=None, on_note=None,
+    ) -> None:
+        # Accepted so a recording caller does not fail construction of a sandboxed run, and
+        # deliberately unused: the hooks execute inside the container, where no host recorder
+        # can be invoked. The run's own log line says the feed is off rather than letting an
+        # empty feed read as an idle agent -- the console's empty state names both nothings.
+        if on_event is not None or on_note is not None:
+            log.info("activity recording does not cross the container boundary; no feed for [%s]", identity)
         with isolated_network() as network_name:
             with sandbox.ephemeral_container(image=self._image) as proxy:
                 sandbox.attach_network(proxy, network_name)

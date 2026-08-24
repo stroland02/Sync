@@ -27,10 +27,11 @@
  *   the specification says so explicitly at `:445` — so it carries the `Errors & Incidents`
  *   level rather than one invented for it.
  *
- * `Signals` gained its third panel on 2026-08-06: `/repositories/:repoId/observed` now renders
- * all three M5 roles (vendor, signal source, human surface) instead of the signal-source-only
- * screen that used to sit under a stale "Observed telemetry" label — `features/signals/signals-page.tsx`
- * carries the level's own docstring. `Pull Request` gained its route the same day: the evidence
+ * `Signals` renders as the Telemetry page: the live traffic instrument plus the recorded
+ * evidence tables. The three-role catalogue it carried between 2026-08-06 and 2026-08-20 left
+ * on the owner's ruling that this page is about live signals —
+ * `features/signals/signals-page.tsx` carries the level's own docstring. `Pull Request`
+ * gained its route on 2026-08-06: the evidence
  * bundle a reviewer can now open at its own address, bounded by what `sync.dashboard.queries`
  * exposes rather than by what the design document's evidence bundle describes —
  * `features/pullrequests/pull-request-page.tsx` names the gap. A level with no route at all would

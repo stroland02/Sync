@@ -1,15 +1,15 @@
 /**
- * The â“˜ beside a heading: explanation on demand, for prose the screen does not need in front
+ * The ⓘ beside a heading: explanation on demand, for prose the screen does not need in front
  * of the data.
  *
  * Owner direction, 2026-08-18, amended 2026-08-19: a reader is here for their own data, so field
  * descriptions and how-this-panel-works prose move behind a hover.
  *
  * **What may move here is the argument. What may not is the claim.** The amendment replaced a rule
- * protecting twenty-four specific sentences from ever reaching a tooltip â€” it blocked ordinary
+ * protecting twenty-four specific sentences from ever reaching a tooltip — it blocked ordinary
  * cleanup and seven of them cited deleted files. What survives is stricter about the thing that
  * mattered: a reader who never hovers must still be able to tell what a figure covers and whether
- * it was measured. *not measured yet* Â· *all workspaces* Â· *static evidence* stay on screen in the
+ * it was measured. *not measured yet* · *all workspaces* · *static evidence* stay on screen in the
  * fewest honest words; why each distinction exists comes here. `web/CLAUDE.md` carries it.
  *
  * A real button, not a bare icon: Radix opens a tooltip on focus as well as hover, so the
@@ -32,7 +32,7 @@ export function InfoHint({
   children,
   side = "bottom",
 }: {
-  /** What this hint explains, for the accessible name â€” "About index coverage". */
+  /** What this hint explains, for the accessible name — "About index coverage". */
   label: string
   /** The explanation itself. Prose, no interactive content: a tooltip closes on the way to it. */
   children: ReactNode

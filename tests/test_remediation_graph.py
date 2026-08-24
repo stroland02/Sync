@@ -217,6 +217,68 @@ def test_a_failed_verification_with_empty_diagnostics_never_pushes():
 
 
 @dataclass
+class NoChangeRemediator(StubRemediator):
+    """Stands in for an agent that examines the site and concludes nothing needs to move."""
+
+    def propose(self, finding, change, site, repo, diagnostics="") -> Patch:
+        self.calls += 1
+        return Patch(diff="", strategy=self.strategy, rationale="nothing to change")
+
+
+def test_a_run_whose_attempts_all_conclude_no_change_reports_rather_than_abandons():
+    """Measured live on 2026-08-20 (S1, finding 072c3676): three agent attempts each concluded
+    no edit was needed -- correctly, the call site never touches the removed property -- and
+    the run booked a true negative as an abandonment, at three model calls. Abandonment means
+    Sync tried and could not finish; this run finished and found nothing to do, which is what
+    `reported` already says. The corpus row says `no_change`, not `abandoned`, so the routing
+    signal ("which kinds are not mechanically safe") stays clean.
+    """
+    forge = StubForge()
+    remediator = NoChangeRemediator()
+    store = StubStore()
+    result = _run(StubAdapter(), remediator, forge, store=store)
+
+    assert result["outcome"] == "reported"
+    assert "no change" in result["report_reason"]
+    assert result["pr_url"] is None
+    assert forge.pushes == 0
+    # The finding stays open -- it is real and unremediated -- and no abandonment is recorded.
+    assert store.status_calls == []
+    assert [o.terminal_status for o in store.outcomes][-1] == "no_change"
+
+
+def test_a_single_no_change_verdict_still_gets_a_second_opinion():
+    """One empty diff can be an agent that gave up confused; the verdict earns `reported`
+    only by surviving the retry loop. The first empty diff re-enters `patch`."""
+    remediator = NoChangeRemediator()
+    _run(StubAdapter(), remediator, StubForge())
+    assert remediator.calls > 1
+
+
+def test_a_rejected_patch_followed_by_empty_diffs_is_a_failure_not_a_verdict():
+    """The line `test_pipeline_composes.py` drew live: a codemod applied its one edit, the
+    compiler rejected it, and every later attempt re-emitted an empty diff. That run tried
+    and could not finish -- `verify_ok` was set the moment the first patch was verified, and
+    its presence is what keeps this exhaustion an abandonment rather than a clean verdict.
+    """
+
+    @dataclass
+    class OneEditThenNothing(StubRemediator):
+        def propose(self, finding, change, site, repo, diagnostics=""):
+            self.calls += 1
+            if self.calls == 1:
+                return Patch(diff="--- a\n+++ b\n", strategy=self.strategy, rationale="edit")
+            return Patch(diff="", strategy=self.strategy, rationale="already applied")
+
+    store = StubStore()
+    result = _run(StubAdapter(verdicts=[_fail()]), OneEditThenNothing(), StubForge(), store=store)
+
+    assert result["outcome"] == "abandoned"
+    assert store.status_calls == [("f1", "abandoned")]
+    assert "no_change" not in [o.terminal_status for o in store.outcomes]
+
+
+@dataclass
 class Recording(StubRemediator):
     seen: list[str] = field(default_factory=list)
 
@@ -296,20 +358,12 @@ def test_an_agent_run_that_fails_is_abandoned_rather_than_crashing_the_graph():
 
 
 def test_a_patch_that_changes_nothing_is_never_pushed():
-    @dataclass
-    class NoChange(StubRemediator):
-        def propose(self, finding, change, site, repo, diagnostics=""):
-            self.calls += 1
-            return Patch(diff="", strategy=self.strategy, rationale="nothing to do")
-
+    """The half that must not move whatever the outcome vocabulary does: a no-op branch
+    passing CI would open a pull request that claims to fix something and does not."""
     forge = StubForge()
-    store = StubStore()
-    result = _run(StubAdapter(), NoChange(), forge, store=store)
-    assert result["outcome"] == "abandoned"
+    result = _run(StubAdapter(), NoChangeRemediator(), forge)
     assert forge.pushes == 0
     assert forge.pr_url is None
-    assert store.status == "abandoned"
-    assert result["abandon_reason_code"] == "patch_attempts_exhausted"
 
 
 def test_a_bare_exception_still_records_a_useful_abandon_reason():
@@ -739,6 +793,9 @@ SHIPPED_EDGES = frozenset({
     ("patch", "static_verify", None, True),
     ("patch", "patch", None, True),
     ("patch", "abandon", None, True),
+    # Exhaustion through consistent no-change verdicts is a conclusion, not a failure: the
+    # run finished and found nothing to do, which is what `report` already says.
+    ("patch", "report", None, True),
     ("patch", "external_cause", None, True),
     ("static_verify", "patch", None, True),
     ("static_verify", "replay", "push_branch", True),

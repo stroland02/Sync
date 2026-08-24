@@ -18,7 +18,7 @@
 
 import { Link } from "react-router"
 
-import type { RiskRow } from "@/api/types"
+import type { RiskRow, Ticket } from "@/api/types"
 import {
   Table,
   TableBody,
@@ -30,15 +30,23 @@ import {
 import { SeverityTag } from "@/components/tag"
 import { RungBadge } from "@/components/provenance"
 import { Formatted } from "@/components/status"
+import { TicketCell } from "@/features/tickets/ticket-cell"
 import { bindingSurfaceHref, findingHref } from "@/lib/hrefs"
 import { orAbsent } from "@/lib/format"
 
 export function FindingsTable({
   repoId,
   rows,
+  tickets,
 }: {
   repoId: string
   rows: readonly RiskRow[]
+  /**
+   * The workspace's tickets, fetched once by the page and null while that read is in flight.
+   * Undefined means the surface has no solutions workflow — the fleet and vendor tables — and
+   * the column itself stays off, not merely empty.
+   */
+  tickets?: readonly Ticket[] | null
 }) {
   return (
     <Table>
@@ -58,6 +66,7 @@ export function FindingsTable({
           <TableHead>Symbol</TableHead>
           <TableHead>Operation</TableHead>
           <TableHead>Change kind</TableHead>
+          {tickets !== undefined && <TableHead>Solution</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -104,6 +113,11 @@ export function FindingsTable({
             <TableCell>
               <Formatted value={orAbsent(row.change_kind)} />
             </TableCell>
+            {tickets !== undefined && (
+              <TableCell>
+                <TicketCell repoId={repoId} findingId={row.finding_id} tickets={tickets} />
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

@@ -77,7 +77,8 @@ def _wire_fakes(monkeypatch, graph: _FakeGraph) -> None:
     monkeypatch.setattr(cli, "load_catalogue", lambda: "catalogue")
     monkeypatch.setattr(
         cli, "build_remediator",
-        lambda catalogue, repo_context, lessons_for=None, slice_for=None: "remediator",
+        lambda catalogue, repo_context, lessons_for=None, slice_for=None,
+        activity_for=None: "remediator",
     )
     monkeypatch.setattr(cli, "GitHubForge", lambda: "forge")
     monkeypatch.setattr(cli, "build_graph", lambda **kw: graph)
@@ -157,8 +158,8 @@ def test_the_corpus_teaches_the_agent_about_its_change_kind():
 
         def migration_outcome_abandon_reasons_by_kind(self):
             # `n`, matching `GraphStore`'s `count(*) AS n`. This double returned
-            # `attempt_count` -- the OTHER rollup's spelling -- which is why the reader's
-            # KeyError never surfaced in the suite while raising against every real store.
+            # `attempt_count` -- the OTHER rollup's spelling -- so the reader's KeyError never
+            # surfaced in the suite, and the first live run after it landed abandoned on one.
             return [
                 {"change_kind": "response-property-removed", "tier": 2,
                  "n": 2, "abandon_reason_code": "static_verify_exhausted"},

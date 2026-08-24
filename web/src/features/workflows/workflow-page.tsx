@@ -25,6 +25,7 @@ import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { activityEntries, omittedCount } from "@/features/workflows/activity"
 import { ActivityTimeline } from "@/features/workflows/activity-timeline"
+import { AgentActivityPanel } from "@/features/workflows/agent-activity-panel"
 import { NodeSequence } from "@/features/workflows/node-sequence"
 import { ReplyBox } from "@/features/workflows/reply-box"
 import { RunFactRail } from "@/features/workflows/run-fact-rail"
@@ -294,6 +295,8 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
                     idleReason="This run has reached a terminal outcome, so nothing is being polled."
                   />
                 )}
+
+                <AgentActivityPanel repoId={repoId} findingId={findingId} run={data} />
 
                 <TabsContent value="activity" className="flex min-w-0 flex-col gap-8">
                   <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>

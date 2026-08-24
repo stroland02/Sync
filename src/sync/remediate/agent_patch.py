@@ -389,15 +389,20 @@ def _unstaged_additions(repo_path: Path) -> list[str]:
     return result.stdout.split()
 
 
-def patch_hooks(identity: str, refusals: list[str]) -> dict[str, list[Any]]:
+def patch_hooks(
+    identity: str,
+    refusals: list[str],
+    on_event: Callable[[str, str | None, str], None] | None = None,
+) -> dict[str, list[Any]]:
     """What narrows the agent inside the tools it was allowed.
 
     Assembled here rather than inside the runner because it is remediation's policy: which
     commands a patch legitimately needs, and how a tool's output is framed as untrusted text.
     A runner that reached for this would make `sync.runner` depend on `sync.remediate`, and
-    the seam runs the other way.
+    the seam runs the other way. `on_event` travels the same road in the same direction: a
+    plain callable the gate invokes, so the recorder's store stays on the caller's side.
     """
-    return {**tool_gate.hooks(identity), **tool_output.hooks(identity, refusals)}
+    return {**tool_gate.hooks(identity, on_event), **tool_output.hooks(identity, refusals)}
 
 
 class AgentRemediator:
@@ -411,6 +416,7 @@ class AgentRemediator:
         runner: PatchRunner | None = None,
         lessons_for: Callable[[VendorChange], str] | None = None,
         slice_for: Callable[[VendorChange], str] | None = None,
+        activity_for: Callable[[str], Callable[[str, str | None, str], None]] | None = None,
     ) -> None:
         # Bound once at construction rather than threaded through `propose()`. The caller
         # constructs one `AgentRemediator` per run, after reading the stored context once, so
@@ -425,6 +431,10 @@ class AgentRemediator:
         # The same seam as `lessons_for`, for the same reason: reading a staged document is the
         # caller's business, and a tier that never uses one must not grow a parameter for it.
         self._slice_for = slice_for
+        # `lessons_for`'s shape again, in the write direction: a per-finding factory whose
+        # result records one run's events, so the store -- and the seq counter that orders the
+        # feed -- both live with the caller. `None` records nothing, anywhere, at no cost.
+        self._activity_for = activity_for
         # The default is the production path, carrying the gate. A caller that names no runner
         # gets a hardened one; the seam serves tests and M9's outcome vocabulary rather than
         # being a switch somebody has to remember to set.
@@ -461,7 +471,22 @@ class AgentRemediator:
         repo_path = Path(repo.local_path)
 
         identity = _identity(finding, repo)
-        self._runner.run(prompt, repo_path, identity)
+        record = (
+            self._activity_for(finding.id)
+            if self._activity_for is not None and finding.id
+            else None
+        )
+        if record is None:
+            # The historical three-argument call, kept as its own branch so a `PatchRunner`
+            # written before the feed existed -- every test double included -- stays a valid
+            # runner for every run that records nothing.
+            self._runner.run(prompt, repo_path, identity)
+        else:
+            self._runner.run(
+                prompt, repo_path, identity,
+                on_event=record,
+                on_note=lambda text: record("note", None, text),
+            )
 
         # Asked of the tree rather than of the diff. An unstaged addition is in
         # neither the tree `static_verify` compiles nor the commit `push_branch`

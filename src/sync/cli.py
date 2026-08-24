@@ -172,10 +172,35 @@ def corpus_lessons_reader(store) -> "Callable[[VendorChange], str]":
     return lessons
 
 
+def activity_recorder(store) -> "Callable[[str], Callable[[str, str | None, str], None]]":
+    """A per-finding recorder of what the patch agent did, writing the live feed's rows.
+
+    The factory closes over the store and one counter per finding, memoised so retries within
+    a run keep counting where the last attempt stopped -- a counter reset to 1 would collide
+    with the rows already written and `ON CONFLICT DO NOTHING` would drop the new attempt's
+    events silently. A restarted *process* does start at 1, which converges on the rows the
+    first run recorded rather than doubling them; that is the re-recording the schema's
+    conflict clause exists for.
+    """
+    from itertools import count
+
+    counters: dict[str, count] = {}
+
+    def for_finding(finding_id: str) -> "Callable[[str, str | None, str], None]":
+        def record(kind: str, tool: str | None, summary: str) -> None:
+            seq = next(counters.setdefault(finding_id, count(1)))
+            store.record_run_activity(finding_id, seq, kind=kind, tool=tool, summary=summary)
+
+        return record
+
+    return for_finding
+
+
 def build_remediator(
     catalogue: dict[str, dict] | None = None, repo_context: str = "",
     lessons_for: "Callable[[VendorChange], str] | None" = None,
     slice_for: "Callable[[VendorChange], str] | None" = None,
+    activity_for: "Callable[[str], Callable[[str, str | None, str], None]] | None" = None,
 ) -> TieredRemediator:
     """The tier cascade, cheapest first, with the agent last and unconditional.
 
@@ -217,6 +242,7 @@ def build_remediator(
             PropertyOmitRemediator(),
             TerminalTier(AgentRemediator(
                 repo_context=repo_context, lessons_for=lessons_for, slice_for=slice_for,
+                activity_for=activity_for,
             )),
         ],
         catalogue=catalogue,
@@ -1245,6 +1271,7 @@ def run(args: argparse.Namespace, today: date | None = None) -> int:
                     catalogue, repo_context=repo_context,
                     lessons_for=corpus_lessons_reader(store),
                     slice_for=slice_for_cache(cache),
+                    activity_for=activity_recorder(store),
                 ),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )
@@ -1329,6 +1356,7 @@ def cmd_tickets(args) -> int:
                     catalogue, repo_context=repo_context,
                     lessons_for=corpus_lessons_reader(store),
                     slice_for=slice_for_cache(cache),
+                    activity_for=activity_recorder(store),
                 ),
                 forge=GitHubForge(), checkpointer=checkpointer, catalogue=catalogue,
             )

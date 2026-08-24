@@ -2,7 +2,7 @@
  * The Overview draws every door a workspace has, or the build says which one it dropped.
  *
  * A page added to the registry and forgotten here is a screen nothing links to from the one
- * place a reader starts â€” reachable by typed URL and by nothing else.
+ * place a reader starts — reachable by typed URL and by nothing else.
  */
 
 import { describe, expect, it } from "vitest"

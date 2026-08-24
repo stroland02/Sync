@@ -401,6 +401,7 @@ def _build_app(
     call_site_source_reader=None,
     ticket_writer=None,
     tickets_reader=None,
+    activity_reader=None,
     serve_source: bool = True,
     api_password: str | None = None,
 ) -> Starlette:
@@ -448,6 +449,7 @@ def _build_app(
         call_site_source_reader=call_site_source_reader,
         ticket_writer=ticket_writer,
         tickets_reader=tickets_reader,
+        activity_reader=activity_reader,
         serve_source=serve_source,
         api_password=api_password,
     )
@@ -921,6 +923,58 @@ def test_workflow_route_returns_404_when_reader_yields_none():
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
     assert "error" in body
+
+
+def test_activity_route_returns_the_readers_events():
+    """The live feed's transport: the repo id scopes the URL the way every finding page is
+    scoped, and the reader is asked with the finding alone -- `run_activity` is keyed by
+    finding, exactly as the workflow reader is."""
+    payload = {
+        "events": [
+            {"seq": 1, "at": "2026-08-20T12:00:00+00:00", "kind": "note", "tool": None,
+             "summary": "Reading the call site first."},
+            {"seq": 2, "at": "2026-08-20T12:00:01+00:00", "kind": "tool", "tool": "Read",
+             "summary": "input={'file_path': 'src/billing.ts'}"},
+        ]
+    }
+    reads: list[str] = []
+
+    def activity_reader(finding_id: str) -> dict:
+        reads.append(finding_id)
+        return payload
+
+    surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
+    app = _build_app(surface=surface, activity_reader=activity_reader)
+    client = TestClient(app)
+
+    response = client.get("/api/repositories/gh/acme/billing/findings/f1/activity")
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    assert reads == ["f1"]
+
+
+def test_activity_route_answers_501_when_no_reader_is_configured():
+    surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
+    client = TestClient(_build_app(surface=surface))
+
+    response = client.get("/api/repositories/r1/findings/f1/activity")
+
+    assert response.status_code == 501
+
+
+def test_an_empty_activity_feed_is_a_200_with_an_empty_list():
+    """Empty is an answer, not a missing page: the payload cannot say whether the run predates
+    capture or has not started, and the console's empty state says exactly that -- a 404 here
+    would turn both nothings into a broken screen."""
+    surface = GraphSurface(FakeGraph(), feed_fetched_at=FETCHED)
+    app = _build_app(surface=surface, activity_reader=lambda finding_id: {"events": []})
+    client = TestClient(app)
+
+    response = client.get("/api/repositories/r1/findings/f1/activity")
+
+    assert response.status_code == 200
+    assert response.json() == {"events": []}
 
 
 # -- fleet roll-ups: runs, corpus, repositories ---------------------------------
@@ -1977,6 +2031,11 @@ _NOT_COLLECTIONS = {
     # magnitude as the open findings themselves. The Detectors page renders the whole lifecycle
     # split, and a page cursor over it would truncate the funnel while looking complete.
     "/api/repositories/{repo_id:path}/tickets",
+    # One run's activity feed, bounded at the store's own read ceiling (500 rows) and rendered
+    # whole: it is a transcript a reviewer reads top to bottom, and a page cursor over it would
+    # truncate the middle of a run while looking complete -- the tickets argument at the grain
+    # of one run.
+    "/api/repositories/{repo_id:path}/findings/{finding_id}/activity",
     # A stream is not a page. It has no total to report and no offset to advance, and it ends when
     # the client goes rather than when the rows run out -- `limit` and `offset` have nothing to
     # mean here.

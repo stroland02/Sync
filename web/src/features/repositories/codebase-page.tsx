@@ -10,10 +10,10 @@
  * every repository's rows under one repository's name (`codebase-page.test.tsx` holds the absence).
  */
 
-import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
 import { Link, useParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
+import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
 import { MapPreviews } from "@/features/index-graph/map-previews"
 import { PipelineStrip } from "@/features/repositories/pipeline-strip"
 import { WorkflowGrid } from "@/features/repositories/workflow-grid"
@@ -76,7 +76,7 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
   // `null` until coverage answers, a number once it has -- including a counted zero. Collapsing
   // the two rendered an unanswered read as a measured absence under a scope string asserting it.
   const operations =
-    surface === null ? null : Object.values(surface).reduce((sum, n) => sum + n, 0)
+    surface === null ? null : Object.values(surface).reduce((sum: number, n) => sum + Number(n ?? 0), 0)
 
   const figures: StatusSegment[] = [
     {
