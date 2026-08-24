@@ -67,9 +67,9 @@ symbols would dispatch to the wrong reader with every test still green.
 | # | Commit | State |
 |---|---|---|
 | A1 | One operation resolves to one name through both entry points | **landed `a568afc1`** |
-| A2 | A reference we cannot resolve is reported as that, not as absent (mistral) | next |
-| A3 | Pin what both symbol rules produce, before anything moves | |
-| A4 | The packages are named for what they hold | |
+| A2 | A reference we cannot resolve is reported as that, not as absent (mistral) | **landed `f1eb6e91`** |
+| A3 | Pin what both symbol rules produce, before anything moves | **landed `01b883c7`** |
+| A4 | The packages are named for what they hold | next |
 | A5 | A rule declares its key, its input and the languages it speaks | |
 | A6 | The tier resolves symbols from a staged map, not only a checkout | |
 | A7 | Every registered vendor's bindings come from its row | |
