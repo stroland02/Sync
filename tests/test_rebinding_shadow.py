@@ -24,6 +24,8 @@ into a missed break.
 
 from __future__ import annotations
 
+from conftest import symbol_resolver
+
 import json
 from pathlib import Path
 
@@ -32,7 +34,6 @@ import pytest
 from sync.core import CallSite, RepoRef
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -90,7 +91,7 @@ MATCHED = ("parameter", "destructured", "read_before_rebind", "closure_read")
 def _sites(tmp_path, language: str) -> list[CallSite]:
     map_path = tmp_path / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    vendor = StripeAdapter(spec_dir=FIXTURES / "specs", symbol_map_path=map_path)
+    vendor = symbol_resolver(map_path)
 
     if language == PYTHON:
         kind, adapter = "py", PythonAdapter(vendor_adapter=vendor)

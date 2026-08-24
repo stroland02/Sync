@@ -752,3 +752,33 @@ def patched_clone(base_clone: Path, agent_edit: dict[str, str]) -> Path:
     for relative, text in agent_edit.items():
         (base_clone / relative).write_text(text, encoding="utf-8")
     return base_clone
+
+
+def symbol_resolver(symbol_map_path, vendor_id: str = "stripe", cache_dir=None):
+    """A vendor adapter that resolves symbols and correlates requests from a staged map.
+
+    Twenty index and correlation tests built `StripeAdapter` for this, and none of them is about
+    Stripe: they need something that turns `stripe.charges.retrieve` into an operation and a
+    request path back into the same one. `CI-W584` moved them onto the uniform tier, which since
+    `CI-W578` reads the same staged `symbols.json` those tests already write, and answers both
+    entry points identically -- checked against the adapter it replaced before the move.
+
+    Living here rather than in each file is what keeps `CI-W585` from being twenty edits when the
+    constructor changes again.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from sync.signals.generated.adapter import CorrelatingGeneratedSpecAdapter
+
+    def _unreached(url: str) -> str:
+        raise AssertionError(f"a symbol resolver fetched {url}")
+
+    return CorrelatingGeneratedSpecAdapter(
+        vendor_id=vendor_id,
+        sources={},
+        fetch=_unreached,
+        cache_dir=Path(cache_dir) if cache_dir else Path(tempfile.mkdtemp()),
+        symbol_map_path=symbol_map_path,
+    )
+

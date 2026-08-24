@@ -16,6 +16,8 @@ it sent before. The span map is keyed by span id, so a span folded twice is fold
 
 from __future__ import annotations
 
+from conftest import symbol_resolver
+
 import json
 import os
 from pathlib import Path
@@ -24,7 +26,6 @@ import pytest
 
 from sync.core.models import ObservedCall
 from sync.graph.store import GraphStore
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 from sync.telemetry import ingest_payload
 from sync.telemetry.otlp import client_spans
@@ -51,10 +52,10 @@ def store() -> GraphStore:
 
 
 @pytest.fixture()
-def correlator(tmp_path: Path) -> StripeAdapter:
+def correlator(tmp_path: Path) -> object:
     map_path = tmp_path / "symbols.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    return StripeAdapter(spec_dir=FIXTURES / "specs", symbol_map_path=map_path)
+    return symbol_resolver(map_path)
 
 
 def _ingest(store, correlator, payload=None):

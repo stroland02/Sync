@@ -24,6 +24,8 @@ false finding, which `2026-07-26-sync-review-integration.md` commits this projec
 
 from __future__ import annotations
 
+from conftest import symbol_resolver
+
 import json
 from pathlib import Path
 
@@ -31,7 +33,6 @@ import pytest
 
 from sync.core import RepoRef
 from sync.index.typescript import TypeScriptAdapter
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -45,7 +46,7 @@ def adapter(tmp_path) -> TypeScriptAdapter:
     map_path = tmp_path / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
     return TypeScriptAdapter(
-        vendor_adapter=StripeAdapter(spec_dir=FIXTURES / "specs", symbol_map_path=map_path)
+        vendor_adapter=symbol_resolver(map_path)
     )
 
 

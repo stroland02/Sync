@@ -18,6 +18,10 @@ Both languages are exercised against Twilio. The two needed different shapes and
 
 from __future__ import annotations
 
+from conftest import symbol_resolver
+
+from sync.signals.stripe.adapter import StripeAdapter
+
 import ast
 import json
 from pathlib import Path
@@ -29,7 +33,6 @@ from sync.index import python_lang, typescript
 from sync.index.python_lang import PythonAdapter
 from sync.index.typescript import TypeScriptAdapter
 from sync.signals.registry import available_vendors
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map as build_stripe_symbols
 from sync.signals.twilio.adapter import ProductDocument, TwilioAdapter
 from sync.signals.twilio.symbols import build_symbol_map as build_twilio_symbols
@@ -77,10 +80,10 @@ def _twilio_vendor(tmp_path) -> TwilioAdapter:
     )
 
 
-def _stripe_vendor(tmp_path) -> StripeAdapter:
+def _stripe_vendor(tmp_path) -> object:
     map_path = tmp_path / "stripe-symbols.json"
     map_path.write_text(json.dumps(build_stripe_symbols(STRIPE_SPEC)), encoding="utf-8")
-    return StripeAdapter(spec_dir=FIXTURES / "specs", symbol_map_path=map_path)
+    return symbol_resolver(map_path)
 
 
 # --- the closing condition ----------------------------------------------------------

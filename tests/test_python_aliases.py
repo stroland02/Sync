@@ -17,12 +17,13 @@ for no other.
 
 from __future__ import annotations
 
+from conftest import symbol_resolver
+
 import json
 from pathlib import Path
 
 from sync.core import CallSite, RepoRef
 from sync.index.python_lang import PythonAdapter
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -39,7 +40,7 @@ SPEC = {
 def _adapter(tmp_path) -> PythonAdapter:
     map_path = tmp_path / "map.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    vendor = StripeAdapter(spec_dir=FIXTURES / "specs", symbol_map_path=map_path)
+    vendor = symbol_resolver(map_path)
     return PythonAdapter(vendor_adapter=vendor)
 
 

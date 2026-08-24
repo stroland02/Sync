@@ -10,6 +10,8 @@ parameter: none of that is a fact about APIs, all of it is a fact about Stripe. 
 
 from __future__ import annotations
 
+from conftest import symbol_resolver
+
 import json
 from pathlib import Path
 
@@ -17,7 +19,6 @@ import pytest
 
 from sync.core.conformance import check_request_correlator
 from sync.core.protocols import RequestCorrelator
-from sync.signals.stripe.adapter import StripeAdapter
 from sync.signals.stripe.symbols import build_symbol_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -25,10 +26,10 @@ SPEC = json.loads((FIXTURES / "specs" / "stripe_v2330_shape.json").read_text(enc
 
 
 @pytest.fixture()
-def adapter(tmp_path: Path) -> StripeAdapter:
+def adapter(tmp_path: Path) -> object:
     map_path = tmp_path / "symbols.json"
     map_path.write_text(json.dumps(build_symbol_map(SPEC)), encoding="utf-8")
-    return StripeAdapter(spec_dir=FIXTURES / "specs", symbol_map_path=map_path)
+    return symbol_resolver(map_path)
 
 
 def test_the_adapter_satisfies_the_correlator_protocol(adapter):
