@@ -188,9 +188,18 @@ The console typechecks green today (`npx tsc -b`, exit 0).
 
 - **D1.** `CI-W569` landed: the acquisition chain is runnable.
 - **D2.** `CI-W570` landed: the decode census described a method `CI-W565` renamed.
-- **D3.** `CLAUDE.md` prescribes `uv run pytest tests/ -q -n0` as the gate. Measured, that is
-  23m54s where the parallel form reaches an identical verdict in 3m56s. Either the prescription or
-  the measurement should change; a gate nobody runs because it costs a coffee break is a gate that
-  decays.
+- **D3.** *(Landed `CI-W604`.)* `CLAUDE.md` prescribed `-n0`, which `pyproject.toml` already
+  overrides with `-n auto` and whose own comment reserves `-n0` for *a focused run* -- so the rule
+  contradicted the config it ran under. Measured on 4,538 tests, both green: **serial 1,108s
+  (18m28s), parallel 215s (3m27s)**, a 5.2x difference for an identical verdict. Owner ruled: drop
+  `-n0`. An earlier draft of this entry claimed 23m54s against 3m56s from memory; both were wrong,
+  which is the reason the numbers here are now dated and measured.
 - **D4.** *(Landed `CI-W603`.)* The three `.cache/corpus` tests skip when the fixture is absent and
   run where it is present. The suite is green with nothing outstanding.
+
+**A correction, recorded because it was repeated.** Most gate reports in this sequence carried the
+sentence *plus the intermittent leaked-database race* as environment noise. That was wrong.
+`test_leaked_database_sweep.py` passes 20/20 in isolation, and the failure appears only when a
+second pytest process runs concurrently -- `conftest.py:609` sweeps every dead-pid database at
+session start, so two runs race for the same rows. Every occurrence in this sequence was caused by
+running a timing measurement alongside a gate. The test is correct and the suite has no flake.

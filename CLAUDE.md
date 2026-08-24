@@ -145,7 +145,7 @@ conflict, no lost work. `git merge-base --is-ancestor origin/main HEAD` is the p
 push `main` when that passes and only then; if it fails, escalate rather than resolve.
 
 **Do not gate a landing on CI.** Hosted runners report a job that never started as `failure` (B112),
-so the local gate is the authority: `uv run pytest tests/ -q -n0`, then `npm run build`,
+so the local gate is the authority: `uv run pytest tests/ -q`, then `npm run build`,
 `npm run lint`, `npm test` from `web/`. Say which ran; never claim CI covered something it did not.
 
 **Commits:** Conventional Commits, body explains why. Carry the work item:

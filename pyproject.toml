@@ -96,7 +96,10 @@ pythonpath = ["."]
 # scheduler. The suite is subprocess-bound -- `git`, `tsc`, `oasdiff` -- and 12 workers
 # take it from 133s to 46s; the default `--dist load` is what those numbers are from,
 # and `--dist loadfile` is 78s because three files hold 79% of the wall clock.
-# Spinning up workers costs about 4s flat, so use `-n0` for a focused run.
+# Spinning up workers costs about 4s flat, so use `-n0` for a focused run -- and only for
+# one. Measured on 2026-08-24 over 4,538 tests, the whole suite is 1,108s serial against
+# 215s here, for the same verdict, which is why `CLAUDE.md`'s landing gate names no `-n`
+# flag and inherits this line instead.
 addopts = "-m 'not e2e and not network' -n auto"
 # The watchdog B132 bought, kept because it is what found B132. A single unbounded wait makes
 # the whole gate unreadable: an operator cannot tell a starved run from a stuck one, so they
