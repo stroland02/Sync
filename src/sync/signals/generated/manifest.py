@@ -31,6 +31,11 @@ _GENERATOR_HOSTS = (
     "registry.speakeasyapi.dev",
 )
 
+# The one scheme-less location shape that names a real artifact rather than a local file.
+# Matched literally rather than by "has no scheme", because `./openapi.yaml` is also scheme-less
+# and names nothing anyone but the generator's own working copy can resolve.
+_SPEAKEASY_REGISTRY = "registry.speakeasyapi.dev/"
+
 
 @dataclass(frozen=True)
 class SpecSource:
@@ -45,6 +50,15 @@ class SpecSource:
     Several real manifests publish nothing but `configured_endpoints` -- Cloudflare and Orb
     both do -- so a source can be genuine and still not fetchable. A relative path is treated
     as absent, because nothing downstream can resolve it.
+    """
+
+    spec_reference: str | None = None
+    """A location the manifest names that this build cannot retrieve, recorded rather than dropped.
+
+    Speakeasy lets a source name a registry reference -- `registry.speakeasyapi.dev/org/ws/spec:v2`
+    -- instead of a URL, and resolving one needs the vendor's own bearer token. Discarding it
+    returned `None`, which put such a vendor in the bucket for a manifest naming no specification
+    at all: the opposite claim. Set only when no input in the manifest named a fetchable URL.
     """
 
     spec_hash: str | None = None
@@ -138,12 +152,20 @@ def _parse_speakeasy(document: dict[str, Any]) -> SpecSource | None:
     if not isinstance(sources, dict):
         return None
 
+    # A fetchable URL anywhere in the manifest wins over a reference anywhere else, so the
+    # unresolvable case is only reported once every input has been rejected.
+    unresolvable: tuple[str, bool] | None = None
+
     for source in sources.values():
         if not isinstance(source, dict):
             continue
         for entry in source.get("inputs") or ():
             location = entry.get("location") if isinstance(entry, dict) else None
-            if not isinstance(location, str) or not _is_absolute_url(location):
+            if not isinstance(location, str):
+                continue
+            if not _is_absolute_url(location):
+                if unresolvable is None and location.startswith(_SPEAKEASY_REGISTRY):
+                    unresolvable = (location, bool(source.get("overlays")))
                 continue
             return SpecSource(
                 generator="speakeasy",
@@ -151,6 +173,14 @@ def _parse_speakeasy(document: dict[str, Any]) -> SpecSource | None:
                 generator_hosted=_generator_hosted(location),
                 has_overlays=bool(source.get("overlays")),
             )
+
+    if unresolvable is not None:
+        location, overlays = unresolvable
+        return SpecSource(
+            generator="speakeasy",
+            spec_reference=location,
+            has_overlays=overlays,
+        )
     return None
 
 

@@ -127,6 +127,7 @@ GENERATOR_MIRROR = "generator-mirror"
 NO_MANIFEST = "no-manifest"
 NO_SPECIFICATION = "no-specification"
 ONE_DOCUMENT = "one-document"
+SPEC_UNREACHABLE = "spec-unreachable"
 
 
 @dataclass(frozen=True)
@@ -458,6 +459,17 @@ class GeneratedSpecAdapter:
             )
 
         if not (base.is_fetchable and head.is_fetchable):
+            # Two opposite states arrive here and used to leave under one name. A vendor that
+            # named a location we cannot retrieve publishes a specification; telling its operator
+            # to write a hand-written adapter is advice for the other case entirely.
+            reference = head.spec_reference or base.spec_reference
+            if reference is not None:
+                return Observability(
+                    False, SPEC_UNREACHABLE,
+                    f"the manifest names {reference}, which resolves only with the vendor's own "
+                    f"registry credential; the specification exists and this deployment cannot "
+                    f"retrieve it",
+                )
             # Cloudflare and Orb publish an endpoint count and no URL. That is a coverage gap
             # this approach does not close, and it is reported rather than discarded: the vendor
             # still needs a hand-written adapter and still contributes a coverage denominator.

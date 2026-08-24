@@ -62,6 +62,9 @@ IntakeReasonCode = Literal[
     "unsupported_version",
     "mcp_snapshot_missing",
     "same_document",
+    # The vendor publishes a specification and gates it behind their own registry credential.
+    # Distinct from `spec_url_unconfigured`, which is the opposite claim: nothing to fetch.
+    "spec_unreachable",
     # Network / HTTP failures
     "http_403_forbidden",
     "http_404_not_found",
@@ -84,6 +87,7 @@ CLOSED_REASON_CODES: frozenset[IntakeReasonCode] = frozenset({
     "unsupported_version",
     "mcp_snapshot_missing",
     "same_document",
+    "spec_unreachable",
     "http_403_forbidden",
     "http_404_not_found",
     "http_429_rate_limited",
@@ -255,6 +259,8 @@ def execute_intake_attempt(
                 reason_code = "same_document"
             elif reason_name in ("no_specification", "no-specification"):
                 reason_code = "spec_url_unconfigured"
+            elif reason_name in ("spec_unreachable", "spec-unreachable"):
+                reason_code = "spec_unreachable"
 
             attempt = IntakeAttempt(
                 vendor_id=resolved_vendor_id,

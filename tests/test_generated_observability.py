@@ -29,6 +29,7 @@ from sync.signals.generated.adapter import (
     NO_MANIFEST,
     NO_SPECIFICATION,
     ONE_DOCUMENT,
+    SPEC_UNREACHABLE,
     GeneratedSpecAdapter,
 )
 
@@ -264,21 +265,47 @@ def test_an_agreeing_hash_answers_even_when_one_url_serves_both(tmp_path):
 # --- the reasons that already existed, now answerable the same way -----------------
 
 
-def test_the_three_ways_of_not_looking_are_told_apart(tmp_path):
-    """`fetch_changes` returned an empty list for three unrelated reasons and named none of them
+def test_the_four_ways_of_not_looking_are_told_apart(tmp_path):
+    """`fetch_changes` returned an empty list for four unrelated reasons and named none of them
     to a caller. They are different repairs -- configure the version, write a hand-written
-    adapter, supply a versioned URL -- so one verdict that cannot distinguish them is no better
-    than the silence it replaced."""
+    adapter, supply a versioned URL, obtain a credential nobody here will hold -- so one verdict
+    that cannot distinguish them is no better than the silence it replaced."""
     no_manifest = _adapter(tmp_path, {"v1": _stainless(MIRROR_BASE, "h-old")})
     no_url = _adapter(tmp_path, {"v1": _stainless(None, "h-old"), "v2": _stainless(None, "h-new")})
     one_document = _adapter(
         tmp_path,
         {"v1": _speakeasy("vercel.workflow.yaml"), "v2": _speakeasy("vercel.workflow.yaml")},
     )
+    behind_registry = _adapter(
+        tmp_path,
+        {"v1": _speakeasy("mistral.workflow.yaml"), "v2": _speakeasy("mistral.workflow.yaml")},
+    )
 
     assert no_manifest.observability("v1", "v2").reason == NO_MANIFEST
     assert no_url.observability("v1", "v2").reason == NO_SPECIFICATION
     assert one_document.observability("v1", "v2").reason == ONE_DOCUMENT
+    assert behind_registry.observability("v1", "v2").reason == SPEC_UNREACHABLE
+
+
+def test_a_vendor_behind_a_registry_is_not_reported_as_publishing_none(tmp_path):
+    """The conflation this separates, asserted as the inequality it is.
+
+    Cloudflare publishes an endpoint count and no location: nothing exists to fetch, and the
+    repair is a hand-written adapter. Mistral publishes three genuine locations gated behind its
+    own Speakeasy token: the specification exists and we may not have it. Reporting the second as
+    the first tells an operator to write an adapter for a vendor that already publishes a spec.
+    """
+    behind_registry = _adapter(
+        tmp_path,
+        {"v1": _speakeasy("mistral.workflow.yaml"), "v2": _speakeasy("mistral.workflow.yaml")},
+    )
+
+    verdict = behind_registry.observability("v1", "v2")
+
+    assert verdict.observable is False
+    assert verdict.reason != NO_SPECIFICATION
+    # The detail names the reference itself, so an operator reads what to go and ask for.
+    assert "registry.speakeasyapi.dev" in verdict.detail
 
 
 @pytest.mark.parametrize(

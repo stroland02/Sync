@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pathlib
+import re
+
 import json
 import urllib.error
 from datetime import datetime, timezone
@@ -11,7 +14,7 @@ from typing import Iterable
 import pytest
 
 from sync.core import VendorChange
-from sync.signals.generated.adapter import GeneratedSpecAdapter, NO_MANIFEST, NO_SPECIFICATION, ONE_DOCUMENT, Observability
+from sync.signals.generated.adapter import GeneratedSpecAdapter, NO_MANIFEST, NO_SPECIFICATION, ONE_DOCUMENT, SPEC_UNREACHABLE, Observability
 from sync.signals.generated.manifest import SpecSource
 from sync.signals.intake_attempt import (
     CLOSED_REASON_CODES,
@@ -374,4 +377,47 @@ def test_intake_attempt_validates_closed_vocabulary():
 
     with pytest.raises(ValueError, match="invalid intake reason_code"):
         IntakeAttempt(vendor_id="stripe", attempted_at=now, outcome="failed", reason_code="invented_reason")  # type: ignore[arg-type]
+
+
+def test_a_spec_behind_a_registry_is_persisted_as_its_own_reason():
+    """The console distinction has to survive into the row, or it stops at the boundary.
+
+    `execute_intake_attempt` defaults `reason_code` unconditionally, so a verdict with no branch
+    of its own is written down as `spec_url_unconfigured` -- Cloudflare's code, and the opposite
+    claim. Asserting the persisted code rather than the verdict is the point of this test.
+    """
+    sink = MemoryIntakeAttemptSink()
+    obs = Observability(
+        False, SPEC_UNREACHABLE,
+        "the manifest names registry.speakeasyapi.dev/mistral-dev/mistral-dev/mistral-openapi:v2",
+    )
+    adapter = StubAdapter(vendor_id="mistral", observability_verdict=obs)
+
+    _, attempt = execute_intake_attempt(adapter, "v1", "v2", sink=sink)
+
+    assert attempt.outcome == "declined"
+    assert attempt.reason_code == "spec_unreachable"
+    assert attempt.reason_code != "spec_url_unconfigured"
+    assert attempt.reason_code in CLOSED_REASON_CODES
+
+
+def test_the_schema_states_the_size_of_the_vocabulary_it_stores():
+    """`schema.sql` names the member count in prose and nothing held it to the code.
+
+    A floor (`>= 15`) cannot notice a member arriving, so the sentence describing the column was
+    free to go stale the moment one did -- which is the decay the governing principle is about.
+    """
+    schema = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "src" / "sync" / "graph" / "schema.sql"
+    ).read_text(encoding="utf-8")
+
+    stated = re.search(r"closed ([a-z-]+)-member vocabulary in `sync.signals.intake_attempt`", schema)
+    assert stated is not None, "schema.sql no longer states the vocabulary size"
+
+    words = {
+        "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+        "nineteen": 19, "twenty": 20,
+    }
+    assert words[stated.group(1)] == len(CLOSED_REASON_CODES)
 

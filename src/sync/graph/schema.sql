@@ -585,7 +585,7 @@ CREATE TABLE IF NOT EXISTS run_heartbeat (
 -- adapter polled hourly that found nothing new for a week is indistinguishable from one
 -- whose fetch has been 403ing for a week. Both render as an old `last_change_at`.
 --
--- `reason_code` is from the closed seventeen-member vocabulary in `sync.signals.intake_attempt`.
+-- `reason_code` is from the closed eighteen-member vocabulary in `sync.signals.intake_attempt`.
 -- Like `abandon_reason_code`, a promise to learn from failures and aggregate statistics across
 -- adapters requires a closed vocabulary rather than free text. Free text is retained only in `detail`
 -- as diagnostic detail.

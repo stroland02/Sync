@@ -216,3 +216,45 @@ def test_sources_from_different_generators_are_never_equal():
     speakeasy = parse_manifest(".speakeasy/workflow.yaml", SPEAKEASY_WORKFLOW)
     assert stainless != speakeasy
     assert isinstance(stainless, SpecSource) and isinstance(speakeasy, SpecSource)
+
+
+# Mistral's real manifest, reduced to one source. Every `location` is a Speakeasy *registry
+# reference* rather than a URL -- verified live on 2026-08-23 at
+# `mistralai/client-python/.speakeasy/workflow.yaml`, which returns 200 unauthenticated.
+SPEAKEASY_REGISTRY_ONLY = """workflowVersion: 1.0.0
+speakeasyVersion: 1.763.6
+sources:
+    mistral-openapi:
+        inputs:
+        -   location: registry.speakeasyapi.dev/mistral-dev/mistral-dev/mistral-openapi:v2
+"""
+
+MISTRAL_REFERENCE = "registry.speakeasyapi.dev/mistral-dev/mistral-dev/mistral-openapi:v2"
+
+
+def test_a_registry_reference_is_recorded_rather_than_discarded():
+    """A manifest naming a location we cannot resolve is not a manifest naming none.
+
+    Returning None here put Mistral in Cloudflare's bucket, and the two are opposites: Cloudflare
+    publishes no specification, while Mistral publishes three and gates them behind its own
+    credential. `schema.sql` argues the rule -- absent and believed present is worse than absent.
+    """
+    source = parse_manifest(".speakeasy/workflow.yaml", SPEAKEASY_REGISTRY_ONLY)
+
+    assert source is not None
+    assert source.spec_reference == MISTRAL_REFERENCE
+    assert source.spec_url is None
+    # The reference is recorded, never resolved. Prefixing a scheme returns 200 and a 4,848-byte
+    # HTML page, which `_spec` would cache as a specification and oasdiff would diff against its
+    # identical twin and report clean.
+    assert source.is_fetchable is False
+
+
+def test_a_manifest_naming_a_real_url_records_no_reference():
+    # The other side of the pair: a resolvable location must not be filed as unreachable.
+    source = parse_manifest(".speakeasy/workflow.yaml", SPEAKEASY_WORKFLOW)
+
+    assert source.spec_url == "https://openapi.vercel.sh/"
+    assert source.spec_reference is None
+    assert source.is_fetchable is True
+
