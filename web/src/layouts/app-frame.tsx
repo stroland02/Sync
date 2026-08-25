@@ -232,7 +232,7 @@ function DestinationRow({
       <SidebarMenuButton
         asChild
         isActive={current}
-        className="h-9 rounded-l-control rounded-r-none text-body data-[active=true]:border-r-2 data-[active=true]:border-primary data-[active=true]:bg-primary/10 data-[active=true]:text-ink"
+        className="h-9 rounded-control text-body data-[active=true]:bg-primary data-[active=true]:font-medium data-[active=true]:text-primary-foreground"
       >
         <Link
           to={href}
@@ -602,7 +602,7 @@ export function AppFrame() {
               is when a reader needs it most. */}
           <header
             role="banner"
-            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-background px-section"
+            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-secondary px-section"
           >
             <div className="flex min-w-0 flex-1 items-center gap-section">
               <ScopeTrail />

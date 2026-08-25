@@ -177,7 +177,10 @@
      entries: no vendored component in this tree spells them, and one of them upstream
      resolves to the warning colour, which is not a value to adopt without a consumer that
      explains it. */
-  --color-sidebar: oklch(0.19 0.0025 159);
+  /* Raised over the #131413 page per the Stitch references -- chrome separates from the
+     canvas by surface, not border alone. Ink contrast still clears the floor here: ink 13.2:1,
+     ink-muted 9.1:1, ink-secondary 6.2:1 (same arithmetic family as the card surfaces). */
+  --color-sidebar: #1b1c1b;
   --color-sidebar-foreground: oklch(0.95 0.00275 159);
   --color-sidebar-accent: oklch(0.95 0.00275 159 / 4.9342%);
   --color-sidebar-accent-foreground: oklch(0.95 0.00275 159);
@@ -300,7 +303,11 @@
      .claude/rules/interface-originality.md keeps identity excluded. A webfont also buys a
      network request, a flash of unstyled text and a licence question for a console nobody
      outside this project has opened. */
-  --font-sans: Manrope, Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The face split the references draw: Manrope, tight-tracked, for display and headers only;
+     body and meta run in Inter. One face for every run was the reason headers and prose read
+     at the same voice. */
+  --font-display: Manrope, Inter, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 
@@ -344,6 +351,14 @@
    transform here rather than in copy, because a screen reader spells out letters that are
    already capitalised in the string -- the transform is a rendering choice, not a fact about
    the data. DESIGN.md's Type section carries which of `--text-meta`'s two jobs this covers. */
+@layer base {
+  /* Headers wear the display face; everything else is the body face. The split is the
+     reference's, and it is what gives a screen a voice change between title and data. */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+}
+
 @layer components {
   .furniture {
     text-transform: uppercase;

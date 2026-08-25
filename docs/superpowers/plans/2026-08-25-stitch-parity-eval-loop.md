@@ -158,6 +158,23 @@ fix, so re-capture retires them formally next iteration.
 (the structural sequence, planned as its own slice). Raw per-screen findings: the workflow
 journal for run `wf_3d57190e-249`.
 
+## Layout rulings — owner, 2026-08-25
+
+Asked screen by screen; these govern the structural slice.
+
+| Screens | Ruling |
+|---|---|
+| Overview | **Full rebuild** to the `developer_control_center` bento: viewport-locked grid, KPI row, per-pane scroll |
+| Findings, Runs, Call sites | **Full rebuild**: viewport-locked table filling the screen, compressed KPI strip, docked right inspector fed by selection |
+| Finding detail, Workflow | **Full rebuild** to the two-column split: evidence timeline left, remediation/code right, per-pane scroll |
+| Solutions | **Rebuild** to the `remediation_ci_cd_policy` board |
+| Graph | Canvas + docked node inspector; **Vendors, Services, Telemetry keep their table layouts** (their data is tabular; the service-map look arrives with the motion tier) |
+| Trends, Settings, Detectors, Corpus, Integration changes, File tree | **Reskin only** — systemic chrome, badges, banded headers, density |
+
+**Build order:** the viewport-locked frame mechanics land once in `ScreenFrame` (everything sits
+on it), then Findings → Overview → Call sites → Runs → Finding detail → Workflow → Solutions →
+Graph. Each lands gated with a re-capture before the next starts.
+
 ## Coverage map — what a screenshot cannot see
 
 The 13 captures cover the default state of every routed screen. "Every pixel" also includes the
