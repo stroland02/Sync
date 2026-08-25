@@ -79,6 +79,30 @@ Identity elements stay excluded — wordmark, logo, identifying iconography, mar
 other reference is governed exactly as above. And **no vendored component may assert a claim our
 data cannot support**: a slot for a confidence score renders the rung instead.
 
+## The Mobbin carve-out (owner-authorized, 2026-08-25)
+
+The owner holds a Mobbin Pro subscription and ruled that its library may inform **how our screens
+look**, not only how they work. That is an explicit amendment to "What does not transfer" above,
+and it is recorded here rather than in a chat message because the paragraph it modifies is the one
+every agent reads.
+
+**What the ruling changes.** Mobbin screens, sections and flows may be used as visual reference —
+composition, density, the shape of a pane, how a mature product arranges a working surface.
+
+**What it does not change**, because none of it was about references:
+
+- **The Stitch set remains the primary visual authority.** Where Mobbin and Stitch disagree about
+  our console, Stitch wins; Mobbin fills gaps Stitch does not draw.
+- **Identity elements stay excluded.** Wordmark, logo, iconography, illustration, marketing copy.
+- **No screen may assert a claim our data cannot support.** This is the refusal that matters most
+  and the one a beautiful reference makes tempting: take a structure, refuse its scalar. The best
+  incident view in the reference set carries `Root cause confidence: 9`, and we still will not.
+- **A change still has to be justifiable without pointing at the reference.** "Mobbin shows X"
+  remains not an argument; the problem it solves for an operator here is.
+
+The competitor screenshots under `references/screenshots/` stay hook-blocked. That guard was about
+one specific corpus and the reasoning that put it there is untouched by this ruling.
+
 ## Why this is not merely legal caution
 
 Sync's position is that competing tools present a black box and ask for trust. An interface
