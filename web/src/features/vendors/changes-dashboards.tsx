@@ -26,13 +26,9 @@
  * a stack is a composition and a log stack does not sum to anything.
  */
 
-import { InfoHint } from "@/components/info-hint"
 import { KpiStrip } from "@/components/kpi-strip"
-import { MetricPanel } from "@/components/metric-panel"
-import { RankedBars } from "@/components/ranked-bars"
 import { RelativeTime } from "@/components/relative-time"
 import { Absent } from "@/components/status"
-import { seriesScale } from "@/lib/palette"
 
 export interface ChangesFacets {
   readonly by_vendor: Record<string, number>
@@ -109,119 +105,3 @@ export function ChangesKpis({ facets }: { facets: ChangesFacets }) {
  * the vendors publish is breaking*, the stack is *which vendor publishes it*. Log-scaled and said
  * so, since the set spans three orders of magnitude.
  */
-export function SeverityMix({ facets }: { facets: ChangesFacets }) {
-  const rows = Object.entries(facets.by_severity)
-    .map(([key, value]) => ({ key, value }))
-    .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))
-
-  if (rows.length === 0) return null
-
-  return (
-    <RankedBars
-      label="Severity as published"
-      caption="Every change the graph holds, by the severity its vendor gave it — counted across the whole record rather than the narrowed table. Severity is the vendor's own: a change published as breaking breaks this codebase only where a call site binds to it."
-      rows={rows}
-      unit="changes"
-      colourByKey={false}
-      scale="log"
-    />
-  )
-}
-
-export function SeverityPerIntegration({ facets }: { facets: ChangesFacets }) {
-  const rows = Object.entries(facets.by_vendor_severity)
-    .map(([vendor, mix]) => ({
-      vendor,
-      mix,
-      total: Object.values(mix).reduce((sum, n) => sum + n, 0),
-    }))
-    .sort((a, b) => b.total - a.total || a.vendor.localeCompare(b.vendor))
-
-  // Every severity that occurs anywhere, so one severity is the same colour on every row.
-  const severities = [...new Set(rows.flatMap((row) => Object.keys(row.mix)))].sort()
-  const colour = seriesScale(severities)
-  const widest = rows.reduce((max, row) => Math.max(max, row.total), 0)
-
-  const hint = (
-    <InfoHint label="About severity per vendor">
-      Every change each integration published, split by the severity the vendor gave it. Counted
-      across the whole record rather than the narrowed table, so the rail&rsquo;s selections do
-      not change these bars. A severity missing from an integration&rsquo;s bar was never
-      published by it — absent from the grouping rather than counted at nought, and those are
-      different claims. Severity is the vendor&rsquo;s own: a change published as breaking breaks
-      this codebase only where a call site binds to it.
-    </InfoHint>
-  )
-
-  if (rows.length === 0) {
-    return (
-      <MetricPanel
-        label="Severity per vendor"
-        hint={hint}
-        caption="No integration has published a change."
-      >
-        <p className="max-w-prose text-body text-ink-muted">
-          Nothing to split. No adapter has delivered a change yet, so there is no severity mix for
-          any integration — which is the absence of a measurement rather than a measured zero.
-        </p>
-      </MetricPanel>
-    )
-  }
-
-  return (
-    <MetricPanel
-      label="Severity per vendor"
-      hint={hint}
-      caption="Each row is one integration's whole published record. A row's full width is the largest publisher's total, so rows compare against each other rather than against themselves."
-    >
-      <div className="flex flex-col gap-row">
-        <ul className="flex flex-wrap gap-section">
-          {severities.map((severity) => (
-            <li key={severity} className="flex items-center gap-field text-meta text-ink-muted">
-              <span
-                aria-hidden
-                className="h-[0.6rem] w-[0.6rem] rounded-[2px]"
-                style={{ background: colour(severity) }}
-              />
-              {severity}
-            </li>
-          ))}
-        </ul>
-
-        {rows.map((row) => (
-          <div key={row.vendor} className="flex min-w-0 flex-col gap-field">
-            <div className="flex items-baseline justify-between gap-row">
-              <span className="min-w-0 truncate font-mono text-meta text-ink">{row.vendor}</span>
-              <span className="text-meta tabular-nums text-ink-muted">
-                {row.total.toLocaleString()}
-              </span>
-            </div>
-            <div
-              className="flex h-[0.5rem] w-full overflow-hidden rounded-[2px]"
-              role="img"
-              aria-label={`${row.vendor}: ${severities
-                .filter((s) => row.mix[s] !== undefined)
-                .map((s) => `${row.mix[s]} ${s}`)
-                .join(", ")}`}
-            >
-              {severities
-                .filter((severity) => row.mix[severity] !== undefined)
-                .map((severity) => (
-                  <span
-                    key={severity}
-                    style={{
-                      // Share of the widest row, not of this row: every row summing to full
-                      // width would draw a vendor with one change the same size as one with
-                      // three hundred, which is the ranking claim silently deleted.
-                      width: `${widest === 0 ? 0 : (row.mix[severity] / widest) * 100}%`,
-                      background: colour(severity),
-                    }}
-                  />
-                ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </MetricPanel>
-  )
-}

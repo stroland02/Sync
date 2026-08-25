@@ -14,8 +14,8 @@ import { Link, useParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
 import { MapPreviews } from "@/features/index-graph/map-previews"
-import { PipelineStrip } from "@/features/repositories/pipeline-strip"
 import { WorkflowGrid } from "@/features/repositories/workflow-grid"
+import { PipelineStrip } from "@/features/repositories/pipeline-strip"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
 import { useRepositoryGraph, useRepositoryCoverage } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
@@ -120,9 +120,13 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
             operator meets setup before metrics. */}
         <GettingStartedCard repoId={repoId} />
         <PipelineStrip repoId={repoId} />
+        {/* The integration map and the file tree are the two the owner kept on 2026-08-25.
+            The stage-door grid went with the rest: every dashboard on this screen is to be
+            rebuilt against the Stitch references rather than reskinned in place. */}
         <MapsRegion repoId={repoId} />
-        {/* Good news as a number, W541 owner-picked: verified clean beside at risk. */}
+
         <WorkflowGrid repoId={repoId} />
+        {/* Good news as a number, W541 owner-picked: verified clean beside at risk. */}
       </section>
     </ScreenFrame>
   )

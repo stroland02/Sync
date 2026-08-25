@@ -25,7 +25,6 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppFrame, navRoutes, SETTINGS_NOTE } from "@/layouts/app-frame"
 import { shortcutHint } from "@/layouts/command-palette"
-import { SIDEBAR_STORAGE_KEY } from "@/layouts/sidebar-collapse"
 import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
 import { DESTINATIONS, ROUTES } from "@/lib/routes"
 
@@ -165,11 +164,15 @@ describe("the top bar sits above the chassis", () => {
    * `Breadcrumbs` and its own tests. `M14-W273` is the precedent this file already records: a
    * test whose subject retires may go, but not the coverage it carried.
    */
-  it("names the workspace in the top bar, which is what the scope trail used to carry", () => {
+  it("names the workspace in the top bar, by the tail of its id", () => {
+    // The full `org/one` was the identity string the owner removed on 2026-08-25 -- switching
+    // codebases is Settings work. What the bar still owes a reader is which workspace they are
+    // in, and the trail carries it as the repository's tail name with the whole id one hover
+    // away, which is the Superlog form the owner asked for.
     renderAt("/repositories/org%2Fone/vendors/stripe")
 
     const banner = screen.getByRole("banner")
-    expect(banner.textContent ?? "").toContain("org/one")
+    expect(banner.textContent ?? "").toContain("one")
   })
 
   it("offers the command palette a trigger a pointer can find", () => {
@@ -239,108 +242,56 @@ describe("a failure displaces the chassis rather than floating over it", () => {
   })
 })
 
-describe("the sidebar reveals itself on hover and returns to a rail", () => {
+describe("the sidebar moves only when its button is pressed", () => {
   /**
-   * The owner asked for this by name: *"the sidebar only expands when you're hovering over it and
-   * then automatically minimizes once you drag off."* It reconciles the two things otherwise in
-   * conflict — a rail that does not consume width, and full labels when they are wanted.
-   *
-   * **jsdom has no layout**, so no width here is read as a pixel. What is asserted is the state
-   * each element declares, which is the thing the derivation in `sidebar-collapse.ts` computes and
-   * the thing a wrong answer would show up in. The widths themselves are measured in Chrome and
-   * recorded in `DESIGN.md`.
+   * Hover-expand is gone -- owner ruling 2026-08-25, after the reveal was reported as "not
+   * working smoothly": a pointer crossing the rail on its way somewhere else reflowed the page
+   * under the reader, and two mechanisms for one panel made the width unpredictable. The
+   * button is the whole mechanism now, and the width a reader chooses is the width they keep.
    */
   function panel(): HTMLElement {
     return destinations().closest("[data-state]") as HTMLElement
   }
 
-  /** The box the content column actually gives up, which a hover must never move. */
-  function reserve(): HTMLElement {
-    return document.querySelector("[data-sidebar-reserve]") as HTMLElement
+  function toggle(): HTMLElement {
+    return screen.getByRole("button", { name: /(collapse|expand) the sidebar/i })
   }
 
-  /**
-   * The three reveal tests below need an unpinned panel to reveal. Since 2026-08-24 an unchosen
-   * reader is *pinned* -- the owner's Stitch specification asks for a persistent 240px sidebar --
-   * so each collapses first. The reveal itself is unchanged; only the starting state moved.
-   */
-  function collapseFirst() {
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "false")
-  }
-
-  it("starts pinned open for a reader who has not chosen, per the persistent-sidebar spec", () => {
+  it("starts expanded for a reader who has not chosen", () => {
     renderAt("/")
     expect(panel().getAttribute("data-state")).toBe("expanded")
   })
 
-  it("starts as a rail once a reader has collapsed it", () => {
-    collapseFirst()
+  it("collapses and expands on the button, and nothing else moves it", () => {
+    renderAt("/")
+
+    fireEvent.click(toggle())
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+
+    // The reveal that used to fire here does not exist: a pointer over the rail changes nothing.
+    fireEvent.pointerEnter(panel())
+    expect(panel().getAttribute("data-state")).toBe("minimised")
+
+    fireEvent.click(toggle())
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+  })
+
+  it("remembers the choice, so a reload does not overrule it", () => {
+    renderAt("/")
+    fireEvent.click(toggle())
+
+    cleanup()
     renderAt("/")
     expect(panel().getAttribute("data-state")).toBe("minimised")
   })
 
-  it("expands while the pointer is inside it and returns to a rail when it leaves", () => {
-    collapseFirst()
+  it("reserves exactly the width it draws, so the page never sits under the panel", () => {
     renderAt("/")
-
-    fireEvent.pointerEnter(reserve())
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-
-    fireEvent.pointerLeave(reserve())
-    expect(panel().getAttribute("data-state")).toBe("minimised")
+    const reserve = document.querySelector("[data-sidebar-reserve]") as HTMLElement
+    expect(reserve.getAttribute("data-sidebar-reserve")).toBe(
+      panel().getAttribute("data-state"),
+    )
   })
-
-  it("holds open while focus is inside it, so a hover does not trap a keyboard reader", () => {
-    // Hover alone would put every label behind a pointer. A reader tabbing into the sidebar has to
-    // see what they are tabbing through, and has to keep seeing it after any pointer has left.
-    collapseFirst()
-    renderAt("/")
-
-    const railLink = within(destinations()).getByRole("link", { name: /call sites/i })
-    fireEvent.focusIn(railLink)
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-
-    fireEvent.pointerLeave(reserve())
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-
-    fireEvent.focusOut(railLink)
-    expect(panel().getAttribute("data-state")).toBe("minimised")
-  })
-
-  it("keeps focus inside when it moves between two rows", () => {
-    // `focusout` fires before `focusin` when focus travels within the sidebar. Collapsing on it
-    // unconditionally would flicker the panel shut and open again on every arrow key.
-    renderAt("/")
-
-    const railLink = within(destinations()).getByRole("link", { name: /call sites/i })
-    const settings = within(destinations()).getByRole("link", { name: /settings/i })
-
-    fireEvent.focusIn(railLink)
-    fireEvent.focusOut(railLink, { relatedTarget: settings })
-
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-  })
-
-  it("takes the width it draws, so revealing pushes the page instead of covering it", () => {
-    // The inverse of what this file asserted until the owner saw it running. The reveal WAS an
-    // overlay, on the argument that reflowing the column under a reader is worse than covering it.
-    // The screenshot that settled it showed the page heading rendering as "W", the leading column of
-    // every table gone, and the repository names cut off mid-word — so the sidebar pushes the page,
-    // and the reserved box tracks the panel rather than disagreeing with it.
-    collapseFirst()
-    renderAt("/")
-
-    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
-    expect(panel().getAttribute("data-state")).toBe("minimised")
-
-    fireEvent.pointerEnter(reserve())
-
-    expect(panel().getAttribute("data-state")).toBe("expanded")
-    expect(reserve().getAttribute("data-sidebar-reserve")).toBe("expanded")
-  })
-
-
-
 })
 
 describe("the sidebar changes density without moving a row", () => {

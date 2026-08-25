@@ -63,6 +63,11 @@ export function adapterTierLabel(kind: AdapterRow["kind"]): string {
 /** A vendor the overview names and the adapter inventory does not. Not the same as never delivering. */
 export const NO_ADAPTER_ROW_NOTE = "the adapter inventory carries no row for this vendor"
 
+/** The catalogue errored: nothing was measured about this vendor's adapter, which is a different
+ *  fact from measuring that it has none. Carried since the table view retired -- the table said
+ *  this per row and going cards-only would have lost the distinction with nothing failing. */
+export const CATALOGUE_UNANSWERED_NOTE = "the adapter catalogue did not answer"
+
 /** No count was computed for this vendor in this scope. Not the same as a count of nought. */
 export const NO_CALL_SITE_COUNT_NOTE = "the index answered for no vendor in this scope"
 
@@ -112,6 +117,8 @@ export interface VendorCardProps {
   vendorId: string
   /** This vendor's row in `GET /api/adapters`, or `null` when the inventory carries none. */
   adapter: AdapterRow | null
+  /** `false` when the catalogue query failed -- absence of an answer, not an answer of none. */
+  catalogueAnswered?: boolean
   /**
    * Call sites this repository binds to the vendor, from `IndexCoverageResponse.by_vendor`, or
    * `null` when the coverage answer does not cover it.
@@ -127,7 +134,12 @@ export interface VendorCardProps {
   callSites: number | null
 }
 
-export function VendorCard({ vendorId, adapter, callSites }: VendorCardProps) {
+export function VendorCard({
+  vendorId,
+  adapter,
+  callSites,
+  catalogueAnswered = true,
+}: VendorCardProps) {
   const facts: Fact[] = [
     ...(adapter === null ? [] : [{ label: "Served from", value: servedFrom(adapter) }]),
     ...(adapter === null ? [] : intakeFacts(adapter)),
@@ -151,7 +163,13 @@ export function VendorCard({ vendorId, adapter, callSites }: VendorCardProps) {
       <header className="flex min-w-0 flex-wrap items-center gap-section">
         <VendorMark vendorId={vendorId} />
         <h3 className="min-w-0 font-mono text-emphasis break-words">{vendorId}</h3>
-        {adapter === null ? (
+        {!catalogueAnswered ? (
+          <span className="text-meta">
+            <Absent>
+              <span>{CATALOGUE_UNANSWERED_NOTE}</span>
+            </Absent>
+          </span>
+        ) : adapter === null ? (
           <span className="text-meta">
             <Absent>
               <span>{NO_ADAPTER_ROW_NOTE}</span>

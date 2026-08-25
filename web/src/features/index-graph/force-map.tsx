@@ -168,11 +168,16 @@ export function ForceMap({
   rows,
   className,
   fill = false,
+  controls = true,
 }: {
   rows: RepositoryGraphBinding[]
   className?: string
   /** Fill the height its container gives, rather than the card's own 44rem. */
   fill?: boolean
+  /** Owner ruling 2026-08-25: zoom and fit belong to the graph page. The Overview's preview is
+      a picture you click through, and the buttons over it were chrome for an interaction
+      nobody performs there. Node selection stays -- it is the picture, not chrome. */
+  controls?: boolean
 }) {
   const { nodes, links } = useMemo(() => buildForceGraph(rows), [rows])
   // One scale over the vendors present, so a vendor wears the same colour here as in every
@@ -428,6 +433,7 @@ export function ForceMap({
       </svg>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
+        {controls && (
         <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
           <Button variant="outline" size="sm" onClick={() => scaleBy(1.5)}>
             Zoom in
@@ -443,6 +449,7 @@ export function ForceMap({
             drag to pan
           </span>
         </div>
+        )}
 
         {selected !== null && (
           <div className="pointer-events-auto flex max-w-sm flex-col gap-field rounded-surface border border-line bg-surface/95 p-section backdrop-blur">

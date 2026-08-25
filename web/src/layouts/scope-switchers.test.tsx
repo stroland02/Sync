@@ -231,10 +231,11 @@ describe("the trail on screen", () => {
     renderAt("/repositories/seed-console")
 
     // The address names the workspace, so that name needs no list to arrive and is drawn at once.
-    // The vendor's does -- nothing in the address names one -- so it is the only skeleton. A bare
-    // count would pass on the wrong pair; this says which switcher is waiting and which is not.
+    // The vendor switcher no longer renders outside a vendor scope at all (owner ruling
+    // 2026-08-25: parent / current, nothing else), so inside a bare workspace there is nothing
+    // left waiting and no skeleton to draw.
     expect(within(trail()).getByText("seed-console")).toBeTruthy()
-    expect(trail().querySelectorAll('[role="presentation"]')).toHaveLength(1)
+    expect(trail().querySelectorAll('[role="presentation"]')).toHaveLength(0)
   })
 
   it("states what the list is counted over, and what an empty one means", () => {
@@ -270,7 +271,10 @@ describe("the trail on screen", () => {
   it("carries the repository onto a vendor picked from the bar", () => {
     withRepositories(["seed-console"])
     withVendors(["stripe", "shopify"])
-    renderAt("/repositories/seed-console")
+    // From inside a vendor scope: the switcher only renders where a vendor is actually in
+    // scope now (owner ruling 2026-08-25), which is also the only place switching to another
+    // one means anything.
+    renderAt("/repositories/seed-console/vendors/stripe")
 
     const popover = openSwitcher(/vendor/i)
     fireEvent.click(within(popover).getByRole("option", { name: "shopify" }))

@@ -160,12 +160,18 @@ describe("a catalogue that did not answer is not a vendor without an adapter", (
     expect(screen.getAllByText(/the adapter catalogue did not answer/i).length).toBeGreaterThan(0)
   })
 
-  it("says the tiers are uncounted rather than removing the control", () => {
+  it("says nothing was counted rather than printing a tier it never read", () => {
+    // The tier facet this used to assert went with the owner's ruling of 2026-08-25 -- every
+    // attached vendor is generated, so the control offered one answer twice. What it guaranteed
+    // is not dropped: the card still refuses to name a tier the catalogue never described, and
+    // says which nothing it is. `M14-W273`'s precedent -- a test whose subject retires may go,
+    // but not the coverage it carried.
     coverage("org/one", { stripe: 3 })
     adaptersFailed()
 
     renderAt("org/one")
 
-    expect(screen.getByText(/Tiers are unavailable/i)).toBeTruthy()
+    expect(screen.getAllByText(/the adapter catalogue did not answer/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/adapter: generated/i)).toBeNull()
   })
 })

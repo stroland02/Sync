@@ -18,7 +18,6 @@ import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 
 import { DetectorAccountability } from "@/features/detectors/detector-accountability"
-import { DetectorsDashboards } from "@/features/detectors/detectors-dashboards"
 import { RungMixCard } from "@/features/detectors/rung-mix-card"
 
 
@@ -68,7 +67,6 @@ export function DetectorsPage() {
       {/* The automatic lane leads (owner ruling): what the platform did without a human. */}
       <AutomationPanel repoId={repoId} />
 
-      <DetectorsDashboards repoId={repoId} />
 
       {/* The workspace-wide rung mix, moved off the Overview 2026-08-19. */}
       <RungMixCard repoId={repoId} />

@@ -491,10 +491,15 @@ export function TreeMapD3({
   rows,
   className,
   fill = false,
+  controls = true,
 }: {
   rows: RepositoryGraphBinding[]
   className?: string
   fill?: boolean
+  /** Owner ruling 2026-08-25: zoom, fit and fold belong to the graph page, not to the
+      Overview's preview -- a preview is a picture you click through, and six buttons over it
+      is chrome for an interaction nobody performs there. */
+  controls?: boolean
 }) {
   const map = useTreeMap(rows, fill)
 
@@ -508,6 +513,7 @@ export function TreeMapD3({
     >
       {map.canvas}
 
+      {controls && (
       <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
         <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
           <Button variant="outline" size="sm" onClick={map.zoomIn}>
@@ -544,6 +550,7 @@ export function TreeMapD3({
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

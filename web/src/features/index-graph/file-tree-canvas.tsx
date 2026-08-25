@@ -166,11 +166,15 @@ export function FileTreeCanvas({
   rows,
   knownVendorIds,
   className,
+  controls = true,
 }: {
   rows: RepositoryGraphBinding[]
   /** Every vendor the caller already knows exists, so a truncated response cannot silently drop one -- see `buildOperationGraph`'s own docstring. */
   knownVendorIds?: string[]
   className?: string
+  /** Owner ruling 2026-08-25: the view controls belong to the file-tree page, not the
+      Overview's preview. */
+  controls?: boolean
 }) {
   const bindings = useMemo(() => rows.map(rowToBinding), [rows])
 
@@ -349,7 +353,8 @@ export function FileTreeCanvas({
           <p className="absolute inset-0 flex items-center justify-center p-section text-center text-body text-ink-muted">{EMPTY_GRAPH_NOTE}</p>
         )}
 
-        {/* Top-left: the view controls, over the canvas. */}
+        {/* Top-left: the view controls, over the canvas. Suppressed on the Overview preview. */}
+        {controls && (
         <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
           <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
             <Button
@@ -397,6 +402,7 @@ export function FileTreeCanvas({
             </div>
           )}
         </div>
+        )}
 
         <div className="pointer-events-none absolute right-0 bottom-0 p-row">
           <Minimap nodes={layout.nodes} frame={fit} view={view} />

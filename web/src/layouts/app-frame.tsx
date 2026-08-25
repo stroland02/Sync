@@ -19,25 +19,24 @@ import {
   Settings,
   Workflow,
   Wrench,
+  PanelLeft,
   type LucideIcon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, NavLink, Outlet, useLocation } from "react-router"
 
 import { useRepositories } from "@/api/queries"
-import { WorkspaceSwitcher } from "@/layouts/workspace-switcher"
 import { ErrorSurface } from "@/components/error-surface"
 import { fetchSetup } from "@/features/settings/api"
 import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command-palette"
 import { StatusTargetProvider, useStatusTarget } from "@/layouts/screen-frame"
 import { ScopeTrail } from "@/layouts/scope-switchers"
-import { ScreenTabs } from "@/layouts/screen-tabs"
 import { STAGE_DOES } from "@/lib/stage-pages"
+import { TopbarStatsProvider, TopbarStatsSlot } from "@/layouts/topbar-stats"
 import {
   SIDEBAR_WIDTH,
-  railState,
   readPinned,
-  sidebarState,
+  writePinned,
 } from "@/layouts/sidebar-collapse"
 import {
   DESTINATIONS,
@@ -156,34 +155,6 @@ function useChassisIdentity(pathname: string) {
  * The environment, in the cross's top-right quadrant by the owner's direction: the workspace's
  * git name, the deployment, and the forge credential, as one truncating link into Connections.
  */
-function EnvironmentBadge() {
-  const { pathname } = useLocation()
-  const { workspace, forgeLogin, pending } = useChassisIdentity(pathname)
-  return (
-    // No longer a link into Settings. Pressing the text a reader takes for the codebase name
-    // navigated them to a different screen entirely (owner report, 2026-08-19); the badge is the
-    // switcher now, and Settings is reachable from the rail where it always was.
-    <WorkspaceSwitcher current={workspace}>
-      {workspace !== null && (
-        <>
-          <span className="min-w-0 truncate font-mono text-meta text-ink-muted" title={workspace}>
-            {workspace}
-          </span>
-          <span aria-hidden="true">·</span>
-        </>
-      )}
-      {/* The environment as a chip in the furniture register, not a sentence. The forge login
-          moved to its tooltip on the owner's 2026-08-25 ruling -- the fact stays one hover away
-          here and fully stated on the Getting-started panel, which is its home. */}
-      <span
-        className="shrink-0 rounded-control border border-line px-field font-furniture text-ink-secondary"
-        title={pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
-      >
-        local dev
-      </span>
-    </WorkspaceSwitcher>
-  )
-}
 
 
 
@@ -296,54 +267,21 @@ function AppSidebar({ pathname }: { pathname: string }) {
   // repositories keep the picker, because choosing among several is the operator's act, and
   // an unanswered repositories query binds nothing rather than guessing.
   const { bound, workspace, forgeLogin, pending: identityPending } = useChassisIdentity(pathname)
-  // The pin is a stored preference with no control any more: the owner removed the button because
-  // hovering is the mechanism, and two ways to open one panel is what made this hard to reason
-  // about. It is still read, so a reader who set it before this change is not overruled by it, and
-  // nothing in the frame can set it. If it is still unset by anything a week from now it should go.
-  const pinned = readPinned()
-  const [pointerInside, setPointerInside] = useState(false)
-  const [focusInside, setFocusInside] = useState(false)
+  // The pin has a control again -- owner ruling 2026-08-25, from the Superlog reference: a
+  // deliberate toggle on the wordmark row, so the rail is a state a reader chooses and stays in
+  // rather than one a stray pointer keeps undoing. Hover-reveal survives underneath it for the
+  // collapsed state, which is what makes the rail navigable without expanding it.
+  const [pinned, setPinned] = useState(readPinned)
+  const togglePinned = () => {
+    setPinned((was) => {
+      writePinned(!was)
+      return !was
+    })
+  }
   const reserve = useRef<HTMLDivElement>(null)
 
-  /**
-   * The reveal, wired to native events rather than to React's synthetic ones.
-   *
-   * `pointerenter`/`pointerleave` and `focusin`/`focusout` are the four the browser actually fires
-   * for "the pointer is over this box" and "something inside it holds focus". React reconstructs
-   * the first pair from `pointerover`/`pointerout` and the second pair is what its `onFocus` is
-   * already built on, so going to the DOM costs one effect and removes a layer of simulation from
-   * the one interaction a reader performs on every pointer move.
-   *
-   * **`focusout` carries `relatedTarget`, and ignoring it is a bug rather than a simplification.**
-   * Focus moving from one row to the next fires `focusout` before `focusin`, so an unconditional
-   * collapse would shut the panel and reopen it on every arrow key.
-   */
-  useEffect(() => {
-    const node = reserve.current
-    if (node === null) return
-
-    const enter = () => setPointerInside(true)
-    const leave = () => setPointerInside(false)
-    const focusIn = () => setFocusInside(true)
-    const focusOut = (event: FocusEvent) => {
-      if (event.relatedTarget instanceof Node && node.contains(event.relatedTarget)) return
-      setFocusInside(false)
-    }
-
-    node.addEventListener("pointerenter", enter)
-    node.addEventListener("pointerleave", leave)
-    node.addEventListener("focusin", focusIn)
-    node.addEventListener("focusout", focusOut)
-    return () => {
-      node.removeEventListener("pointerenter", enter)
-      node.removeEventListener("pointerleave", leave)
-      node.removeEventListener("focusin", focusIn)
-      node.removeEventListener("focusout", focusOut)
-    }
-  }, [])
-
-  const state = sidebarState({ pinned, pointerInside, focusInside })
-  const rail = railState({ pinned, pointerInside, focusInside })
+  const state = pinned ? "expanded" : "minimised"
+  const rail = state
   const minimised = state === "minimised"
 
 
@@ -374,19 +312,38 @@ function AppSidebar({ pathname }: { pathname: string }) {
               top bar) on the owner's direction, so nothing here ever shifts the rows below. */}
           <SidebarHeader className="gap-0 p-0">
             <div
-              className="flex h-12 shrink-0 items-center gap-row border-b border-line px-section"
+              className={cn(
+                "flex h-12 shrink-0 items-center border-b border-line",
+                minimised ? "justify-center px-0" : "gap-row px-section"
+              )}
               title={workspace ?? undefined}
             >
-              <SyncMark className="size-5 shrink-0 text-foreground" />
-              <span
-                className={
-                  minimised
-                    ? "sr-only"
-                    : "font-semibold text-emphasis tracking-tight text-foreground"
-                }
+              {/* At rail width the toggle is the whole row and centres in it; the wordmark is
+                  absent rather than `sr-only`, because an invisible element still took the
+                  width and pushed the button off centre -- which is the overlap the owner
+                  reported on 2026-08-25. */}
+              {!minimised && (
+                <Link to="/" aria-label="Fleet" className="flex min-w-0 items-center gap-row">
+                  <SyncMark className="size-5 shrink-0 text-foreground" />
+                  <span className="font-semibold text-emphasis tracking-tight text-foreground">
+                    Sync
+                  </span>
+                </Link>
+              )}
+              {/* The toggle the Superlog reference puts here. At rail width it is the only
+                  control on the row, so it centres; expanded it sits at the far end. */}
+              <button
+                type="button"
+                onClick={togglePinned}
+                aria-label={pinned ? "Collapse the sidebar" : "Expand the sidebar"}
+                aria-pressed={!pinned}
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-control text-graphics transition-colors hover:bg-surface-subtle hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+                  minimised ? "" : "ml-auto"
+                )}
               >
-                Sync
-              </span>
+                <PanelLeft aria-hidden="true" className="size-4" />
+              </button>
             </div>
           </SidebarHeader>
           {/* No scrollbar — owner review item 3, and the compaction above is what makes it honest
@@ -541,6 +498,7 @@ function ChassisQualifications() {
 export function AppFrame() {
   const { pathname } = useLocation()
   const { target, footerRef } = useStatusTarget()
+  const [statsTarget, setStatsTarget] = useState<HTMLElement | null>(null)
   const contentRef = useRef<HTMLElement>(null)
   const arrivedAt = useRef<string | null>(null)
 
@@ -591,6 +549,7 @@ export function AppFrame() {
         <AppSidebar pathname={pathname} />
 
         <StatusTargetProvider target={target}>
+        <TopbarStatsProvider target={statsTarget}>
         <div className="flex min-w-0 flex-1 flex-col">
           <ErrorSurface />
 
@@ -606,13 +565,16 @@ export function AppFrame() {
           >
             <div className="flex min-w-0 flex-1 items-center gap-section">
               <ScopeTrail />
-              <ScreenTabs />
             </div>
-            <div className="flex shrink-0 items-center gap-section">
-              <EnvironmentBadge />
-              <CommandPaletteTrigger />
-            </div>
+            <CommandPaletteTrigger />
           </header>
+
+          {/* The page's own figures, published here by every screen's KPI strip and the
+              pipeline (owner rulings 2026-08-25): a second chrome row at the top bar's own
+              height, not a shared corner -- and gone entirely (`empty:hidden`) on a screen
+              that publishes nothing, because an empty bar is dead chrome. The workspace
+              identity that used to hold this ground is Settings work now. */}
+          <TopbarStatsSlot onTarget={setStatsTarget} />
 
           {/* The routed screen renders inside a centred column capped at 1400px — a page-layout
               number, argued here and spelled in layouts/ per DESIGN.md's own rule for those. At
@@ -646,6 +608,7 @@ export function AppFrame() {
             <ChassisQualifications />
           </footer>
         </div>
+        </TopbarStatsProvider>
         </StatusTargetProvider>
       </SidebarProvider>
     </CommandPaletteProvider>

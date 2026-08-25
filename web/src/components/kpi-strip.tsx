@@ -21,8 +21,10 @@
  */
 
 import type { ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 import { FactTile } from "@/components/fact-tile"
+import { TopbarStat, useTopbarStatsTarget } from "@/layouts/topbar-stats"
 import { cn } from "@/lib/utils"
 
 export interface Kpi {
@@ -42,6 +44,28 @@ export function KpiStrip({
   items: readonly [Kpi, Kpi, Kpi] | readonly [Kpi, Kpi, Kpi, Kpi]
   className?: string
 }) {
+  // Inside the chassis the strip lives in the top bar -- owner ruling 2026-08-25, every page.
+  // The portal keeps the page's own code unchanged: it passes the same items, and the chrome is
+  // where they land. Outside the chassis (a bare test, a screen on its own) the in-page grid
+  // below is the fallback, so the facts are never lost to a missing slot. Notes travel as the
+  // segment's tooltip; the tile carried them in full, and the bar has one line.
+  const target = useTopbarStatsTarget()
+  if (target !== null) {
+    return createPortal(
+      <>
+        {items.map((item) => (
+          <TopbarStat
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            note={typeof item.note === "string" ? item.note : undefined}
+          />
+        ))}
+      </>,
+      target,
+    )
+  }
+
   return (
     // One surface, hairline-divided, rather than four cards with four borders and four gaps.
     // The owner's direction of 2026-08-19: the strip is the page's instrument panel and should

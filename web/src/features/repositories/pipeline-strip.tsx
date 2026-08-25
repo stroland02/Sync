@@ -26,7 +26,10 @@ import { InfoHint } from "@/components/info-hint"
 import { RelativeTime } from "@/components/relative-time"
 import { Skeleton } from "@/components/skeleton"
 import { Absent } from "@/components/status"
+import { createPortal } from "react-dom"
+
 import { STAGE_DOES, pagesByStage } from "@/lib/stage-pages"
+import { useTopbarStatsTarget } from "@/layouts/topbar-stats"
 import { destinationHref, type RouteEntry, type WorkflowStage } from "@/lib/stage-pages"
 
 interface StageFigure {
@@ -122,6 +125,41 @@ export function PipelineStrip({ repoId }: { repoId: string }) {
       unit: "a run carries no repository yet",
       figure: false,
     },
+  }
+
+  // In the chrome, compact -- owner ruling 2026-08-25: the pipeline reads as one line in the
+  // top bar on every page load of this screen. Each stage keeps its link, an uncounted stage
+  // keeps its dash with the reason one hover away, and the arrows say the order without
+  // asserting a proportion. Outside the chassis the full strip below still renders.
+  const target = useTopbarStatsTarget()
+  if (target !== null) {
+    return createPortal(
+      <>
+        {pagesByStage().map(({ stage, pages }) => {
+          const destination = pages[0]
+          const href = destinationHref(destination, { repoId })
+          if (href === null) return null
+          const figure = figures[stage]
+          // The same instrument cell the KPI segments take: full-width even division, label
+          // centered over value, the stage's sentence one hover away. The arrows went with the
+          // owner's simpler form -- the order is the order of the cells.
+          return (
+            <Link
+              key={stage}
+              to={href}
+              title={`${stage} — ${typeof figure.unit === "string" ? figure.unit : ""}`}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-center px-row text-center transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <span className="truncate font-furniture text-ink-secondary">{stage}</span>
+              <span className="min-w-0 max-w-full truncate font-mono text-body font-medium text-ink">
+                {figure.figure === false ? "—" : figure.value}
+              </span>
+            </Link>
+          )
+        })}
+      </>,
+      target,
+    )
   }
 
   return (

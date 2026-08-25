@@ -68,7 +68,7 @@ export function MapPreviews({
         href={`/repositories/${scoped}/graph`}
         action="Open integration map"
       >
-        <ForceMap rows={bindings} fill />
+        <ForceMap rows={bindings} fill controls={false} />
       </MapPanel>
 
       <MapPanel
@@ -77,7 +77,7 @@ export function MapPreviews({
         href={`/repositories/${scoped}/file-tree`}
         action="Open file tree"
       >
-        <TreeMapD3 rows={bindings} fill />
+        <TreeMapD3 rows={bindings} fill controls={false} />
       </MapPanel>
     </div>
   )

@@ -47,7 +47,6 @@ import {
   useColumnVisibility,
   type ColumnSpec,
 } from "@/components/column-visibility"
-import { CallSitesDashboards } from "@/features/bindings/call-sites-dashboards"
 import { CallSiteDetail } from "@/features/bindings/call-site-drawer"
 import {
   DetailLayout,
@@ -589,7 +588,6 @@ export function CallSitesPage() {
           table's success branch, for the reason it always was: the topology answers a different
           question over the same rows, and a failure to page the table is no reason to withhold
           the shape of what was indexed. */}
-      <CallSitesDashboards repoId={repoId} />
     </section>
     </ScreenFrame>
   )

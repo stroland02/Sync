@@ -43,9 +43,7 @@ import { MetricPanel } from "@/components/metric-panel"
 import {
   ChangesKpis,
   type ChangesFacets,
-  SeverityMix,
-  SeverityPerIntegration,
-} from "@/features/vendors/changes-dashboards"
+    } from "@/features/vendors/changes-dashboards"
 import { RelativeTime } from "@/components/relative-time"
 import { ErrorState, LoadingState } from "@/components/states"
 import { describeRecordWindow } from "@/lib/record-window"
@@ -267,8 +265,6 @@ export function IntegrationChangesPage() {
               request, and both describe the whole record rather than the narrowed table. */}
           <ChangesKpis facets={facetsOf(query.data)} />
           <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
-            <SeverityMix facets={facetsOf(query.data)} />
-            <SeverityPerIntegration facets={facetsOf(query.data)} />
           </div>
         </>
       )}

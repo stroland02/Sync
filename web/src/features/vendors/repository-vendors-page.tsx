@@ -19,13 +19,11 @@
  * scope matches the address, and say so plainly when it does not.
  */
 
-import { useState } from "react"
 import { useParams, Link } from "react-router"
 
 import { useAdapters, useRepositoryCoverage } from "@/api/queries"
 import type { AdapterRow } from "@/api/types"
 import { Badge } from "@/vendor/supabase/ui/badge"
-import { Button } from "@/components/ui/button"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Skeleton } from "@/components/skeleton"
 import { Absent } from "@/components/status"
@@ -38,7 +36,7 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
-import { VendorCard, ADAPTER_TIERS } from "@/features/vendors/vendor-card"
+import { VendorCard } from "@/features/vendors/vendor-card"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 
@@ -92,7 +90,7 @@ export function RepositoryVendorsPage() {
 
   // Cards only, owner ruling 2026-08-25 -- the table view is retired, not toggled off.
   const viewMode: ViewMode = "cards"
-  const [tierFilter, setTierFilter] = useState<TierFilter>("all")
+  const tierFilter: TierFilter = "all"
 
 
 
@@ -163,49 +161,11 @@ export function RepositoryVendorsPage() {
     },
   ]
 
-  // Undefined rather than an empty band when there is no vendor to narrow: the frame reserves no
-  // height for controls it is not given.
-  const tierControls =
-    scopeMatches && vendors.length > 0 ? (
-      <div className="flex items-center gap-field overflow-x-auto">
-        <Button
-          size="sm"
-          variant={tierFilter === "all" ? "secondary" : "ghost"}
-          onClick={() => setTierFilter("all")}
-          className="text-meta"
-        >
-          All ({vendors.length})
-        </Button>
-        {/* Every count derives from the same map, so an errored catalogue zeroes them all and the
-            `count === 0` rule below removes every chip -- the control disappears rather than
-            saying why it is gone. */}
-        {!adaptersQuery.isSuccess && (
-          <span className="text-meta text-ink-muted">
-            Tiers are unavailable: the adapter catalogue did not answer, so nothing here has been
-            counted.
-          </span>
-        )}
-        {adaptersQuery.isSuccess &&
-          ADAPTER_TIERS.map((tier) => {
-          const count = vendors.filter((v) => adaptersMap.get(v.vendor_id)?.kind === tier).length
-          if (count === 0 && tierFilter !== tier) return null
-          return (
-            <Button
-              key={tier}
-              size="sm"
-              variant={tierFilter === tier ? "secondary" : "ghost"}
-              onClick={() => setTierFilter(tier)}
-              className="text-meta capitalize"
-            >
-              {tier} ({count})
-            </Button>
-          )
-        })}
-      </div>
-    ) : undefined
-
+  // The tier tabs went on the owner's ruling of 2026-08-25: every attached vendor is generated,
+  // so "All (3) / Generated (3)" was a control offering one answer twice. The tier still shows
+  // on each card, which is where a reader asks about one vendor rather than filtering by it.
   return (
-    <ScreenFrame controls={tierControls} status={status}>
+    <ScreenFrame status={status}>
     <section className="flex min-w-0 flex-col gap-8">
 
       {/* Dashboard I1. Above the scope check on purpose: the catalogue is its own read with its
@@ -250,6 +210,7 @@ export function RepositoryVendorsPage() {
                     <VendorCard
                       vendorId={vendor.vendor_id}
                       adapter={adapter}
+                      catalogueAnswered={adaptersQuery.isSuccess}
                       callSites={vendor.call_sites}
                     />
                   </Link>

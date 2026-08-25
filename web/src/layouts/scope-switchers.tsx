@@ -36,7 +36,7 @@
  */
 
 import { useState } from "react"
-import { ChevronsUpDown, Radar } from "lucide-react"
+import { ChevronsUpDown } from "lucide-react"
 import { Link, matchPath, useLocation, useNavigate } from "react-router"
 
 import { useOverview, useRepositories } from "@/api/queries"
@@ -199,6 +199,7 @@ function Switcher({
   absence,
   hrefFor,
   skeletonWidth,
+  display,
 }: {
   name: string
   value: string | null
@@ -210,6 +211,8 @@ function Switcher({
   absence: string
   hrefFor: (id: string) => string
   skeletonWidth: string
+  /** Shortens the trigger label only -- the full id stays in `title` and in the option list. */
+  display?: (id: string) => string
 }) {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
@@ -223,8 +226,8 @@ function Switcher({
   return (
     <span className="flex min-w-0 items-center gap-field">
       {value !== null && valueHref !== null ? (
-        <Link to={valueHref} title={value} className={TRAIL_LINK}>
-          {value}
+        <Link to={valueHref} title={value} className={cn(TRAIL_LINK, "text-ink-muted")}>
+          {display ? display(value) : value}
         </Link>
       ) : pending ? (
         <Skeleton width={skeletonWidth} />
@@ -288,19 +291,13 @@ export function ScopeTrail() {
 
   return (
     <nav aria-label="Scope" className="flex min-w-0 items-center gap-field">
-      <Link
-        to="/"
-        aria-label="Repositories"
-        className="flex shrink-0 items-center gap-field rounded-control px-field text-body text-foreground hover:bg-surface-subtle"
-      >
-        <Radar aria-hidden="true" className="size-4" />
-        <span>Repositories</span>
-      </Link>
-
-      <Divider />
-
+      {/* Parent / current, nothing else -- the owner's 2026-08-25 simplification. The fleet
+          root moved onto the wordmark, the repository shows its tail name with the full id one
+          hover away, and the vendor level appears only when a vendor is actually in scope.
+          Parents are muted; the current page is the one bold segment. */}
       <Switcher
         name="Repository"
+        display={(id) => id.split("/").pop() ?? id}
         value={repoId}
         valueHref={repoId === null ? null : overviewHref(repoId)}
         options={repositories.data?.repo_ids ?? []}
@@ -316,7 +313,7 @@ export function ScopeTrail() {
           so without one there is nothing this control could navigate to -- and a control that
           absorbs the press reads as broken, where one that is absent is honest about being
           unavailable. That is the registry's own rule for a destination needing a subject. */}
-      {repoId !== null && (
+      {repoId !== null && vendorId !== null && (
         <>
           <Divider />
 
