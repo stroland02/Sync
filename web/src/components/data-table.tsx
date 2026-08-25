@@ -52,7 +52,13 @@ export function TableRow({ className, ...props }: ComponentProps<typeof Vendored
   return (
     <VendoredRow
       className={cn(
-        "border-b transition-colors hover:bg-surface-subtle data-[state=selected]:bg-surface-emphasis",
+        // 36px as a floor, not a clamp. The design system asks for a strict 36px row, and a
+        // single-line row is exactly that. Measured on the call-sites table, rows come out at
+        // 39px -- and that is honest rather than drift: the leading cell stacks a file path over
+        // a muted second line, so it carries two 16px line boxes inside the same 8px padding.
+        // Clamping to 36px would clip the second line, which is the content the screen exists
+        // to show. `min-h` holds the rhythm where a row has one line and yields where it has two.
+        "min-h-[var(--row-md)] box-border border-b transition-colors hover:bg-surface-subtle data-[state=selected]:bg-surface-emphasis",
         className
       )}
       {...props}
