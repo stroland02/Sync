@@ -33,12 +33,12 @@
   /* -- depth: four opaque steps, `--surface` plus `--elevation-step * ratio` ----------
      The ratios are upstream's: card 1, popover 1.5, secondary 2. Our own names sit on
      the first two, which are the only two depths a console needs. */
-  --color-background: oklch(0.19 0.0025 159);
-  --color-card: oklch(0.215 0.0025 159);
-  --color-popover: oklch(0.2275 0.0025 159);
-  --color-secondary: oklch(0.24 0.0025 159);
-  --color-surface-sunken: oklch(0.19 0.0025 159);
-  --color-surface: oklch(0.215 0.0025 159);
+  --color-background: #131413;
+  --color-card: #181a19;
+  --color-popover: #1b1d1c;
+  --color-secondary: #1e201f;
+  --color-surface-sunken: #0e0f0e;
+  --color-surface: #181a19;
 
   /* -- state: two foreground overlays, not two more depth steps ----------------------
      `--muted` and `--accent` are the foreground at an alpha tuned upstream so each
@@ -62,10 +62,10 @@
      is the chart legend's and is banned as a text class by
      tests/test_console_design_tokens.py, which holds the class rather than the token so
      a chart resolving it through getComputedStyle keeps working. */
-  --color-foreground: oklch(0.95 0.00275 159);
-  --color-ink: oklch(0.95 0.00275 159);
-  --color-ink-muted: oklch(0.798 0.00275 159);
-  --color-ink-secondary: oklch(0.684 0.00275 159);
+  --color-foreground: #edefee;
+  --color-ink: #edefee;
+  --color-ink-muted: #bcbdbc;
+  --color-ink-secondary: #989a99;
   --color-foreground-light: var(--color-ink-muted);
   --color-foreground-lighter: var(--color-ink-secondary);
   --color-foreground-muted: var(--color-ink-secondary);
@@ -79,12 +79,12 @@
      console ships reaches for `graphics` on day one instead of borrowing `ink-muted` and
      leaving a second migration to do later; the day an icon lands, it either takes this
      token or the token is the one that should go. */
-  --color-graphics: oklch(0.798 0.00275 159);
+  --color-graphics: #bcbdbc;
 
-  --color-card-foreground: oklch(0.95 0.00275 159);
-  --color-popover-foreground: oklch(0.95 0.00275 159);
-  --color-secondary-foreground: oklch(0.95 0.00275 159);
-  --color-accent-foreground: oklch(0.95 0.00275 159);
+  --color-card-foreground: #edefee;
+  --color-popover-foreground: #edefee;
+  --color-secondary-foreground: #edefee;
+  --color-accent-foreground: #edefee;
 
   /* -- boundaries -------------------------------------------------------------------
      `--border` is upstream's, verbatim: the foreground at an alpha the `--contrast` knob
@@ -92,11 +92,11 @@
      measurements -- upstream's control boundary measures 1.43-1.47 against surfaces this
      contract requires a control boundary to clear 3:1 against, and 0.578 is the lightness
      that clears it on the substrate's own neutral hue and chroma. */
-  --color-border: oklch(0.95 0.001485 159 / 7.5125%);
-  --color-line: oklch(0.95 0.001485 159 / 7.5125%);
-  --color-input: oklch(0.578 0.00275 159);
-  --color-line-strong: oklch(0.578 0.00275 159);
-  --color-border-control: oklch(0.578 0.00275 159);
+  --color-border: oklch(0.95 0.001485 159 / 7.51%);
+  --color-line: #1e201f;
+  --color-input: #787a79;
+  --color-line-strong: #787a79;
+  --color-border-control: #787a79;
   --color-border-overlay: oklch(0.95 0.001375 159 / 13.3713%);
   --color-border-stronger: oklch(0.95 0.001375 159 / 17.4031%);
 
@@ -106,7 +106,7 @@
      ring at partial strength is a contrast figure nobody can read off a class name. The
      recorded 2026-08-06 decision that removed an alpha from this ring is not reversed by
      a substrate swap. DESIGN.md names it as a deviation and publishes both figures. */
-  --color-ring: oklch(0.76 0.15 159);
+  --color-ring: #45cd8e;
 
   /* -- brand ------------------------------------------------------------------------
      `--primary` is upstream's derived accent; `--color-brand` and the stepped scale are
@@ -114,9 +114,9 @@
      visible in the file. The brand hue is the substrate's green, which is also the hue
      `good` wears -- DESIGN.md's brand section carries why one green is better than two
      14 degrees apart, and what still keeps a brand mark from reading as a verdict. */
-  --color-primary: oklch(0.76 0.15 159);
-  --color-primary-foreground: oklch(0.19 0.00225 159);
-  --color-brand: hsl(153.1 60.2% 52.7%);
+  --color-primary: #45cd8e;
+  --color-primary-foreground: #003822;
+  --color-brand: #3ecf8e;
   --color-brand-link: hsl(155 100% 38.6%);
   --color-brand-600: hsl(154.9 59.5% 70%);
   --color-brand-500: hsl(154.9 100% 19.2%);
@@ -131,17 +131,17 @@
      built on the substrate's own expressive construction -- a fixed lightness, the shared
      expressive chroma of 0.14, and a hue between warning's 75 and destructive's 25 that
      falls inside neither's clamp. */
-  --color-good: hsl(153.1 60.2% 52.7%);
+  --color-good: #3ecf8e;
   --color-good-ink: hsl(154.9 59.5% 70%);
   --color-good-surface: hsl(155.5 100% 9.6%);
-  --color-warning: oklch(0.8 0.14 75);
+  --color-warning: #f2af48;
   --color-warning-ink: oklch(0.8 0.14 75);
   --color-warning-surface: hsl(33.2 100% 14.5%);
   --color-warning-foreground: oklch(0.12 0.0112 75);
-  --color-serious: oklch(0.66 0.16 45);
+  --color-serious: #fd9565;
   --color-serious-ink: oklch(0.77 0.14 45);
   --color-serious-surface: oklch(0.26 0.055 45);
-  --color-critical: hsl(10.2 77.9% 53.9%);
+  --color-critical: #fa8880;
   --color-critical-ink: oklch(0.75 0.14 25);
   --color-critical-surface: hsl(6.7 60% 20.6%);
   --color-destructive: oklch(0.75 0.14 25);
@@ -290,8 +290,8 @@
      .claude/rules/interface-originality.md keeps identity excluded. A webfont also buys a
      network request, a flash of unstyled text and a licence question for a console nobody
      outside this project has opened. */
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
+  --font-sans: Manrope, Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Segoe UI Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 
   /* Four. A fifth is a decision recorded in DESIGN.md, not a value added in passing.
@@ -304,6 +304,15 @@
 
   /* The two radii the vendored catalog actually renders: `rounded-md` on every control,
      `rounded-lg` on every card and dialog. */
+  /* Shell geometry, from the Stitch console's design system. Named here because two screens
+     choosing their own sidebar width is exactly the drift a token exists to stop. */
+  --spacing-sidebar: 15rem;
+  --spacing-sidebar-collapsed: 3rem;
+  --spacing-topbar: 3rem;
+  --row-sm: 2rem;
+  --row-md: 2.25rem;
+  --row-lg: 2.5rem;
+
   --radius-control: 0.375rem;
   --radius-surface: 0.5rem;
 
@@ -402,5 +411,27 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+}
+
+/* The two classes the design system names directly. Both are compositions of tokens declared
+   above rather than new values -- a class here, not a token, because two screens could not
+   reasonably choose differently and the difference would not be visible. */
+@layer components {
+  /* Uppercase furniture: column headers, band labels, small caps metadata. */
+  .font-furniture {
+    font-family: var(--font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    font-size: var(--text-meta);
+  }
+
+  .code-block {
+    font-family: var(--font-mono);
+    background: var(--color-background);
+    border: 1px solid var(--color-border);
+    padding: var(--spacing-row);
+    border-radius: var(--radius-control);
   }
 }
