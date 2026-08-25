@@ -125,7 +125,6 @@ export function SolutionsPage() {
   return (
     <ScreenFrame status={status}>
     <section className="flex flex-col gap-8">
-      <SolutionsFunnelRegion repoId={repoId} />
 
       {query.isPending && <LoadingState what="the opened pull requests" />}
       {query.isError && (
@@ -253,6 +252,12 @@ export function SolutionsPage() {
           </Table>
         </MetricPanel>
       )}
+
+      {/* Below the rows, not above them. The funnel is a full-width Sankey roughly 600px tall,
+          so leading with it put this page's own facts -- the KPI strip the ruling of 2026-08-19
+          says comes before its rows -- entirely below the fold, and the table below that. The
+          shape of the funnel is worth showing and is not what a reader opens this page to read. */}
+      <SolutionsFunnelRegion repoId={repoId} />
     </section>
     </ScreenFrame>
   )
