@@ -67,7 +67,7 @@ export function ScreenFrame({
   title,
   subtitle,
   status,
-  fill = false,
+  layout = "flow",
   children,
 }: {
   /** Omitted entirely when a screen has nothing to narrow — no element, no rule, no reserved
@@ -85,7 +85,16 @@ export function ScreenFrame({
   status: StatusSegment[]
   /** For the two canvases, which computed their own height from the old chassis and would be
       wrong on day one of this one. */
-  fill?: boolean
+  /**
+   * How this screen occupies the locked chassis.
+   *
+   * `flow` — the default and what nineteen screens do: the content column grows and `main`
+   * scrolls it. `fill` — the two canvases, which take their height from the column rather than
+   * computing it. `locked` — the screen owns every scrollbar on the page: it stamps
+   * `data-screen="locked"`, which is what flips `main` to `overflow-hidden` through `:has()`,
+   * and from there each of its panes scrolls its own body.
+   */
+  layout?: "flow" | "fill" | "locked"
   children: ReactNode
 }) {
   // `useLocation` throws outside a router, and this frame is deliberately rendered without one --
@@ -126,7 +135,10 @@ export function ScreenFrame({
       ) : null}
       <div
         data-band="content"
-        className={fill ? "flex min-h-0 flex-1 flex-col gap-8" : "flex flex-col gap-8"}
+        data-screen={layout === "locked" ? "locked" : undefined}
+        className={
+          layout === "flow" ? "flex flex-col gap-8" : "flex min-h-0 flex-1 flex-col gap-8"
+        }
       >
         {/* The page names itself here, at the top of its own content, which is where the design
             system's Identity band puts it. Read from the route registry rather than typed per

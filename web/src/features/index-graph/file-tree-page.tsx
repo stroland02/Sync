@@ -141,7 +141,7 @@ function FileTreeDetail({ repoId }: { repoId: string }) {
     <ScreenFrame
       status={status}
       controls={query.isSuccess ? <TreeMapControls map={map} /> : undefined}
-      fill
+      layout="fill"
     >
       <section className="flex min-h-0 flex-1 flex-col gap-8">
 

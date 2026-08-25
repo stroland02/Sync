@@ -196,7 +196,7 @@ function IndexGraphDetail({ repoId }: { repoId: string }) {
     ) : undefined
 
   return (
-    <ScreenFrame status={status} controls={controls} fill>
+    <ScreenFrame status={status} controls={controls} layout="fill">
       <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-8">
         {/* Above the read's own states rather than inside the answered one: a stream that drops
             while the first read is still in flight was previously invisible, and the control in

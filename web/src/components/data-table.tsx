@@ -36,10 +36,23 @@ export { Table, TableBody }
 /**
  * A table header row rendered on the substrate's subtle surface strip.
  */
-export function TableHeader({ className, ...props }: ComponentProps<typeof VendoredHeader>) {
+export function TableHeader({
+  sticky = false,
+  className,
+  ...props
+}: ComponentProps<typeof VendoredHeader> & {
+  /**
+   * Pins the head inside a scrolling table body. Opaque `bg-secondary` rather than the
+   * surface-alpha step the head normally takes: an alpha composites against whatever scrolls
+   * under it, so rows would read through the header at exactly the moment it matters.
+   */
+  sticky?: boolean
+}) {
   return (
     <VendoredHeader
-      className={cn("[&_tr]:border-b [&_tr]:bg-surface-subtle", className)}
+      className={cn(
+        sticky && "sticky top-0 z-10 [&_tr]:bg-secondary",
+        "[&_tr]:border-b [&_tr]:bg-surface-subtle", className)}
       {...props}
     />
   )
@@ -175,16 +188,28 @@ export function TableEmptyRow({
  * behaviour is measured in Chrome per `.claude/rules/console-dev-loop.md`.
  */
 export function TableFrame({
+  fill = false,
   children,
   className,
 }: {
   children: ReactNode
   className?: string
+  /**
+   * Takes its share of a locked column and scrolls the rows inside itself, instead of growing
+   * to fit them. The scroll lands on the vendored `data-slot=table-container` within, which is
+   * the element that actually owns the rows.
+   */
+  fill?: boolean
 }) {
   return (
     <div
       data-slot="table-frame"
-      className={cn("min-w-0 overflow-hidden rounded-surface border border-line", className)}
+      className={cn(
+        "min-w-0 overflow-hidden rounded-surface border border-line",
+        fill &&
+          "flex min-h-0 flex-1 flex-col [&_[data-slot=table-container]]:min-h-0 [&_[data-slot=table-container]]:flex-1 [&_[data-slot=table-container]]:overflow-auto",
+        className
+      )}
     >
       {children}
     </div>
