@@ -175,6 +175,26 @@ Asked screen by screen; these govern the structural slice.
 on it), then Findings → Overview → Call sites → Runs → Finding detail → Workflow → Solutions →
 Graph. Each lands gated with a re-capture before the next starts.
 
+## Supabase reference, via Mobbin (2026-08-25)
+
+The owner enabled Mobbin Pro and pointed at Supabase specifically. It is the right reference for
+this console: our primitives are already vendored from Supabase under the 2026-08-06 carve-out, so
+its patterns and our components are the same material. Read as composition, per `CI-W630`.
+
+What its dashboard does that ours does not, each restated as a problem rather than a picture:
+
+| Pattern | The problem it solves here |
+|---|---|
+| **Table toolbar directly above the rows** — filter field, then actions, then one primary button at the right edge | Our filters live in a rail or a controls band away from the table; a reader narrowing a table looks at the table. The eval's finding #8 is the same gap seen from the Stitch side. |
+| **Column type annotations** — `id int8`, `created_at timestamptz` in muted mono beside the header | Our columns say what they are named, never what they hold. Sync's equivalent is the unit or grain a column counts, which several screens currently explain in prose beneath. |
+| **Bottom bar owning pagination and the record count** — `Page 1 of 1 · 100 rows · 18 records` | We already have a status band; this is the same instrument and confirms the placement. |
+| **Grouped section nav** — MANAGE / NOTIFICATIONS / CONFIGURATION as furniture headings over items | Exactly the stage grouping the sidebar landed in `CI-W624`. Independent confirmation, not a change. |
+| **Two-tier navigation** — a 48px icon rail *plus* a labelled section nav, on screens with sub-sections | Ours collapses to one tier. Settings and the graph screens are where a second tier would earn itself. **Not adopted yet**: it is a real change to the chassis and belongs to a ruling, not to a rebuild. |
+| **Environment chip in the trail** — `main [PRODUCTION]` beside the project | We put `LOCAL DEV` in the top bar in `CI-W624`; Supabase puts it in the trail beside the branch. Worth revisiting when the trail work settles. |
+
+**What is deliberately not taken:** the primary green is already ours from the token sheet, and the
+identity elements stay excluded. Nothing here overrides a Stitch screen where the two disagree.
+
 ## Coverage map — what a screenshot cannot see
 
 The 13 captures cover the default state of every routed screen. "Every pixel" also includes the
