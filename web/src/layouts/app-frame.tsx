@@ -172,10 +172,14 @@ function EnvironmentBadge() {
           <span aria-hidden="true">·</span>
         </>
       )}
-      <span className="shrink-0">local dev</span>
-      <span aria-hidden="true">·</span>
-      <span className="shrink-0">
-        {pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
+      {/* The environment as a chip in the furniture register, not a sentence. The forge login
+          moved to its tooltip on the owner's 2026-08-25 ruling -- the fact stays one hover away
+          here and fully stated on the Getting-started panel, which is its home. */}
+      <span
+        className="shrink-0 rounded-control border border-line px-field font-furniture text-ink-secondary"
+        title={pending ? "git: asking…" : forgeLogin !== null ? `git: ${forgeLogin}` : "git: not connected"}
+      >
+        local dev
       </span>
     </WorkspaceSwitcher>
   )
@@ -228,7 +232,7 @@ function DestinationRow({
       <SidebarMenuButton
         asChild
         isActive={current}
-        className="h-7 rounded-l-control rounded-r-none text-body data-[active=true]:border-r-2 data-[active=true]:border-primary data-[active=true]:bg-primary/10 data-[active=true]:text-ink"
+        className="h-9 rounded-l-control rounded-r-none text-body data-[active=true]:border-r-2 data-[active=true]:border-primary data-[active=true]:bg-primary/10 data-[active=true]:text-ink"
       >
         <Link
           to={href}
@@ -409,8 +413,12 @@ function AppSidebar({ pathname }: { pathname: string }) {
                     spacing, so the rail shows a centred hairline instead: the same group
                     boundary, drawn in the only channel a 48px column has. The first group
                     skips it, or it doubles the wordmark row's own hairline. */}
-                <div data-stage-heading={stage} className="flex h-7 items-center px-row">
-                  <span className={minimised ? "sr-only" : "text-meta text-ink-muted"}>
+                <div
+                  data-stage-heading={stage}
+                  title={STAGE_DOES[stage]}
+                  className="flex h-7 items-center px-row"
+                >
+                  <span className={minimised ? "sr-only" : "font-furniture text-ink-secondary"}>
                     {stage}
                   </span>
                   <span
@@ -420,22 +428,10 @@ function AppSidebar({ pathname }: { pathname: string }) {
                     }
                   />
                 </div>
-                {/* What the stage does to the graph, under its own heading. A rail of five bare
-                    words says which pages exist and nothing about why; the owner's mock puts a
-                    sentence under every area for that reason. `STAGE_DOES` is the owner's own
-                    wording, so this renders the vocabulary rather than paraphrasing it -- and it
-                    is hidden rather than removed at rail width, where there is no room for a
-                    sentence and the icons must not move. */}
-                <p
-                  data-stage-does={stage}
-                  className={
-                    minimised
-                      ? "sr-only"
-                      : "px-row pb-row text-meta leading-snug text-ink-muted"
-                  }
-                >
-                  {STAGE_DOES[stage]}
-                </p>
+                {/* `CI-W612` rendered `STAGE_DOES` as a sentence under every heading; the owner
+                    ruled it back out on 2026-08-25 -- too much text for the rail, and the Stitch
+                    references draw bare labelled items. The sentence survives as the heading's
+                    `title`, so the vocabulary is one hover away rather than deleted. */}
                 <SidebarGroupContent>
                   <SidebarMenu className="gap-0">
                     {rows.map((route) => (
