@@ -138,7 +138,16 @@ export function DetailLayout({
             : "grid min-w-0 gap-section xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] xl:items-start"
       }
     >
-      <div className={docked ? "flex min-h-0 min-w-0 flex-col" : "min-w-0"}>{list}</div>
+      {/* Docked lives inside a locked screen, so the list scrolls itself. Without this the
+          table grows to its content -- measured at 1601px inside a 925px pane -- and inflates
+          the screen it was supposed to be bounded by. */}
+      <div
+        className={
+          docked ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-auto" : "min-w-0"
+        }
+      >
+        {list}
+      </div>
       {docked ? (
         <Sheet open={detail !== null} onOpenChange={(open) => { if (!open) onClose() }}>
           <SheetContent

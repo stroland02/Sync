@@ -460,3 +460,37 @@
     border-radius: var(--radius-control);
   }
 }
+
+/* Viewport scaling — owner ruling 2026-08-25.
+   Under the lock, chrome is subtracted from the working area rather than scrolled past, so a
+   short viewport pays for it directly. Measured at 1896x913: two 48px bars, an 80px frame gutter
+   and a 95px footer left roughly 640px for the screen itself.
+
+   Three steps rather than a continuous scale, because a value that changes with every pixel is a
+   value nobody can reason about. **Nothing here hides a sentence.** The first draft put the
+   chassis qualifications behind `display: none` at the short step, and one of them is the
+   multi-tenancy claim -- that nothing is filtered per viewer -- which `console-surface.md`
+   forbids collapsing behind any disclosure, a media query included. Only spacing scales. */
+@layer components {
+  /* Laptop and below: the frame gutter halves. */
+  @media (max-height: 1000px) {
+    [data-scrollport] > div {
+      padding-top: var(--spacing-section);
+      padding-bottom: var(--spacing-section);
+      gap: var(--spacing-section);
+    }
+    [data-chassis-qualifications] {
+      padding-top: var(--spacing-row);
+      padding-bottom: var(--spacing-row);
+    }
+  }
+
+  /* Short: the gutter tightens again. The title keeps its step -- shrinking a heading is how a
+     hierarchy flattens, and `why-the-console-came-out-flat` measured what that costs. */
+  @media (max-height: 850px) {
+    [data-scrollport] > div {
+      padding-top: var(--spacing-row);
+      padding-bottom: var(--spacing-row);
+    }
+  }
+}

@@ -135,7 +135,7 @@ export function ScreenFrame({
       ) : null}
       <div
         data-band="content"
-        data-screen={layout === "locked" ? "locked" : undefined}
+        data-screen={layout === "flow" ? undefined : layout}
         className={
           layout === "flow" ? "flex flex-col gap-8" : "flex min-h-0 flex-1 flex-col gap-8"
         }

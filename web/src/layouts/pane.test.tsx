@@ -75,17 +75,66 @@ describe("the screen layout union", () => {
     return container.querySelector("[data-band='content']") as HTMLElement
   }
 
-  it("stamps `locked` only when a screen asks to own its scrollbars", () => {
-    // The stamp is what `main`'s `:has([data-screen=locked])` reads. A screen that does not ask
-    // must not carry it, or every screen loses the page scroll at once.
+  it("stamps every bounded layout, and never a flowing one", () => {
+    // The stamp does two jobs, and both read it through `:has()`: `locked` flips `main` to
+    // `overflow-hidden`, and either stamp clamps the content box with `min-h-0`. A flowing
+    // screen must carry neither -- that clamp is what held 986px of content at 869px and
+    // clipped the rest, which is the regression this pair exists to stop.
     expect(bandOf("locked").getAttribute("data-screen")).toBe("locked")
+    expect(bandOf("fill").getAttribute("data-screen")).toBe("fill")
     expect(bandOf("flow").getAttribute("data-screen")).toBeNull()
-    expect(bandOf("fill").getAttribute("data-screen")).toBeNull()
   })
 
   it("leaves the flow layout growing, and bounds the other two", () => {
     expect(bandOf("flow").className).not.toContain("min-h-0")
     expect(bandOf("fill").className).toContain("min-h-0")
     expect(bandOf("locked").className).toContain("min-h-0")
+  })
+})
+
+/**
+ * Nothing is clipped, on either kind of screen.
+ *
+ * Both halves of this shipped broken and the owner found them by scrolling, not a test. A flowing
+ * screen carried `min-h-0` on its content box, which clamped it to the viewport so everything past
+ * the fold was clipped rather than scrolled -- 986px of content held at 869px. A locked screen had
+ * the inverse: its table was not bounded by any pane, grew to 1601px inside a 925px region, and
+ * inflated the screen it was supposed to be bounded by.
+ *
+ * The two are one rule with two directions, which is why they are asserted together: a flowing
+ * box must be free to grow, a bounded box must actually bound, and neither may clip.
+ */
+describe("neither layout clips its content", () => {
+  it("leaves a flowing screen's box free to grow past the viewport", () => {
+    cleanup()
+    const { container } = render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <ScreenFrame status={RECORDS} layout="flow">
+          <table />
+        </ScreenFrame>
+      </MemoryRouter>
+    )
+
+    const band = container.querySelector("[data-band='content']") as HTMLElement
+    // `min-h-0` here is what clamped a flowing screen to the viewport. The frame applies it
+    // through `:has([data-screen])`, so the absence of the stamp is what keeps this box free.
+    expect(band.getAttribute("data-screen")).toBeNull()
+    expect(band.className).not.toContain("min-h-0")
+  })
+
+  it("stamps a bounded screen so the frame clamps its box", () => {
+    cleanup()
+    for (const layout of ["fill", "locked"] as const) {
+      cleanup()
+      const { container } = render(
+        <MemoryRouter initialEntries={["/settings"]}>
+          <ScreenFrame status={RECORDS} layout={layout}>
+            <table />
+          </ScreenFrame>
+        </MemoryRouter>
+      )
+      const band = container.querySelector("[data-band='content']") as HTMLElement
+      expect(band.getAttribute("data-screen"), `${layout} lost its stamp`).toBe(layout)
+    }
   })
 })

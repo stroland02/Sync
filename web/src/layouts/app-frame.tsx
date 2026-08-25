@@ -474,7 +474,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
  */
 function ChassisQualifications() {
   return (
-    <div className="flex flex-col gap-field px-frame py-section">
+    <div data-chassis-qualifications className="flex flex-col gap-field px-frame py-section">
       <p className="text-meta text-ink-muted leading-snug">
         Nine graph levels, five pipeline stages. A stage groups the pages that answer it — it is
         not a level itself.
@@ -594,7 +594,13 @@ export function AppFrame() {
                 the scrollbar and land differently per browser. */}
             <div
               className={cn(
-                "mx-auto flex w-full min-h-0 flex-1 flex-col gap-8 p-frame",
+                // `min-h-0` ONLY for a bounded screen. On a flowing one it clamps this box to
+                // the viewport, so content past the fold is clipped rather than scrolled -- the
+                // regression the owner reported: 986px of content held at 869px, 117px of scroll,
+                // the rest unreachable. `flex-1` stays either way so a short page still pushes
+                // the footer down.
+                "mx-auto flex w-full flex-1 flex-col gap-8 p-frame",
+                "has-[[data-screen=locked]]:min-h-0 has-[[data-screen=fill]]:min-h-0",
                 // Full width, every route. Owner ruling 2026-08-25: 1920 is the standard this
                 // console is operated at, and a 1400px column left 520px of dead page beside a
                 // table that wanted it. `isWideRoute` is now the whole set.
