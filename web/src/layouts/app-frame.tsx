@@ -220,7 +220,16 @@ function DestinationRow({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={current} className="h-7 text-body">
+      {/* The current destination is marked twice over, which the design system asks for in as
+          many words: *every status mark must include an icon and a label, colour is never the sole
+          channel*. The emerald edge is the mark; `aria-current` below is the one a screen reader
+          reads; and the row keeps its label. At rail width the edge still lands, so the current
+          destination is legible with every name hidden. */}
+      <SidebarMenuButton
+        asChild
+        isActive={current}
+        className="h-7 rounded-l-control rounded-r-none text-body data-[active=true]:border-r-2 data-[active=true]:border-primary data-[active=true]:bg-primary/10 data-[active=true]:text-ink"
+      >
         <Link
           to={href}
           data-destination={route.path}

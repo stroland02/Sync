@@ -30,25 +30,26 @@ afterEach(() => {
 })
 
 describe("the remembered pin", () => {
-  it("reads an absent choice as unpinned, so hover-expand is what a reader who never chose gets", () => {
-    // This reverses the pre-hover default deliberately. The old module defaulted to expanded and
-    // argued it: "defaulting the other way would hide every destination's name from someone who
-    // never asked". Hover-expand retires that argument rather than overruling it — the names are
-    // one pointer-move away and arrive without a decision — and the owner asked for the rail to be
-    // the default behaviour, with the pin kept for anyone who wants it held open.
-    expect(parsePinned(null)).toBe(false)
-    expect(readPinned()).toBe(false)
+  it("reads an absent choice as pinned, so a reader who never chose gets the full sidebar", () => {
+    // Flipped back on 2026-08-24 by the owner's Stitch specification: "a persistent 240px sidebar
+    // with a collapsed 48px icon-only state". Persistent is the word that decides it. The rail
+    // default and the argument that held it -- that a reveal answers the naming problem, so the
+    // names are one pointer-move away -- are superseded rather than wrong. Hover-expand and the
+    // pin both stay; what changed is which state an unchosen reader lands in.
+    expect(parsePinned(null)).toBe(true)
+    expect(readPinned()).toBe(true)
   })
 
-  it("pins only on the exact stored string, not on anything truthy", () => {
+  it("collapses only on the exact stored string, never on an unrecognised value", () => {
     expect(parsePinned("true")).toBe(true)
     expect(parsePinned("false")).toBe(false)
-    // A value this module did not write is not a choice. "1", "yes" and a stale JSON blob all read
-    // as unpinned rather than being coerced into holding the panel open.
-    expect(parsePinned("1")).toBe(false)
-    expect(parsePinned("yes")).toBe(false)
-    expect(parsePinned('{"pinned":true}')).toBe(false)
-    expect(parsePinned("")).toBe(false)
+    // A value this module did not write is not a choice, and an unrecognised one must not collapse
+    // the panel: "1", "yes" and a stale JSON blob all fall to the persistent default. Only the
+    // exact string this module writes for "collapsed" collapses it.
+    expect(parsePinned("1")).toBe(true)
+    expect(parsePinned("yes")).toBe(true)
+    expect(parsePinned('{"pinned":true}')).toBe(true)
+    expect(parsePinned("")).toBe(true)
   })
 
   it("round-trips a choice through the store", () => {

@@ -47,15 +47,16 @@ export const SIDEBAR_STORAGE_KEY = "sync-console-sidebar-pinned"
  * Only the exact string `"true"` pins. Absent, malformed, and every other value read as unpinned —
  * the rail, which reveals itself under a pointer or a focus.
  *
- * **The default flipped when hover-expand landed, and the argument that held the old one is what
- * retired it.** This module used to default to expanded because "defaulting the other way would
- * hide every destination's name from someone who never asked". A reveal answers that: the names
- * arrive on the first pointer move, without a decision and without a control. What is left is the
- * owner's own framing — a compact rail that does not consume width, with the pin kept for anyone
- * who wants it held open.
+ * **The default flipped back on 2026-08-24, by the owner's own specification.** It defaulted to
+ * expanded, then to the rail when hover-expand landed, and the Stitch technical specification now
+ * asks for "a persistent 240px sidebar with a collapsed 48px icon-only state" — persistent being
+ * the word that decides it. Hover-expand stays and so does the pin; what changes is which state a
+ * reader who has never chosen gets, and the specification says the full one.
+ *
+ * Only the exact string `"false"` unpins, so a reader who collapsed it keeps that across reloads.
  */
 export function parsePinned(raw: string | null): boolean {
-  return raw === "true"
+  return raw !== "false"
 }
 
 /**

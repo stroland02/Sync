@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AppFrame, navRoutes, SETTINGS_NOTE } from "@/layouts/app-frame"
 import { shortcutHint } from "@/layouts/command-palette"
+import { SIDEBAR_STORAGE_KEY } from "@/layouts/sidebar-collapse"
 import { KINDS_SHOWN, clearErrors, reportError } from "@/lib/error-log"
 import { DESTINATIONS, ROUTES } from "@/lib/routes"
 
@@ -258,12 +259,28 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     return document.querySelector("[data-sidebar-reserve]") as HTMLElement
   }
 
-  it("starts as a rail for a reader who has not pinned it", () => {
+  /**
+   * The three reveal tests below need an unpinned panel to reveal. Since 2026-08-24 an unchosen
+   * reader is *pinned* -- the owner's Stitch specification asks for a persistent 240px sidebar --
+   * so each collapses first. The reveal itself is unchanged; only the starting state moved.
+   */
+  function collapseFirst() {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "false")
+  }
+
+  it("starts pinned open for a reader who has not chosen, per the persistent-sidebar spec", () => {
+    renderAt("/")
+    expect(panel().getAttribute("data-state")).toBe("expanded")
+  })
+
+  it("starts as a rail once a reader has collapsed it", () => {
+    collapseFirst()
     renderAt("/")
     expect(panel().getAttribute("data-state")).toBe("minimised")
   })
 
   it("expands while the pointer is inside it and returns to a rail when it leaves", () => {
+    collapseFirst()
     renderAt("/")
 
     fireEvent.pointerEnter(reserve())
@@ -276,6 +293,7 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
   it("holds open while focus is inside it, so a hover does not trap a keyboard reader", () => {
     // Hover alone would put every label behind a pointer. A reader tabbing into the sidebar has to
     // see what they are tabbing through, and has to keep seeing it after any pointer has left.
+    collapseFirst()
     renderAt("/")
 
     const railLink = within(destinations()).getByRole("link", { name: /call sites/i })
@@ -309,6 +327,7 @@ describe("the sidebar reveals itself on hover and returns to a rail", () => {
     // The screenshot that settled it showed the page heading rendering as "W", the leading column of
     // every table gone, and the repository names cut off mid-word — so the sidebar pushes the page,
     // and the reserved box tracks the panel rather than disagreeing with it.
+    collapseFirst()
     renderAt("/")
 
     expect(reserve().getAttribute("data-sidebar-reserve")).toBe("minimised")
