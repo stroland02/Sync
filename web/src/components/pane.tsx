@@ -45,7 +45,12 @@ export function PanelPane({
         {Icon !== undefined && (
           <Icon aria-hidden="true" className="size-4 shrink-0 text-graphics" />
         )}
-        <span className="min-w-0 truncate font-furniture text-ink-secondary">{label}</span>
+        {/* `text-section`, not the reference's 12px uppercase furniture. The mock is the lowest
+            authority where it disagrees with DESIGN.md, and
+            `reports/2026-08-06-why-the-console-came-out-flat.md` measured exactly one 18px heading
+            in the whole application with every other h2 at furniture size -- a screen whose only
+            headings are one h1 and three column-header-sized strips is that failure repeated. */}
+        <h2 className="min-w-0 truncate text-section">{label}</h2>
         {actions !== undefined && <span className="ml-auto flex shrink-0 items-center gap-field">{actions}</span>}
       </header>
 

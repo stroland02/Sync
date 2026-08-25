@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/data-table"
 import { FilterRail, type FilterGroup } from "@/components/filter-rail"
+import { PanelPane } from "@/components/pane"
 import { BindingStatusTag } from "@/components/tag"
 import { InfoHint } from "@/components/info-hint"
 import { RelativeTime } from "@/components/relative-time"
@@ -353,8 +354,13 @@ export function CallSitesPage() {
   ) : undefined
 
   return (
-    <ScreenFrame controls={controls} status={status}>
-    <section className="flex min-w-0 flex-col gap-8">
+    <ScreenFrame
+      controls={controls}
+      status={status}
+      layout="locked"
+      subtitle="Every place this codebase calls an integration's API, as the last index pass found it."
+    >
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-8">
 
       {query.isPending && <LoadingState what={`the call sites in ${repoId}`} />}
       {query.isError && (
@@ -365,8 +371,15 @@ export function CallSitesPage() {
         />
       )}
 
+      {/* The explorer. Below `xl` the panes stack and the page scrolls -- three panes need
+          roughly 1000px of content width and a squeezed grid reads worse than a stack. At `xl`
+          the grid locks and each pane scrolls its own body: rail, table, inspector.
+
+          Two tracks here, not three: `DetailLayout` owns the table/inspector split itself, so a
+          third track nested one grid inside another and crushed the table until file paths
+          wrapped one word per line (owner capture, 2026-08-25). */}
       {query.isSuccess && (
-        <div className="grid gap-section lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-stretch">
+        <div className="grid min-h-0 flex-1 gap-field xl:grid-cols-[15rem_minmax(0,1fr)]">
           {(() => {
             const groups = [
               facetGroup(
@@ -411,18 +424,27 @@ export function CallSitesPage() {
             return groups.length === 0 ? (
               <div />
             ) : (
+              <PanelPane label="Narrow the call sites" className="hidden xl:flex">
               <FilterRail
+                fill
                 label="Narrow the call sites"
                 countScope="Each count is over every call site the OTHER facets admit, so pressing an option here does not change the numbers beside its own siblings. The record count under the table describes the narrowed set."
                 groups={groups as [FilterGroup, ...FilterGroup[]]}
               />
+              </PanelPane>
             )
           })()}
 
           {/* The detail sits beside the table rather than over it (M15 Task 2): a reader
               working down 165 rows should not close one row to reach the next. */}
           <DetailLayout
-            title={selectedSite ? `${selectedSite.path}:${selectedSite.line}` : ""}
+            docked
+            title="Call site"
+            subtitle={
+              selectedSite === null
+                ? undefined
+                : `${selectedSite.path}:${selectedSite.line}:${selectedSite.col}`
+            }
             onClose={() => setOpenSite(null)}
             detail={
               selectedSite ? (

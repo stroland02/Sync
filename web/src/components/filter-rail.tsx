@@ -328,9 +328,17 @@ export function FilterRail({
   label,
   groups,
   countScope,
+  fill = false,
 }: {
   /** What the rail narrows, named for a reader and for a screen reader. */
   label: string
+  /**
+   * Inside a locked pane the rail's own chrome is wrong twice over: its heading duplicates the
+   * pane header above it, and its `lg:sticky lg:max-h-[calc(100svh-8rem)]` was measured against
+   * a chassis with one 48px bar and no pinned footer, so it overshoots and puts its own
+   * scrollbar below the fold. The pane bounds it instead.
+   */
+  fill?: boolean
   groups: readonly [FilterGroup, ...FilterGroup[]]
   /**
    * What the counts are counted over, in words. Required.
@@ -348,9 +356,16 @@ export function FilterRail({
   return (
     <aside
       aria-labelledby={headingId}
-      className="flex min-w-0 flex-col gap-section self-stretch overflow-y-auto rounded-surface border border-line bg-surface p-section lg:sticky lg:top-frame lg:max-h-[calc(100svh-8rem)]"
+      className={
+        fill
+          ? "flex min-w-0 flex-col gap-section p-row"
+          : "flex min-w-0 flex-col gap-section self-stretch overflow-y-auto rounded-surface border border-line bg-surface p-section lg:sticky lg:top-frame lg:max-h-[calc(100svh-8rem)]"
+      }
     >
-      <h2 id={headingId} className="furniture text-meta text-ink">
+      {/* Filled: the pane header above already carries this name, and two headings for one
+          region is the duplication the pane exists to remove. It stays in the DOM as the
+          `aria-labelledby` target so the landmark keeps its accessible name. */}
+      <h2 id={headingId} className={fill ? "sr-only" : "furniture text-meta text-ink"}>
         {label}
       </h2>
       {groups.map((group) => (

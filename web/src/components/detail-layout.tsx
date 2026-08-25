@@ -27,6 +27,7 @@
  * the list behind it is not background, it is the thing the reader is working through.
  */
 
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/vendor/supabase/ui/sheet"
 import { useCallback, useEffect } from "react"
 import { X } from "lucide-react"
 import { useSearchParams } from "react-router"
@@ -118,11 +119,10 @@ export function DetailLayout({
   title: string
   onClose: () => void
   /**
-   * Docked: the aside is a permanent column inside a locked viewport, and it renders even with
-   * nothing selected — a resting pane a reader can aim at beats a layout that reflows the table
-   * every time they click a row. The sticky-and-capped treatment below is deleted in this mode:
-   * `calc(100svh-8rem)` was measured against a chassis with one 48px bar and no pinned footer,
-   * and under the lock the pane's own `min-h-0` chain bounds it exactly.
+   * Drawer: the detail slides over the page from the right rather than taking a column from it.
+   * Owner ruling 2026-08-25, after the docked column squeezed the table until file paths wrapped
+   * one word per line. A reader working down a table wants the table at full width and the
+   * detail on top of it, not a permanently narrowed list.
    */
   docked?: boolean
   /** One line under the title — the address, the id. Docked mode only. */
@@ -132,54 +132,52 @@ export function DetailLayout({
     <div
       className={
         docked
-          ? "grid min-h-0 min-w-0 flex-1 gap-section xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)]"
+          ? "flex min-h-0 min-w-0 flex-1 flex-col"
           : detail === null
             ? "min-w-0"
             : "grid min-w-0 gap-section xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] xl:items-start"
       }
     >
       <div className={docked ? "flex min-h-0 min-w-0 flex-col" : "min-w-0"}>{list}</div>
-      {(docked || detail !== null) && (
-        <aside
-          aria-label={detail === null ? "Detail" : title}
-          // Sticky within its own column: the list is long, and a detail that scrolls away while
-          // the reader is still in the list is a panel they have to scroll back up to read.
-          className={
-            docked
-              ? "flex min-h-0 min-w-0 flex-col gap-row overflow-hidden rounded-surface border border-line bg-surface p-section"
-              : "flex min-w-0 flex-col gap-row rounded-surface border border-line bg-surface p-section xl:sticky xl:top-frame xl:max-h-[calc(100svh-8rem)] xl:overflow-y-auto"
-          }
-        >
-          <div className="flex shrink-0 items-start justify-between gap-row border-b border-line pb-row">
-            <div className="flex min-w-0 flex-col">
-              <h2 className="min-w-0 break-all text-section">{title}</h2>
+      {docked ? (
+        <Sheet open={detail !== null} onOpenChange={(open) => { if (!open) onClose() }}>
+          <SheetContent
+            side="right"
+            className="flex w-full flex-col gap-0 border-l border-line bg-surface p-0 sm:max-w-[42rem]"
+          >
+            <SheetHeader className="shrink-0 border-b border-line px-section py-row text-left">
+              <SheetTitle className="min-w-0 break-all text-section">{title}</SheetTitle>
               {subtitle !== undefined && (
-                <span className="min-w-0 truncate font-mono text-meta text-ink-muted">
+                <SheetDescription className="min-w-0 truncate font-mono text-meta text-ink-muted">
                   {subtitle}
-                </span>
+                </SheetDescription>
               )}
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-auto px-section py-section">{detail}</div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        detail !== null && (
+          <aside
+            aria-label={title}
+            // Sticky within its own column: the list is long, and a detail that scrolls away
+            // while the reader is still in the list is a panel they scroll back up to read.
+            className="flex min-w-0 flex-col gap-row rounded-surface border border-line bg-surface p-section xl:sticky xl:top-frame xl:max-h-[calc(100svh-8rem)] xl:overflow-y-auto"
+          >
+            <div className="flex items-start justify-between gap-row border-b border-line pb-row">
+              <h2 className="min-w-0 break-all text-section">{title}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close detail"
+                className="shrink-0 rounded-control p-field text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <X aria-hidden="true" className="size-4" />
+              </button>
             </div>
-            {detail !== null && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close detail"
-              className="shrink-0 rounded-control p-field text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <X aria-hidden="true" className="size-4" />
-            </button>
-            )}
-          </div>
-          {detail !== null ? (
-            <div className="min-h-0 flex-1 overflow-auto">{detail}</div>
-          ) : (
-            // Docked and nothing selected. Says which nothing it is rather than sitting blank:
-            // an empty bordered box reads as a pane that failed to load.
-            <p className="min-h-0 flex-1 text-body text-ink-muted">
-              Select a row to read it here.
-            </p>
-          )}
-        </aside>
+            {detail}
+          </aside>
+        )
       )}
     </div>
   )

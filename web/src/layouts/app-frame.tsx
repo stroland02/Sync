@@ -45,7 +45,6 @@ import {
   boundParams,
   destinationHref,
   isActiveMenuItem,
-  isWideRoute,
   type RouteEntry,
 } from "@/lib/routes"
 import {
@@ -596,7 +595,10 @@ export function AppFrame() {
             <div
               className={cn(
                 "mx-auto flex w-full min-h-0 flex-1 flex-col gap-8 p-frame",
-                isWideRoute(pathname) ? "max-w-none" : "max-w-[1400px]",
+                // Full width, every route. Owner ruling 2026-08-25: 1920 is the standard this
+                // console is operated at, and a 1400px column left 520px of dead page beside a
+                // table that wanted it. `isWideRoute` is now the whole set.
+                "max-w-none",
               )}
             >
               <Outlet />
