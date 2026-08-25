@@ -32,6 +32,7 @@ import { CommandPaletteProvider, CommandPaletteTrigger } from "@/layouts/command
 import { StatusTargetProvider, useStatusTarget } from "@/layouts/screen-frame"
 import { ScopeTrail } from "@/layouts/scope-switchers"
 import { ScreenTabs } from "@/layouts/screen-tabs"
+import { STAGE_DOES } from "@/lib/stage-pages"
 import {
   SIDEBAR_WIDTH,
   railState,
@@ -410,6 +411,22 @@ function AppSidebar({ pathname }: { pathname: string }) {
                     }
                   />
                 </div>
+                {/* What the stage does to the graph, under its own heading. A rail of five bare
+                    words says which pages exist and nothing about why; the owner's mock puts a
+                    sentence under every area for that reason. `STAGE_DOES` is the owner's own
+                    wording, so this renders the vocabulary rather than paraphrasing it -- and it
+                    is hidden rather than removed at rail width, where there is no room for a
+                    sentence and the icons must not move. */}
+                <p
+                  data-stage-does={stage}
+                  className={
+                    minimised
+                      ? "sr-only"
+                      : "px-row pb-row text-meta leading-snug text-ink-muted"
+                  }
+                >
+                  {STAGE_DOES[stage]}
+                </p>
                 <SidebarGroupContent>
                   <SidebarMenu className="gap-0">
                     {rows.map((route) => (
