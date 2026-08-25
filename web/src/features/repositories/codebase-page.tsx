@@ -13,14 +13,12 @@
 import { Link, useParams } from "react-router"
 
 import { Button } from "@/components/ui/button"
-import { ApiSurfacePanel } from "@/features/repositories/api-surface-panel"
 import { MapPreviews } from "@/features/index-graph/map-previews"
 import { PipelineStrip } from "@/features/repositories/pipeline-strip"
 import { WorkflowGrid } from "@/features/repositories/workflow-grid"
 import { GettingStartedCard } from "@/features/repositories/getting-started-card"
 import { useRepositoryGraph, useRepositoryCoverage } from "@/api/queries"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { ControlBar } from "@/layouts/control-bar"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -118,11 +116,12 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
     <ScreenFrame status={status}>
       <section className="flex flex-col gap-8">
         <PageHeaderRegion repoId={repoId} />
-        <PipelineStrip repoId={repoId} />
+        {/* Getting started leads, the pipeline follows -- owner ruling 2026-08-25. A new
+            operator meets setup before metrics. */}
         <GettingStartedCard repoId={repoId} />
+        <PipelineStrip repoId={repoId} />
         <MapsRegion repoId={repoId} />
         {/* Good news as a number, W541 owner-picked: verified clean beside at risk. */}
-        <ApiSurfaceRegion repoId={repoId} />
         <WorkflowGrid repoId={repoId} />
       </section>
     </ScreenFrame>
@@ -130,31 +129,15 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
 }
 
 function PageHeaderRegion({ repoId }: { repoId: string }) {
+  // The Scope sentence that used to fill this bar was ruled out on 2026-08-25 -- the trail and
+  // the workspace switcher already scope the page. One action survives it.
   return (
-    <div className="flex flex-col gap-section">
-      <ControlBar
-        action={
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/repositories/${encodeURIComponent(repoId)}/observed`}>
-              Signals for this repository
-            </Link>
-          </Button>
-        }
-      >
-        <div className="flex min-w-0 flex-col gap-field">
-          <span className="furniture text-meta text-ink-muted">Scope</span>
-          <span className="text-body">
-            This repository alone. The codebase overview shows all repositories watched by Sync.
-          </span>
-        </div>
-      </ControlBar>
+    <div className="flex justify-end">
+      <Button asChild variant="outline" size="sm">
+        <Link to={`/repositories/${encodeURIComponent(repoId)}/observed`}>
+          Signals for this repository
+        </Link>
+      </Button>
     </div>
   )
-}
-
-/** Its own read, so a coverage failure costs this panel and not the maps beside it. */
-function ApiSurfaceRegion({ repoId }: { repoId: string }) {
-  const query = useRepositoryCoverage(repoId)
-  if (!query.isSuccess || query.data.repo_id !== repoId) return null
-  return <ApiSurfacePanel counts={query.data.by_binding_status ?? {}} />
 }

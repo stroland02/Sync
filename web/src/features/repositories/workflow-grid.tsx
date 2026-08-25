@@ -29,11 +29,12 @@ function GridCard({ title, does, children }: { title: string; does: string; chil
   )
 }
 
-function DoorRow({ to, label, detail }: { to: string; label: string; detail?: string }) {
+function DoorRow({ to, label, detail, title }: { to: string; label: string; detail?: string; title?: string }) {
   return (
     <li>
       <Link
         to={to}
+        title={title}
         className="flex flex-col gap-field rounded-control px-row py-row transition-colors hover:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <span className="text-body text-ink">{label}</span>
@@ -77,9 +78,9 @@ export function WorkflowGrid({ repoId }: { repoId: string }) {
           {LOOP_PREREQUISITES.map(({ id, why }) => {
             const group = SETTING_GROUPS.find((entry) => entry.id === id)
             if (group === undefined) return null
-            return (
-              <DoorRow key={id} to="/settings" label={group.label} detail={why} />
-            )
+            // Label only -- the owner ruled the descriptions out on 2026-08-25; the sentence
+            // survives as the row's tooltip.
+            return <DoorRow key={id} to="/settings" label={group.label} title={why} />
           })}
         </GridCard>
       </div>

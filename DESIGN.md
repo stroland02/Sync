@@ -654,6 +654,13 @@ each names a heading role. If `--text-emphasis` is ever reached for as in-row em
 panel title, that use takes `tracking-normal` alongside it; the tracking belongs to the heading, not
 to the size.
 
+**`--font-display` is Manrope; `--font-sans` leads with Inter.** The face split of `CI-W627`,
+from the Stitch references: headers wear the display face (h1–h3 take it in the base layer) and
+body, meta and furniture run in Inter, which restores the voice change between a title and its
+data that one face for every run had flattened. No contrast arithmetic attaches — a face carries
+no colour — but the split is a decision with a live alternative (one face everywhere, rejected
+for reading monotone), so it is recorded here where the type system is argued.
+
 **`--font-weight-normal` is 450, not 400.** Upstream's own adjustment, adopted with the ramp it
 belongs to — its ramp was tuned against that weight, and taking the sizes without it would be taking
 half a decision. The heaviest step this console declares is still 600, and

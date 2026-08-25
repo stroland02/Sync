@@ -1,36 +1,45 @@
 /**
- * Getting started, first on the Overview — the owner's direction 2026-08-18.
+ * Getting started — the first thing on the Overview, rebuilt as a stepper on the owner's
+ * 2026-08-25 ruling: icons over sentences, one action, the next unmet prerequisite expanded.
  *
- * The first thing a new operator meets is the setup information: which codebase this console
- * is working with, and the six prerequisites of the full loop with each one's probed state.
- * The checklist is `/api/setup`'s answer rendered compactly — the long form with the inline
- * editors stays in Settings → Setup, which the first button reaches — so this card is the
- * doorway, never a second place to configure a thing.
+ * The card is `/api/setup`'s answer rendered as progress: every prerequisite is a chip whose
+ * icon and word carry its probed state, and the first one that is not ready gets the wide row
+ * with its fix line and the one button. Configuration still happens in Settings only — this is
+ * the doorway, never a second place to hold a setting.
  *
- * It stays when everything is ready rather than vanishing: a region that disappears once
- * setup completes teaches an operator the page is unpredictable, and "everything the loop
- * needs is in place" is worth one compact row of words. No figure over the items, as
- * everywhere: ready, missing and unanswered are three facts nothing here sums.
+ * "N of M ready" supersedes the earlier no-figure-over-the-items note deliberately (owner
+ * ruling, same date): it is a measured count of probed answers, not a composite — and the three
+ * states stay three, because `unanswered` rendering as `missing` would claim a probe that never
+ * ran. It stays when everything is ready rather than vanishing: a region that disappears once
+ * setup completes teaches an operator the page is unpredictable.
  */
 
 import { useQuery } from "@tanstack/react-query"
+import { CircleCheck, CircleDashed, TriangleAlert, Zap } from "lucide-react"
 import { Link } from "react-router"
 
-import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState } from "@/components/states"
 import { Button } from "@/components/ui/button"
 import { fetchSetup, type SetupItem } from "@/features/settings/api"
+import { cn } from "@/lib/utils"
 
-function StateWord({ state }: { state: SetupItem["state"] }) {
-  const wording: Record<SetupItem["state"], string> = {
-    ready: "ready",
-    missing: "missing",
-    unanswered: "not answered",
-  }
+const STATE = {
+  ready: { icon: CircleCheck, ink: "text-good-ink", word: "ready" },
+  missing: { icon: TriangleAlert, ink: "text-warning-ink", word: "missing" },
+  unanswered: { icon: CircleDashed, ink: "text-ink-muted", word: "not answered" },
+} as const
+
+function StepChip({ item }: { item: SetupItem }) {
+  const { icon: Icon, ink } = STATE[item.state]
   return (
-    <span className="furniture shrink-0 rounded-control border border-line px-field py-field text-meta text-ink-muted">
-      {wording[state]}
-    </span>
+    <Link
+      to="/settings"
+      title={`${item.label} — ${STATE[item.state].word}`}
+      className="flex items-center gap-field rounded-control border border-line px-row py-field text-meta text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
+    >
+      <Icon aria-hidden="true" className={cn("size-4 shrink-0", ink)} />
+      {item.label}
+    </Link>
   )
 }
 
@@ -40,35 +49,41 @@ export function GettingStartedCard({ repoId }: { repoId: string }) {
     queryFn: ({ signal }) => fetchSetup(repoId, signal),
   })
 
+  const items = query.isSuccess ? query.data.items : []
+  const ready = items.filter((item) => item.state === "ready").length
+  const next = items.find((item) => item.state !== "ready") ?? null
+
   return (
     <div className="flex flex-col gap-section rounded-surface border border-line bg-surface p-section">
       <div className="flex flex-wrap items-center justify-between gap-section">
-        <div className="flex min-w-0 flex-col gap-field">
-          <div className="flex items-center gap-row">
-            <h2 className="text-section">Getting started</h2>
-            <InfoHint label="About getting started">
-              Sync is installed beside a codebase and indexes it into the graph; every figure on
-              every screen is scoped to the workspace named here. The items on the right are the
-              full loop&rsquo;s prerequisites — index, detect, remediate, verify, pull request —
-              each probed when this page loads. Fixing any of them happens in Settings, never
-              here, so there is one place for a setting and one answer to what it holds.
-            </InfoHint>
-          </div>
-          <span className="truncate font-mono text-body text-ink" title={repoId}>
-            {repoId}
+        <div className="flex min-w-0 items-center gap-row">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-primary/15">
+            <Zap aria-hidden="true" className="size-4 text-primary" />
           </span>
+          <div className="flex min-w-0 flex-col">
+            <h2 className="text-section">Getting started</h2>
+            <span className="truncate font-mono text-meta text-ink-muted" title={repoId}>
+              {repoId}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-row">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/settings">Setup checklist</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/settings">Connect to Git</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/settings">How these pages work</Link>
-          </Button>
-        </div>
+        {query.isSuccess && (
+          <div className="flex shrink-0 items-center gap-row">
+            <span className="font-furniture text-ink-secondary">
+              {ready} / {items.length} ready
+            </span>
+            <span
+              role="img"
+              aria-label={`${ready} of ${items.length} prerequisites ready`}
+              className="h-1 w-24 overflow-hidden rounded-full bg-surface-emphasis"
+            >
+              <span
+                className="block h-full rounded-full bg-primary"
+                style={{ width: items.length === 0 ? 0 : `${(ready / items.length) * 100}%` }}
+              />
+            </span>
+          </div>
+        )}
       </div>
 
       {query.isPending && <LoadingState what="the setup checklist" />}
@@ -79,26 +94,43 @@ export function GettingStartedCard({ repoId }: { repoId: string }) {
           onRetry={() => void query.refetch()}
         />
       )}
+
       {query.isSuccess && (
-        <div className="grid auto-rows-fr gap-row border-t border-line pt-section sm:grid-cols-2 xl:grid-cols-3">
-          {query.data.items.map((item) => (
-            <div key={item.id} className="flex min-w-0 flex-col gap-field">
-              <div className="flex flex-wrap items-center gap-row">
-                <span className="text-body text-ink">{item.label}</span>
-                <StateWord state={item.state} />
-              </div>
-              {item.state !== "ready" && item.fix !== null && (
-                <span className="font-mono text-meta text-ink-muted">{item.fix}</span>
-              )}
-            </div>
+        <div className="flex flex-wrap items-center gap-row">
+          {items.map((item) => (
+            <StepChip key={item.id} item={item} />
           ))}
         </div>
       )}
-      {query.isSuccess && query.data.items.every((item) => item.state === "ready") && (
-        <p className="max-w-prose text-meta text-ink-muted">
+
+      {query.isSuccess && next !== null && (
+        <div className="flex flex-wrap items-center justify-between gap-section rounded-control border border-line bg-surface-subtle px-section py-row">
+          <div className="flex min-w-0 items-center gap-row">
+            <TriangleAlert
+              aria-hidden="true"
+              className={cn("size-4 shrink-0", STATE[next.state].ink)}
+            />
+            <div className="flex min-w-0 flex-col">
+              <span className="text-body text-ink">
+                {next.label} — {STATE[next.state].word}
+              </span>
+              {next.fix !== null && (
+                <span className="truncate font-mono text-meta text-ink-muted">{next.fix}</span>
+              )}
+            </div>
+          </div>
+          <Button asChild size="sm">
+            <Link to="/settings">Fix in Settings →</Link>
+          </Button>
+        </div>
+      )}
+
+      {query.isSuccess && next === null && items.length > 0 && (
+        <div className="flex items-center gap-row text-meta text-ink-muted">
+          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-good-ink" />
           Everything the full loop needs is in place — indexed, staged, connected, and a merge
           policy in force.
-        </p>
+        </div>
       )}
     </div>
   )

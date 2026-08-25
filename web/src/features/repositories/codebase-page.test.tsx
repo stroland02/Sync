@@ -72,8 +72,11 @@ describe("CodebasePage's scope", () => {
   it("renders no fleet-wide runs or repair record under one repository's name", () => {
     renderCodebase("/repositories/org%2Fpayments")
 
-    // Non-vacuous: the screen rendered, and it states the scope every figure on it was computed in.
-    expect(document.body.textContent).toContain("This repository alone.")
+    // Non-vacuous: the screen rendered with its own heading. The scope sentence that used to
+    // anchor this assertion was ruled out on 2026-08-25 (cognitive load): the trail and the
+    // workspace switcher scope the page, so the sentence said it a third time.
+    expect(document.body.textContent).toContain("Getting started")
+    expect(document.body.textContent).not.toContain("This repository alone.")
 
     expect(document.body.textContent).not.toContain("the fleet's runs")
     expect(document.body.textContent).not.toContain("One row per checkpoint thread")

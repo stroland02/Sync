@@ -163,10 +163,6 @@ export function PipelineStrip({ repoId }: { repoId: string }) {
         })}
       </ol>
 
-      <p className="text-meta leading-snug text-ink-muted">
-        Every figure is this workspace&rsquo;s alone, and nothing is drawn to scale: the stages
-        count call sites, integrations, calls and findings, which are four different units.
-      </p>
     </section>
   )
 }

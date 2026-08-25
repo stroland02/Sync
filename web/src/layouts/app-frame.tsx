@@ -166,7 +166,7 @@ function EnvironmentBadge() {
     <WorkspaceSwitcher current={workspace}>
       {workspace !== null && (
         <>
-          <span className="min-w-0 truncate font-mono text-ink" title={workspace}>
+          <span className="min-w-0 truncate font-mono text-meta text-ink-muted" title={workspace}>
             {workspace}
           </span>
           <span aria-hidden="true">·</span>

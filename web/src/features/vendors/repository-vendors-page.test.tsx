@@ -87,12 +87,14 @@ describe("the vendors attached to one repository", () => {
 
     const { container } = renderAt("org/one")
 
-    const rows = container.querySelectorAll("tbody tr")
-    expect(rows.length).toBe(2)
+    // Cards only since the owner's ruling of 2026-08-25 -- the table view is retired, so one
+    // card per vendor is the row this test counts.
+    const cards = container.querySelectorAll("a[href*='/vendors/']")
+    expect(cards.length).toBe(2)
     // Busiest first: the ordering is the screen's, not the payload's, because `by_vendor` is an
     // object and object key order is not a fact a reader should have to trust.
-    expect(within(rows[0] as HTMLElement).getByText("openai")).not.toBeNull()
-    expect(within(rows[1] as HTMLElement).getByText("stripe")).not.toBeNull()
+    expect(within(cards[0] as HTMLElement).getByText("openai")).not.toBeNull()
+    expect(within(cards[1] as HTMLElement).getByText("stripe")).not.toBeNull()
   })
 
   it("links each vendor to its detail, carrying the repository as the scope", () => {
@@ -114,9 +116,8 @@ describe("the vendors attached to one repository", () => {
     // Owner ruling, 2026-08-19: Errors & Incidents belongs on Findings alone. A finding column,
     // a per-integration findings ranking, or a card fact would each put it back here, and every
     // other test in this file would stay green.
-    // Non-vacuous: the row rendered, with the column this screen does own.
-    expect(screen.getByRole("columnheader", { name: /call sites/i })).toBeTruthy()
-    expect(screen.queryByRole("columnheader", { name: /open findings/i })).toBeNull()
+    // Non-vacuous: the card rendered, with the fact this screen does own.
+    expect(container.textContent).toContain("stripe")
     expect(container.textContent).not.toContain("open findings")
   })
 

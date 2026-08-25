@@ -90,7 +90,8 @@ export function RepositoryVendorsPage() {
   // products here would be the Services screen rendered twice.
   const coverage = useRepositoryCoverage(repoId ?? "")
 
-  const [viewMode, setViewMode] = useState<ViewMode>("table")
+  // Cards only, owner ruling 2026-08-25 -- the table view is retired, not toggled off.
+  const viewMode: ViewMode = "cards"
   const [tierFilter, setTierFilter] = useState<TierFilter>("all")
 
 
@@ -231,28 +232,6 @@ export function RepositoryVendorsPage() {
         />
       ) : (
         <div className="flex flex-col gap-section">
-          {/* Controls Bar: View toggle. The tier facet moved to the frame's controls band. */}
-          <div className="flex flex-wrap items-center justify-between gap-field pb-field border-b border-line">
-            <div className="flex items-center gap-field">
-              <Button
-                size="sm"
-                variant={viewMode === "table" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("table")}
-                className="text-meta"
-              >
-                Table
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === "cards" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("cards")}
-                className="text-meta"
-              >
-                Cards
-              </Button>
-            </div>
-          </div>
-
           {filteredVendors.length === 0 ? (
             <EmptyState
               headline="No vendors match the selected filter."
