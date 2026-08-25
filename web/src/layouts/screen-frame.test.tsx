@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react"
+import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { ScreenFrame } from "@/layouts/screen-frame"
@@ -99,5 +100,65 @@ describe("ScreenFrame", () => {
     const controls = band("controls")!
     const content = band("content")!
     expect(controls.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+/**
+ * The page names itself once, in the content band, above everything it contains.
+ *
+ * Measured on the Findings screen before this moved: the `h1` rendered at **13px** while every
+ * `h2` inside it rendered at 18px -- a page titled smaller than its own sections. The heading had
+ * been living in the breadcrumb trail, where body size is correct for a trail segment and wrong
+ * for a document's top-level heading.
+ *
+ * The size is asserted through the class rather than a computed style: jsdom resolves no
+ * stylesheet, so `getComputedStyle` here would report the same thing whatever the class said,
+ * and a test that cannot fail is worse than no test.
+ */
+describe("the page's heading", () => {
+  it("renders once, in the content band, at the page step", () => {
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <ScreenFrame status={RECORDS}>
+          <table />
+        </ScreenFrame>
+      </MemoryRouter>
+    )
+
+    const headings = document.querySelectorAll("h1")
+    expect(headings).toHaveLength(1)
+
+    const heading = headings[0]
+    expect(heading.className).toContain("text-page")
+    // Not `text-body`, which is what it carried in the trail and what made it smaller than its
+    // own sections.
+    expect(heading.className).not.toContain("text-body")
+  })
+
+  it("comes before the controls, so a screen says what it is before how to narrow it", () => {
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <ScreenFrame status={RECORDS} controls={<button>Severity</button>}>
+          <table />
+        </ScreenFrame>
+      </MemoryRouter>
+    )
+
+    const heading = document.querySelector("h1")!
+    const controls = band("controls")!
+    expect(heading.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("takes an explicit title over the registry's label", () => {
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <ScreenFrame status={RECORDS} title="A better name" subtitle="What it answers.">
+          <table />
+        </ScreenFrame>
+      </MemoryRouter>
+    )
+
+    expect(document.querySelector("h1")?.textContent).toBe("A better name")
+    expect(document.body.textContent).toContain("What it answers.")
   })
 })

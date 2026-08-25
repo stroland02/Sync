@@ -159,11 +159,21 @@ describe("the findings screen", () => {
     expect(after).not.toMatch(/nothing has checked/i)
   })
 
-  it("carries no page header, because density is dense", () => {
+  // Superseded 2026-08-24 by the owner's Stitch specification, which puts a prominent page title
+  // and a one-line subtitle at the top of every screen's content. The old ruling -- the trail
+  // names the page, so a page does not have to -- was coherent and was not wrong for the console
+  // it described; what retired it is that the trail rendered the `h1` at 13px, smaller than the
+  // 18px `h2` of every section inside it. A high-density design is not one without titles: the
+  // Stitch screens are denser than ours and every one of them is titled.
+  //
+  // There is still exactly one top-level heading. It moved; it did not multiply.
+  it("names itself once, at the page step", () => {
     mockState.page = page([row()])
     renderFindings()
 
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
+    const headings = screen.getAllByRole("heading", { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0].className).toContain("text-page")
   })
 })
 

@@ -297,12 +297,18 @@ describe("the trail names the page, so a page does not have to", () => {
     expect(within(trail).getByText("Telemetry")).toBeTruthy()
   })
 
-  it("makes that name the page's only top-level heading", () => {
+  it("marks that name as the current segment, and is not the page's heading", () => {
+    // Until 2026-08-24 this segment was the `h1`, on the argument that one heading in chrome
+    // beats twelve in twelve pages. The registry half of that argument still holds and is why
+    // `ScreenFrame` reads the same `labelFor`; what failed is the size. A trail segment is body
+    // text, and a document's top-level heading rendering at body size put the page title under
+    // the `h2` of every section it contained. The heading moved to the content band; this stayed
+    // a trail segment, and marks itself current the way a trail's last segment should.
     renderAt("/repositories/seed-console/observed")
 
-    const headings = screen.getAllByRole("heading", { level: 1 })
-    expect(headings.length).toBe(1)
-    expect(headings[0].textContent).toContain("Telemetry")
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
+    const current = document.querySelector('[aria-current="page"]')
+    expect(current?.textContent).toContain("Telemetry")
   })
 
   it("names a page the registry does not declare without inventing a label for it", () => {

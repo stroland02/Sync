@@ -102,7 +102,7 @@ interface Matched {
  * renders inside this chassis like any other screen, and a trail that invented a name for it would
  * be the console asserting something nothing computed.
  */
-function labelFor(pathname: string): string | null {
+export function labelFor(pathname: string): string | null {
   const route = ROUTES.find((entry) => matchPath(entry.path, pathname) !== null)
   if (route !== undefined) return route.label
   const destination = DESTINATIONS.find((entry) => matchPath(entry.path, pathname) !== null)
@@ -347,7 +347,17 @@ export function ScopeTrail() {
       {pageLabel !== null && (
         <>
           <Divider />
-          <h1 className="min-w-0 truncate text-body font-medium text-foreground">{pageLabel}</h1>
+          {/* A trail segment, not the page's heading. It was the `h1` while nothing else named
+              the page, and that made the page's own title render at 13px -- smaller than the
+              18px `h2` of every section inside it, which is a hierarchy inverted. The heading
+              moved to the content band where the design system puts it; this stays as the last
+              segment of the trail, same words, same registry, no drift. */}
+          <span
+            aria-current="page"
+            className="min-w-0 truncate text-body font-medium text-foreground"
+          >
+            {pageLabel}
+          </span>
         </>
       )}
     </nav>

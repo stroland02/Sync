@@ -92,11 +92,16 @@ describe("the runs screen", () => {
    * claim itself is asserted above.
    */
 
-  it("carries no page header, because density is dense", () => {
+  it("names itself once, at the page step", () => {
     renderRuns()
 
-    // Owner answer 7, applied to every screen. The breadcrumb and the rail name this destination.
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
+    // Owner answer 7 -- the breadcrumb and the rail name this destination, so the page need not --
+    // is superseded by the Stitch specification of 2026-08-24, which titles every screen. The
+    // trail rendered that name as an `h1` at 13px, under the 18px `h2` of its own sections, and
+    // an inverted hierarchy is what actually retired the ruling. One heading still, relocated.
+    const headings = screen.getAllByRole("heading", { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0].className).toContain("text-page")
   })
 
   it("keeps one attempt as one attempt, and never reads a row count as a finding count", () => {
