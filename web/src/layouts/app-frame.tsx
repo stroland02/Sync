@@ -298,7 +298,7 @@ function AppSidebar({ pathname }: { pathname: string }) {
       ref={reserve}
       data-sidebar-reserve={rail}
       style={{ width: SIDEBAR_WIDTH[rail] }}
-      className="sticky top-0 z-40 h-svh shrink-0"
+      className="relative z-40 h-full shrink-0"
     >
       <Sidebar
         collapsible="none"
@@ -544,13 +544,13 @@ export function AppFrame() {
           either way, so nothing in CI would have told us which one shipped. */}
       <SidebarProvider
         defaultOpen={false}
-        className="flex min-h-svh items-start bg-background text-foreground"
+        className="flex h-svh overflow-hidden bg-background text-foreground"
       >
         <AppSidebar pathname={pathname} />
 
         <StatusTargetProvider target={target}>
         <TopbarStatsProvider target={statsTarget}>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
           <ErrorSurface />
 
           {/* The identity band. The trail was pulled in 2026-08 because it and the sidebar were two
@@ -561,7 +561,7 @@ export function AppFrame() {
               is when a reader needs it most. */}
           <header
             role="banner"
-            className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-secondary px-section"
+            className="z-30 flex h-12 shrink-0 items-center justify-between gap-section border-b border-line bg-secondary px-section"
           >
             <div className="flex min-w-0 flex-1 items-center gap-section">
               <ScopeTrail />
@@ -582,7 +582,12 @@ export function AppFrame() {
               = 1120), so nothing measured changes; on a wide monitor it stops every page hugging
               the sidebar with dead space to the right, which reads as a misaligned screen rather
               than a large one. `w-full` keeps narrow viewports exactly as they were. */}
-          <main ref={contentRef} tabIndex={-1} className="flex flex-1 flex-col outline-none">
+          <main
+            ref={contentRef}
+            tabIndex={-1}
+            data-scrollport
+            className="flex min-h-0 flex-1 flex-col overflow-auto outline-none has-[[data-screen=locked]]:overflow-hidden"
+          >
             {/* The cap keeps a prose line readable, which is right for a screen of panels and
                 wrong for one whose subject is fifteen recorded fields per row -- a table-first
                 route declares itself wide in the registry and gets the window (M15 Task 1). A
@@ -590,7 +595,7 @@ export function AppFrame() {
                 the scrollbar and land differently per browser. */}
             <div
               className={cn(
-                "mx-auto flex w-full flex-1 flex-col gap-8 p-frame",
+                "mx-auto flex w-full min-h-0 flex-1 flex-col gap-8 p-frame",
                 isWideRoute(pathname) ? "max-w-none" : "max-w-[1400px]",
               )}
             >
@@ -603,7 +608,7 @@ export function AppFrame() {
               to stay outside that column. A screen therefore cannot render its own status inline
               -- `ScreenFrame` portals into the target below. An unmigrated screen portals nothing
               and the footer is the chassis sentences alone, exactly as before. */}
-          <footer className="mt-auto flex flex-col border-t border-line">
+          <footer className="flex shrink-0 flex-col border-t border-line">
             <div ref={footerRef} />
             <ChassisQualifications />
           </footer>
