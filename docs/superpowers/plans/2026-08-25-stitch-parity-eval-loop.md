@@ -131,4 +131,29 @@ reference shows them and never as decoration on data-bearing surfaces).
 
 | # | Date | Screens | Findings | Fixed | Landed |
 |---|---|---|---|---|---|
-| 1 | 2026-08-25 | all 13 | — | — | — |
+| 1 | 2026-08-25 | all 13 | 351 raw, 12 systemic | #7 sidebar prose, #12 topbar identity | `CI-W624` |
+
+### Iteration 1 — the twelve systemic findings, ranked
+
+Fourteen agents, 351 raw findings, synthesized. Impact 5 = an operator notices at a glance.
+Effort S/M/L. The two shell items were fixed the same day (`CI-W624`); the captures predate that
+fix, so re-capture retires them formally next iteration.
+
+| # | Impact | Effort | Difference | Screens |
+|---|---|---|---|---|
+| 1 | 5 | L | **Viewport-locked multi-pane composition** — the references keep every fact on screen (bento grids, splits, canvas+inspector) with per-pane scroll; we render one long scrolling column | 9 |
+| 2 | 5 | L | **Persistent selection-driven inspector pane** — selecting a row or node should surface detail in place; ours shows nothing or navigates away | call-sites, vendors, runs, graph |
+| 3 | 4 | S | **Tinted-fill icon+word status badges** — closed-vocabulary values render as plain text or gray outline chips; the tinted form is explicitly permitted and dropped everywhere | 8 |
+| 4 | 4 | S | **Active nav item as a filled primary-container pill** with on-primary ink, not a faint tint with an edge bar | all |
+| 5 | 4 | M | **No filled-primary element anywhere in the chrome** — logo, CTAs and accents all neutral; the references carry the emerald family through | 8 |
+| 6 | 4 | M | **Prose before data** — caption paragraphs and checklists spend the fold; the references lead with data and one subtitle line | 10 |
+| 7 | 3 | S | Sidebar stage descriptor sentences — **fixed, `CI-W624`** | 10 |
+| 8 | 3 | M | **Persistent bordered search input at top-bar left** opening the palette, not a pill at the far right | 8 |
+| 9 | 3 | M | **Banded pane headers** — tinted furniture strip (container fill, hairline, uppercase label with icon) on cards and panels | 7 |
+| 10 | 2 | S | **Chrome on raised surfaces** — sidebar `#1b1c1b`, topbar `#1f201f` over the `#131413` page, not border-only separation | 10 |
+| 11 | 2 | S | **Face split** — Manrope reserved for display/headers, body and meta in Inter 13px | 7 |
+| 12 | 2 | S | Topbar repo identity as large mono — **partially fixed, `CI-W624`** (chip landed; mono size next capture) | 5 |
+
+**Execution order:** 3 → 4 → 10 → 11 (small, high visibility) → 5 → 6 → 8 → 9 (medium) → 1 → 2
+(the structural sequence, planned as its own slice). Raw per-screen findings: the workflow
+journal for run `wf_3d57190e-249`.
