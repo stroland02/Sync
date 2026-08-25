@@ -62,3 +62,9 @@ scripts/orchestration/hold_clock.json
 # `.playwright-mcp/` catches the snapshots and logs; this catches the images, which land
 # in the repository root instead.
 /*.png
+
+# The Supabase reference capture: 356 screens, 126MB. Deliberately untracked -- twenty times the
+# Stitch set, and unlike that one it is mined once rather than read per screen. What it teaches is
+# tracked in docs/superpowers/references/notes/; the images stay local.
+docs/supabase-reference/
+
