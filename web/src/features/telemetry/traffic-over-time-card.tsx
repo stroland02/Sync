@@ -30,9 +30,16 @@ export function TrafficOverTimeCard({ series }: { series: TrafficBucket[] }) {
           days,
           members: TRAFFIC_MEMBERS,
           stackId: "traffic",
-          // Errored is a state, never a category: painted from the reserved serious
-          // ink so it cannot land on green by slot order, which it did.
-          memberColors: { errored: tokens.seriousInk },
+          // Both bands are states, never categories, so both are painted from reserved status
+          // inks rather than taking a categorical slot.
+          //
+          // Pinning only one was not enough, and the screenshot is what showed it: `errored` was
+          // held at serious while `succeeded` took series slot 0 -- which is itself an orange, so
+          // the chart drew two near-identical oranges and the legend was the only thing telling
+          // the reader which band was which. The failure this file already records is the same
+          // one inverted: an error band from a categorical slot once rendered errors green and
+          // successes orange.
+          memberColors: { errored: tokens.seriousInk, succeeded: tokens.goodInk },
         },
         tokens,
       ),
