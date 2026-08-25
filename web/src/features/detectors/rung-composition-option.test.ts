@@ -31,6 +31,7 @@ const TOKENS: ChartTokens = {
   labelOnLight: "chart-label-on-light",
   goodInk: "good-ink",
   warningInk: "warning-ink",
+  outcome: { opened: "o1", retried: "o2", in_flight: "o3", reported: "o4", abandoned: "o5" },
   seriousInk: "serious-ink",
   series: Array.from({ length: 8 }, (_, i) => `series-${i + 1}`),
 }

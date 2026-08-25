@@ -1413,6 +1413,13 @@ _INK_GROUPS = (
 )
 
 
+#: A colour spelled out, in either notation this file has held. `CI-W614` moved the palette from
+#: `oklch()` to the hex the owner's token sheet supplies, and this guard asserted `oklch(` -- so it
+#: went red on that commit and stayed red through six more, because `index.css` changes were gated
+#: on the console suite alone and this check lives in the Python one.
+_IS_LITERAL_COLOUR = re.compile(r"^(#[0-9a-fA-F]{3,8}|oklch\(|rgb\(|hsl\()")
+
+
 def _declaration_of(css: str, token: str) -> str | None:
     matched = re.search(re.escape(token) + r":\s*([^;]+);", css)
     return matched.group(1).strip() if matched else None
@@ -1426,7 +1433,7 @@ def _ink_violations(css: str) -> list[str]:
         owned = _declaration_of(css, owner)
         if owned is None:
             found.append(owner + " is not declared")
-        elif not owned.startswith("oklch("):
+        elif not _IS_LITERAL_COLOUR.match(owned):
             found.append(owner + " holds " + owned + ", not a colour of its own")
         for alias in aliases:
             value = _declaration_of(css, alias)

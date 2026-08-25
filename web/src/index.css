@@ -142,6 +142,16 @@
   --color-serious-ink: oklch(0.77 0.14 45);
   --color-serious-surface: oklch(0.26 0.055 45);
   --color-critical: #fa8880;
+
+  /* The outcome ramp: five states one repair attempt can end in, ordered by how well it ended.
+     Argued in DESIGN.md under "The outcome ramp". Reserved like the status inks above -- a chart
+     band meaning an outcome takes a step from here, never a categorical slot, because a slot
+     rendered `abandoned` in the good ink and read as a success. */
+  --color-outcome-opened: #3ecf8e;
+  --color-outcome-retried: #5bd6e0;
+  --color-outcome-in-flight: #e8c15a;
+  --color-outcome-reported: #f78a4e;
+  --color-outcome-abandoned: #fa8880;
   --color-critical-ink: oklch(0.75 0.14 25);
   --color-critical-surface: hsl(6.7 60% 20.6%);
   --color-destructive: oklch(0.75 0.14 25);

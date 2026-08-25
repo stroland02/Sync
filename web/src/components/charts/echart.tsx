@@ -32,6 +32,10 @@ export interface ChartTokens {
   goodInk: string
   warningInk: string
   seriousInk: string
+  /** The outcome ramp, by state name. A band meaning an outcome reads from here rather than
+   * taking a categorical slot -- a slot rendered `abandoned` in the good ink and read as a
+   * success. `DESIGN.md`, "The outcome ramp". */
+  outcome: Readonly<Record<string, string>>
 }
 
 const TOKEN_PROPERTIES = {
@@ -45,6 +49,14 @@ const TOKEN_PROPERTIES = {
   goodInk: "--color-good-ink",
   warningInk: "--color-warning-ink",
   seriousInk: "--color-serious-ink",
+} as const
+
+const OUTCOME_PROPERTIES = {
+  opened: "--color-outcome-opened",
+  retried: "--color-outcome-retried",
+  in_flight: "--color-outcome-in-flight",
+  reported: "--color-outcome-reported",
+  abandoned: "--color-outcome-abandoned",
 } as const
 
 const SERIES_PROPERTIES = Array.from({ length: 8 }, (_, i) => `--color-series-${i + 1}`)
@@ -75,6 +87,9 @@ function readTokens(): ChartTokens {
     goodInk: read(TOKEN_PROPERTIES.goodInk),
     warningInk: read(TOKEN_PROPERTIES.warningInk),
     seriousInk: read(TOKEN_PROPERTIES.seriousInk),
+    outcome: Object.fromEntries(
+      Object.entries(OUTCOME_PROPERTIES).map(([state, property]) => [state, read(property)]),
+    ),
     series: SERIES_PROPERTIES.map(read),
   }
 }

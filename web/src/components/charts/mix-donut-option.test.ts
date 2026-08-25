@@ -23,6 +23,7 @@ const TOKENS: ChartTokens = {
   labelOnLight: "token:label-on-light",
   goodInk: "token:good-ink",
   warningInk: "token:warning-ink",
+  outcome: { opened: "o1", retried: "o2", in_flight: "o3", reported: "o4", abandoned: "o5" },
   seriousInk: "token:serious-ink",
   series: ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"],
 }

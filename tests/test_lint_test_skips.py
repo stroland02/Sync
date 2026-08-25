@@ -180,6 +180,11 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     sentence its two siblings in that file already use. It arrived with the `CI-W547`-`CI-W549`
     rebuild without this count moving, which is exactly the silent arrival this test exists to
     make impossible; the count moves here, deliberately and late.
+
+    The nineteenth is `tests/test_outcome_ramp.py`'s, added 2026-08-24 with the outcome ramp. It
+    is the same absent-console sentence as the other console guards: the file reads `index.css`
+    to hold five colours to a contrast floor and a difference floor, and a checkout with no
+    console has no colours to hold.
     """
     from scripts.lint_test_skips import find_skip_sites
 
@@ -187,7 +192,7 @@ def test_current_skip_sites_are_a_pinned_baseline() -> None:
     for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
         sites.extend(find_skip_sites(path.read_text(encoding="utf-8"), str(path)))
 
-    assert len(sites) == 18, [f"{s.filename}:{s.line}" for s in sites]
+    assert len(sites) == 19, [f"{s.filename}:{s.line}" for s in sites]
     assert all(s.permitted for s in sites)
 
 

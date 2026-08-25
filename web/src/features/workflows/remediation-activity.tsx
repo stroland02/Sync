@@ -92,7 +92,19 @@ export function AttemptsOverTime() {
   const statuses = [...new Set(days.flatMap((day) => Object.keys(day.counts)))].sort()
   const build = useCallback(
     (tokens: ChartTokens) =>
-      buildDayStackOption({ days, members: statuses, stackId: "attempts" }, tokens),
+      buildDayStackOption(
+        {
+          days,
+          members: statuses,
+          stackId: "attempts",
+          // Every band here means an outcome, so every band reads the ramp rather than a
+          // categorical slot. Before this, slot order painted `abandoned` in the good ink --
+          // a failure drawn as a success -- and `retried` in a pink that belongs to no palette
+          // this console declares. `DESIGN.md`, "The outcome ramp".
+          memberColors: tokens.outcome,
+        },
+        tokens,
+      ),
     [days, statuses],
   )
 

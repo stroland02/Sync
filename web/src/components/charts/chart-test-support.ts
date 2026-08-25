@@ -29,6 +29,13 @@ export const CHART_TOKENS: ChartTokens = {
   goodInk: "token:good-ink",
   warningInk: "token:warning-ink",
   seriousInk: "token:serious-ink",
+  outcome: {
+    opened: "token:outcome-opened",
+    retried: "token:outcome-retried",
+    in_flight: "token:outcome-in-flight",
+    reported: "token:outcome-reported",
+    abandoned: "token:outcome-abandoned",
+  },
   series: Array.from({ length: 8 }, (_, i) => `token:series-${i + 1}`),
 }
 

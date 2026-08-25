@@ -496,6 +496,49 @@ already argued above:
 
 ---
 
+### The outcome ramp
+
+Five states one repair attempt can end in, ordered by how well it ended. Added 2026-08-24 on the
+owner's ruling; the two endpoints are theirs unchanged.
+
+| Step | Token | Value | Meaning |
+|---|---|---|---|
+| 1 | `--color-outcome-opened` | `#3ecf8e` | reached the forge |
+| 2 | `--color-outcome-retried` | `#5bd6e0` | tried again |
+| 3 | `--color-outcome-in-flight` | `#e8c15a` | still going |
+| 4 | `--color-outcome-reported` | `#f78a4e` | no patch attempted |
+| 5 | `--color-outcome-abandoned` | `#fa8880` | gave up |
+
+**Why a ramp rather than the three status inks.** An outcome is a state, not a category, and a
+state painted from a categorical slot lies: `abandoned` rendered in the good ink and read as a
+success on the Solutions screen (`CI-W620`). There are five states and only three reserved status
+inks, so the reserved set is extended rather than stretched.
+
+**Why these five values and not the ones first proposed.** The ruling's middle steps were
+`#45cd8e`, `#f2af48` and `#fd9565`. Measured, `opened` against `retried` came out at **CIE76 dE
+2.1** — two colours no reader can tell apart, which is exactly the defect `CI-W619` had just fixed
+in the traffic chart. `reported` against `abandoned` was **19.8**, also under the threshold. The
+middles were searched for the arrangement maximising the worst pair while holding the contrast
+floor and the semantic order.
+
+**Measured, and both properties hold at once.** Worst pair **dE 26.3** (`reported` vs
+`abandoned`); every other pair is 36.7 or higher. dE ≥ 20 is the threshold this file uses for
+"clearly different at chart scale", where a band is a few hundred pixels of flat fill.
+
+Contrast against the three surfaces, all clearing the 5.05:1 floor:
+
+| Step | on `#131413` | on `#181a19` | on `#1e201f` |
+|---|---|---|---|
+| opened | 9.25 | 8.76 | 8.21 |
+| retried | 10.68 | 10.12 | 9.49 |
+| in-flight | 10.73 | 10.17 | 9.53 |
+| reported | 7.65 | 7.25 | 6.80 |
+| abandoned | 7.82 | 7.41 | 6.94 |
+
+**The endpoints are load-bearing and the middles are not.** `opened` is the good ink and
+`abandoned` is critical, so the two states a reader most needs to tell apart are the two furthest
+apart on the ramp. A future sixth state takes a step between the middles, never at an end.
+
 ## Type
 
 Seven steps, and the sizes are Studio's own ramp adopted whole. The console previously lived at
@@ -726,6 +769,28 @@ band three measured reference surfaces hold. It was **3.0 on all nine routes** b
 Four levels: `40 : 32 : 16 : 8 : 4`.
 
 ---
+
+
+### Shell geometry
+
+Three page-layout numbers the Stitch specification names, added 2026-08-24. They are not component
+spacing and do not belong in the four-token scale above: each is used once per view, by the chassis.
+
+| Token | Value | Job |
+|---|---|---|
+| `--spacing-sidebar` | `15rem` (240px) | the sidebar, expanded |
+| `--spacing-sidebar-collapsed` | `3rem` (48px) | the sidebar as a rail |
+| `--spacing-topbar` | `3rem` (48px) | the top bar |
+
+**Both sidebar widths were already argued** under the *chassis widths* decision (`M14-W367`) and are
+unchanged: 240px lands within 6px of mock v1's 246px and is 6× the 40px frame; 48px settles a
+contradiction where the current-row colour ramp argued from "a 48px column with no label in it"
+while the rail that shipped was 40px. What is new is that they are **tokens rather than two string
+constants in `sidebar-collapse.ts`**, because the Stitch specification gives the top bar the same
+48px and a third view choosing its own number is the drift a token exists to stop.
+
+**The top bar's 48px is the specification's**, and it matches what the console already rendered —
+`h-12` on the banner — so this token names a measured fact rather than changing one.
 
 ## Row height
 
