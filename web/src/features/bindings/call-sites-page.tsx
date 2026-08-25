@@ -357,11 +357,6 @@ export function CallSitesPage() {
     <ScreenFrame controls={controls} status={status}>
     <section className="flex min-w-0 flex-col gap-8">
 
-      {/* Dashboards C1, C2, C3. Its own read on its own key, deliberately outside the table's
-          success branch: the topology answers a different question over the same rows, and a
-          failure to page the table is no reason to withhold the shape of what was indexed. */}
-      <CallSitesDashboards repoId={repoId} />
-
       {query.isPending && <LoadingState what={`the call sites in ${repoId}`} />}
       {query.isError && (
         <ErrorState
@@ -587,6 +582,14 @@ export function CallSitesPage() {
 
         </div>
       )}
+
+      {/* Below the working surface, not above it. The design system's first principle is density
+          and its layout rule is that the main data view is the content band -- a reader who came
+          to read call sites should not scroll two chart panels to reach them. Still outside the
+          table's success branch, for the reason it always was: the topology answers a different
+          question over the same rows, and a failure to page the table is no reason to withhold
+          the shape of what was indexed. */}
+      <CallSitesDashboards repoId={repoId} />
     </section>
     </ScreenFrame>
   )
