@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - Live Telemetry &amp; Agent Health</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&amp;family=Manrope:wght@600&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#454746",
+                        "surface-container": "#1f201f",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "status-critical-ink": "#fa8880",
+                        "secondary": "#c6c7c5",
+                        "surface-tint": "#59de9d",
+                        "outline-variant": "#3d4a41",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "status-good-bg": "#00311d",
+                        "tertiary-container": "#3dce8d",
+                        "tertiary": "#5feba7",
+                        "status-warning-ink": "#f2af48",
+                        "surface-popover": "#1b1d1c",
+                        "on-error": "#690005",
+                        "outline": "#86948a",
+                        "on-tertiary-fixed": "#002112",
+                        "surface-variant": "#343534",
+                        "inverse-on-surface": "#30312f",
+                        "surface-container-highest": "#343534",
+                        "on-primary": "#003822",
+                        "on-tertiary": "#003822",
+                        "on-primary-container": "#005333",
+                        "status-warning-bg": "#4a2900",
+                        "tertiary-fixed": "#71fcb6",
+                        "surface": "#131413",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "inverse-primary": "#006c45",
+                        "ink-muted": "#bcbdbc",
+                        "on-surface": "#e4e2e0",
+                        "primary-container": "#45cd8e",
+                        "on-background": "#e4e2e0",
+                        "surface-dim": "#131413",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "status-serious-bg": "#391a0b",
+                        "on-tertiary-container": "#005333",
+                        "on-secondary-container": "#b5b5b3",
+                        "primary-fixed-dim": "#59de9d",
+                        "status-good-ink": "#85e0ba",
+                        "on-secondary": "#2f3130",
+                        "surface-container-low": "#1b1c1b",
+                        "on-primary-fixed": "#002112",
+                        "background": "#131413",
+                        "secondary-fixed": "#e2e3e0",
+                        "surface-card": "#181a19",
+                        "status-critical-bg": "#541c15",
+                        "status-serious-ink": "#fd9565",
+                        "surface-bright": "#393938",
+                        "border-control": "#787a79",
+                        "on-primary-fixed-variant": "#005233",
+                        "ink-secondary": "#989a99",
+                        "ink-primary": "#edefee",
+                        "surface-container-lowest": "#0d0e0d",
+                        "on-surface-variant": "#bccabe",
+                        "error-container": "#93000a",
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed-variant": "#454746",
+                        "surface-container-high": "#292a29",
+                        "primary": "#65eaa8",
+                        "primary-fixed": "#77fbb8",
+                        "inverse-surface": "#e4e2e0",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "topbar-height": "48px",
+                        "sidebar-expanded": "240px",
+                        "panel-gap": "32px",
+                        "page-frame": "40px",
+                        "grid-unit": "4px",
+                        "row-padding": "8px",
+                        "sidebar-collapsed": "48px",
+                        "field-gap": "4px"
+                    },
+                    "fontFamily": {
+                        "mono-data": ["\"ui-monospace, monospace\""],
+                        "body": ["Inter"],
+                        "figure": ["Inter"],
+                        "meta": ["Inter"],
+                        "furniture": ["Inter"],
+                        "emphasis": ["Inter"],
+                        "section-header": ["Manrope"],
+                        "display": ["Manrope"],
+                        "page-header": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }],
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }
+        
+        .pulse-good {
+            animation: pulse-good-anim 2s infinite;
+        }
+        @keyframes pulse-good-anim {
+            0% { opacity: 0.8; box-shadow: 0 0 0 0 rgba(133, 224, 186, 0.4); }
+            70% { opacity: 1; box-shadow: 0 0 0 4px rgba(133, 224, 186, 0); }
+            100% { opacity: 0.8; box-shadow: 0 0 0 0 rgba(133, 224, 186, 0); }
+        }
+
+        .pulse-warning {
+            animation: pulse-warn-anim 2s infinite;
+        }
+        @keyframes pulse-warn-anim {
+            0% { opacity: 0.8; box-shadow: 0 0 0 0 rgba(242, 175, 72, 0.4); }
+            70% { opacity: 1; box-shadow: 0 0 0 4px rgba(242, 175, 72, 0); }
+            100% { opacity: 0.8; box-shadow: 0 0 0 0 rgba(242, 175, 72, 0); }
+        }
+
+        .shimmer-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .shimmer-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent);
+            transform: skewX(-20deg);
+            transition: left 0.5s ease;
+        }
+        .shimmer-btn:hover::after {
+            left: 150%;
+        }
+
+        .expandable-row {
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, transform 0.4s ease;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transform: scaleY(0.95);
+            transform-origin: top;
+        }
+        .expandable-row.expanded {
+            max-height: 300px;
+            opacity: 1;
+            transform: scaleY(1);
+        }
+
+        .glitch-anim {
+            animation: glitch-entrance 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+        }
+        
+        @keyframes glitch-entrance {
+            0% {
+                opacity: 0;
+                transform: translateX(-10px) skewX(20deg);
+                filter: drop-shadow(2px 0px 0px rgba(101, 234, 168, 0.8));
+            }
+            20% {
+                opacity: 0.8;
+                transform: translateX(5px) skewX(-10deg);
+                filter: drop-shadow(-2px 0px 0px rgba(242, 175, 72, 0.8));
+            }
+            40% {
+                opacity: 0.9;
+                transform: translateX(-2px) skewX(5deg);
+                filter: drop-shadow(1px 0px 0px rgba(101, 234, 168, 0.8));
+            }
+            100% {
+                opacity: 1;
+                transform: translateX(0) skewX(0);
+                filter: drop-shadow(0 0 0 transparent);
+            }
+        }
+
+        /* Matrix rain simulation */
+        .matrix-bg {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: linear-gradient(to bottom, rgba(19, 20, 19, 0.95), rgba(19, 20, 19, 0.98)), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="20" fill="rgba(101, 234, 168, 0.05)" font-family="monospace" font-size="10">01 10 00 11</text><text x="40" y="60" fill="rgba(101, 234, 168, 0.03)" font-family="monospace" font-size="10">11 01 01 00</text></svg>');
+            background-size: 100px 100px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .emerald-glow {
+            animation: emerald-glow-anim 3s ease-in-out infinite;
+        }
+        
+        @keyframes emerald-glow-anim {
+            0%, 100% { box-shadow: 0 0 5px rgba(101, 234, 168, 0.2); border-color: rgba(101, 234, 168, 0.3); }
+            50% { box-shadow: 0 0 15px rgba(101, 234, 168, 0.5); border-color: rgba(101, 234, 168, 0.6); }
+        }
+
+        /* Scrollbar styling for high-density feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3d4a41;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #787a79;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body min-h-screen relative overflow-hidden">
+<div class="matrix-bg"></div>
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full z-40 overflow-y-auto flex flex-col docked left-0 h-screen w-sidebar-expanded bg-background text-primary font-furniture text-furniture bg-surface-container-low border-r border-outline-variant flat no shadows">
+<div class="p-4 mb-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container">sync</span>
+</div>
+<div>
+<h1 class="font-display text-page-header font-bold text-primary">Sync</h1>
+<p class="font-meta text-meta text-ink-secondary">Self-maintaining API</p>
+</div>
+</div>
+</div>
+<div class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="api">api</span>
+                Integrations
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="healing">healing</span>
+                Self-Healing Queue
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                Telemetry/Traces
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="vpn_key">vpn_key</span>
+                API Keys
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-[240px] z-30 flex items-center justify-between px-page-frame text-primary font-furniture text-furniture docked full-width top-0 h-topbar-height bg-surface-container/80 backdrop-blur-md border-b border-outline-variant flat no shadows">
+<div class="flex items-center gap-6 h-full">
+<div class="relative h-full flex items-center">
+<span class="material-symbols-outlined absolute left-2 text-ink-secondary text-[16px]">search</span>
+<input class="bg-surface-variant/80 backdrop-blur border border-border-control rounded h-7 pl-8 pr-3 text-mono-data font-mono-data text-on-surface placeholder:text-ink-secondary focus:outline-none focus:border-primary w-64 transition-colors hover:border-primary/50" placeholder="Search traces..." type="text"/>
+</div>
+<div class="flex h-full">
+<a class="h-full flex items-center px-4 text-primary font-emphasis border-b-2 border-primary hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">Production</a>
+<a class="h-full flex items-center px-4 text-ink-secondary font-furniture hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">Staging</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center justify-center w-8 h-8 rounded hover:bg-surface-container-high text-ink-secondary hover:text-on-surface transition-colors active:translate-y-[1px]">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="flex items-center justify-center w-8 h-8 rounded hover:bg-surface-container-high text-ink-secondary hover:text-on-surface transition-colors active:translate-y-[1px]">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<button class="shimmer-btn bg-primary-container text-on-primary-container font-emphasis text-emphasis px-4 py-1.5 rounded flex items-center gap-2 active:translate-y-[1px] transition-all duration-0 h-8 hover:shadow-[0_0_10px_rgba(101,234,168,0.4)]">
+<span class="material-symbols-outlined text-[16px]">rocket_launch</span>
+                Deploy Agent
+            </button>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A detailed digital avatar of an engineer, highly stylized in a cyberpunk aesthetic with neon green highlights against a dark background, minimal but sharp facial features." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzZCb-2ETEAdY41eHsZlk655na9q0qo2zcVHHCSg5X716BuA7T1U6kXB8Hd8y2yy8wU5O1Kqgnib8H10nvdKymPhqVdSwd_xCFCN4udEHmiaN8pIKBZEqfSsUZ25_PkmMKfBoYWS83bYWlsjcexKDWbO_sD8t7axg1TfLBS4ORJM1NvoAWiyjMM0ccN2XUndjsz5QLjS2n2TaBA3tlGLt2zuhVvv8PxuoS_w8-hG2afl1wUKhKwnL1"/>
+</div>
+</div>
+</header>
+<!-- Main Content Chassis -->
+<main class="ml-[240px] mt-[48px] p-page-frame h-[calc(100vh-48px)] flex flex-col gap-panel-gap overflow-hidden relative">
+<header class="flex justify-between items-end shrink-0 relative z-10">
+<div>
+<h2 class="font-display text-page-header font-bold text-on-surface">Live Telemetry</h2>
+<div class="flex items-center gap-2 mt-1">
+<span class="w-2 h-2 rounded-full bg-status-good-ink pulse-good"></span>
+<span class="font-meta text-meta text-ink-secondary">System nominal. Agents active.</span>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="bg-surface-card/80 backdrop-blur border border-border-low rounded px-3 py-1.5 flex items-center gap-2">
+<span class="material-symbols-outlined text-ink-secondary text-[16px]">speed</span>
+<span class="font-mono-data text-mono-data text-on-surface">Avg Latency: 12ms</span>
+</div>
+<div class="bg-surface-card/80 backdrop-blur border border-border-low rounded px-3 py-1.5 flex items-center gap-2">
+<span class="material-symbols-outlined text-status-good-ink text-[16px]">check_circle</span>
+<span class="font-mono-data text-mono-data text-status-good-ink">99.99% Uptime</span>
+</div>
+</div>
+</header>
+<!-- Bento Grid Layout -->
+<div class="flex-1 grid grid-cols-12 gap-grid-unit h-full overflow-hidden relative z-10">
+<!-- Column 1: Agent Operations -->
+<div class="col-span-4 bg-surface-card/90 backdrop-blur border border-border-low rounded flex flex-col h-full overflow-hidden shadow-lg emerald-glow">
+<div class="p-3 border-b border-border-low bg-surface-container-low/80 flex justify-between items-center shrink-0">
+<h3 class="font-section-header text-section-header text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">smart_toy</span>
+                        Agent Operations
+                    </h3>
+<span class="bg-status-good-bg text-status-good-ink font-meta text-meta px-2 py-0.5 rounded border border-status-good-ink/30 pulse-good shadow-[0_0_8px_rgba(133,224,186,0.3)]">ACTIVE</span>
+</div>
+<div class="flex-1 overflow-y-auto p-2 space-y-1" id="agent-ops-log">
+<!-- Log Item -->
+<div class="bg-surface/80 p-2 rounded border border-outline-variant hover:border-border-control cursor-pointer group transition-colors glitch-anim" onclick="toggleRow(this)" style="animation-delay: 0.1s;">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[14px]">psychology</span>
+<span class="font-mono-data text-mono-data text-on-surface">Analyzing Trace</span>
+</div>
+<span class="font-mono-data text-mono-data text-ink-muted">10:42:01</span>
+</div>
+<p class="font-meta text-meta text-ink-secondary mt-1 ml-6">Detected spike in 502 Bad Gateway responses from Auth Service.</p>
+<div class="expandable-row ml-6 mt-2 border-l-2 border-surface-tint pl-3">
+<pre class="font-mono-data text-mono-data text-ink-muted bg-surface-container-lowest/80 p-2 rounded">Decision Context:
+- Trigger: ErrorRate &gt; 5%
+- Confidence Score: 0.92
+- Action: Initiate Auto-Remediation Workflow
+                            </pre>
+</div>
+</div>
+<!-- Log Item -->
+<div class="bg-surface/80 p-2 rounded border border-outline-variant hover:border-border-control cursor-pointer group transition-colors glitch-anim" onclick="toggleRow(this)" style="animation-delay: 0.3s;">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-status-warning-ink text-[14px]">build</span>
+<span class="font-mono-data text-mono-data text-on-surface">Synthesizing Fix</span>
+</div>
+<span class="font-mono-data text-mono-data text-ink-muted">10:42:03</span>
+</div>
+<p class="font-meta text-meta text-ink-secondary mt-1 ml-6">Generating patch for connection pool exhaustion.</p>
+<div class="expandable-row ml-6 mt-2 border-l-2 border-status-warning-ink pl-3">
+<pre class="font-mono-data text-mono-data text-ink-muted bg-surface-container-lowest/80 p-2 rounded">Generated Patch:
+--- a/config/db.yml
++++ b/config/db.yml
+@@ -2,2 +2,2 @@
+- pool: 5
++ pool: 20
+                            </pre>
+</div>
+</div>
+</div>
+</div>
+<!-- Column 2: Live HTTP Stream -->
+<div class="col-span-5 relative flex flex-col h-full overflow-hidden rounded border border-border-low shadow-lg group">
+<div class="absolute inset-0 z-0 opacity-60 mix-blend-screen pointer-events-none">{{DATA:ANIMATION:ANIMATION_1}}</div>
+<div class="absolute inset-0 bg-surface-card/60 backdrop-blur-[2px] z-0"></div>
+<div class="relative z-10 flex flex-col h-full">
+<div class="p-3 border-b border-border-low bg-surface-container-low/80 backdrop-blur flex justify-between items-center shrink-0">
+<h3 class="font-section-header text-section-header text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">swap_vert</span>
+                        Live HTTP Stream
+                    </h3>
+<div class="flex gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-status-good-ink animate-ping shadow-[0_0_5px_rgba(133,224,186,0.8)]"></span>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-0">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-surface-container-lowest/90 backdrop-blur z-10 border-b border-border-low shadow-sm">
+<tr>
+<th class="font-furniture text-furniture text-ink-secondary py-2 px-3 font-normal">Method</th>
+<th class="font-furniture text-furniture text-ink-secondary py-2 px-3 font-normal">Endpoint</th>
+<th class="font-furniture text-furniture text-ink-secondary py-2 px-3 font-normal">Status</th>
+<th class="font-furniture text-furniture text-ink-secondary py-2 px-3 font-normal text-right">Time</th>
+</tr>
+</thead>
+<tbody class="font-mono-data text-mono-data">
+<tr class="border-b border-outline-variant/30 hover:bg-surface-variant/80 cursor-pointer transition-all duration-300 hover:shadow-inner hover:scale-[1.01]" onclick="toggleRow(this)">
+<td class="py-1.5 px-3 text-tertiary">GET</td>
+<td class="py-1.5 px-3 text-on-surface truncate max-w-[150px]">/api/v1/users/me</td>
+<td class="py-1.5 px-3">
+<span class="bg-status-good-bg text-status-good-ink px-1.5 py-0.5 rounded border border-status-good-ink/20">200</span>
+</td>
+<td class="py-1.5 px-3 text-ink-muted text-right">45ms</td>
+</tr>
+<tr class="expandable-row bg-surface-card/90 backdrop-blur">
+<td class="p-0" colspan="4">
+<div class="p-3 border-b border-outline-variant/30 text-ink-secondary">
+<div><span class="text-on-surface">req_id:</span> req_a1b2c3d4</div>
+<div><span class="text-on-surface">user_agent:</span> Mozilla/5.0...</div>
+</div>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/30 hover:bg-surface-variant/80 cursor-pointer transition-all duration-300 hover:shadow-inner hover:scale-[1.01]" onclick="toggleRow(this)">
+<td class="py-1.5 px-3 text-status-warning-ink">POST</td>
+<td class="py-1.5 px-3 text-on-surface truncate max-w-[150px]">/api/v1/checkout</td>
+<td class="py-1.5 px-3">
+<span class="bg-status-warning-bg text-status-warning-ink px-1.5 py-0.5 rounded border border-status-warning-ink/20 pulse-warning">429</span>
+</td>
+<td class="py-1.5 px-3 text-ink-muted text-right">120ms</td>
+</tr>
+<tr class="expandable-row bg-surface-card/90 backdrop-blur">
+<td class="p-0" colspan="4">
+<div class="p-3 border-b border-outline-variant/30 text-ink-secondary">
+<div class="text-status-warning-ink">Rate limit exceeded. Initiating backoff strategy.</div>
+</div>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/30 hover:bg-surface-variant/80 cursor-pointer transition-all duration-300 hover:shadow-inner hover:scale-[1.01]">
+<td class="py-1.5 px-3 text-tertiary">GET</td>
+<td class="py-1.5 px-3 text-on-surface truncate max-w-[150px]">/api/v1/products/list</td>
+<td class="py-1.5 px-3">
+<span class="bg-status-good-bg text-status-good-ink px-1.5 py-0.5 rounded border border-status-good-ink/20">200</span>
+</td>
+<td class="py-1.5 px-3 text-ink-muted text-right">22ms</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Column 3: Resource Metrics -->
+<div class="col-span-3 bg-surface-card/90 backdrop-blur border border-border-low rounded flex flex-col h-full overflow-hidden shadow-lg">
+<div class="p-3 border-b border-border-low bg-surface-container-low/80 shrink-0">
+<h3 class="font-section-header text-section-header text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-ink-secondary text-[18px]">memory</span>
+                        Node Health
+                    </h3>
+</div>
+<div class="flex-1 p-3 space-y-4 overflow-y-auto">
+<!-- Agent Alpha -->
+<div class="bg-surface/80 border border-outline-variant p-3 rounded transition-all hover:border-primary/50 hover:shadow-[0_0_15px_rgba(101,234,168,0.1)]">
+<div class="flex justify-between items-center mb-2">
+<span class="font-emphasis text-emphasis text-on-surface">Agent Alpha</span>
+<span class="font-meta text-meta bg-status-good-bg text-status-good-ink px-1.5 py-0.5 rounded border border-status-good-ink/20 shadow-[0_0_5px_rgba(133,224,186,0.2)]">ONLINE</span>
+</div>
+<div class="space-y-3">
+<div>
+<div class="flex justify-between font-mono-data text-mono-data mb-1">
+<span class="text-ink-secondary">CPU</span>
+<span class="text-on-surface">42%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
+<div class="bg-tertiary h-full w-[42%] shadow-[0_0_5px_#5feba7]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between font-mono-data text-mono-data mb-1">
+<span class="text-ink-secondary">MEM</span>
+<span class="text-on-surface">2.4GB</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
+<div class="bg-primary h-full w-[65%] shadow-[0_0_5px_#65eaa8]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Agent Beta -->
+<div class="bg-surface/80 border border-outline-variant p-3 rounded transition-all hover:border-status-warning-ink/50 hover:shadow-[0_0_15px_rgba(242,175,72,0.1)]">
+<div class="flex justify-between items-center mb-2">
+<span class="font-emphasis text-emphasis text-on-surface">Agent Beta</span>
+<span class="font-meta text-meta bg-status-warning-bg text-status-warning-ink px-1.5 py-0.5 rounded border border-status-warning-ink/20 shadow-[0_0_5px_rgba(242,175,72,0.2)]">SCALING</span>
+</div>
+<div class="space-y-3">
+<div>
+<div class="flex justify-between font-mono-data text-mono-data mb-1">
+<span class="text-ink-secondary">CPU</span>
+<span class="text-status-warning-ink">88%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
+<div class="bg-status-warning-ink h-full w-[88%] pulse-warning shadow-[0_0_5px_#f2af48]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between font-mono-data text-mono-data mb-1">
+<span class="text-ink-secondary">MEM</span>
+<span class="text-on-surface">3.8GB</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
+<div class="bg-primary h-full w-[85%] shadow-[0_0_5px_#65eaa8]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        function toggleRow(element) {
+            const nextRow = element.nextElementSibling;
+            if (nextRow && nextRow.classList.contains('expandable-row')) {
+                const isExpanded = nextRow.classList.contains('expanded');
+                
+                // Close all other expandable rows if it's a table row
+                if (element.tagName === 'TR') {
+                     const allRows = element.closest('tbody').querySelectorAll('.expandable-row.expanded');
+                     allRows.forEach(row => {
+                         if (row !== nextRow) {
+                             row.classList.remove('expanded');
+                             row.previousElementSibling.classList.remove('bg-surface-variant/80');
+                         }
+                     });
+                }
+                
+                nextRow.classList.toggle('expanded');
+                
+                if (nextRow.classList.contains('expanded')) {
+                    element.classList.add('bg-surface-variant/80');
+                } else {
+                    element.classList.remove('bg-surface-variant/80');
+                }
+            } else {
+                // Handle the agent ops div structure
+                const expandable = element.querySelector('.expandable-row');
+                if (expandable) {
+                    expandable.classList.toggle('expanded');
+                }
+            }
+        }
+        
+        // Add random delays to glitch animations
+        document.addEventListener('DOMContentLoaded', () => {
+            const glitchEls = document.querySelectorAll('.glitch-anim');
+            glitchEls.forEach((el, index) => {
+                el.style.animationDelay = `${index * 0.15 + 0.1}s`;
+            });
+        });
+    </script>
+</body></html>

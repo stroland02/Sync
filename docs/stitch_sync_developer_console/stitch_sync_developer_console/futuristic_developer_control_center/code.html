@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync Platform - Developer Superpowers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&amp;family=Manrope:wght@600&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#454746",
+                        "surface-container": "#1f201f",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "status-critical-ink": "#fa8880",
+                        "secondary": "#c6c7c5",
+                        "surface-tint": "#59de9d",
+                        "outline-variant": "#3d4a41",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "status-good-bg": "#00311d",
+                        "tertiary-container": "#3dce8d",
+                        "tertiary": "#5feba7",
+                        "status-warning-ink": "#f2af48",
+                        "surface-popover": "#1b1d1c",
+                        "on-error": "#690005",
+                        "outline": "#86948a",
+                        "on-tertiary-fixed": "#002112",
+                        "surface-variant": "#343534",
+                        "inverse-on-surface": "#30312f",
+                        "surface-container-highest": "#343534",
+                        "on-primary": "#003822",
+                        "on-tertiary": "#003822",
+                        "on-primary-container": "#005333",
+                        "status-warning-bg": "#4a2900",
+                        "tertiary-fixed": "#71fcb6",
+                        "surface": "#131413",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "inverse-primary": "#006c45",
+                        "ink-muted": "#bcbdbc",
+                        "on-surface": "#e4e2e0",
+                        "primary-container": "#45cd8e",
+                        "on-background": "#e4e2e0",
+                        "surface-dim": "#131413",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "status-serious-bg": "#391a0b",
+                        "on-tertiary-container": "#005333",
+                        "on-secondary-container": "#b5b5b3",
+                        "primary-fixed-dim": "#59de9d",
+                        "status-good-ink": "#85e0ba",
+                        "on-secondary": "#2f3130",
+                        "surface-container-low": "#1b1c1b",
+                        "on-primary-fixed": "#002112",
+                        "background": "#131413",
+                        "secondary-fixed": "#e2e3e0",
+                        "surface-card": "#181a19",
+                        "status-critical-bg": "#541c15",
+                        "status-serious-ink": "#fd9565",
+                        "surface-bright": "#393938",
+                        "border-control": "#787a79",
+                        "on-primary-fixed-variant": "#005233",
+                        "ink-secondary": "#989a99",
+                        "ink-primary": "#edefee",
+                        "surface-container-lowest": "#0d0e0d",
+                        "on-surface-variant": "#bccabe",
+                        "error-container": "#93000a",
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed-variant": "#454746",
+                        "surface-container-high": "#292a29",
+                        "primary": "#65eaa8",
+                        "primary-fixed": "#77fbb8",
+                        "inverse-surface": "#e4e2e0",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "topbar-height": "48px",
+                        "sidebar-expanded": "240px",
+                        "panel-gap": "32px",
+                        "page-frame": "40px",
+                        "grid-unit": "4px",
+                        "row-padding": "8px",
+                        "sidebar-collapsed": "48px",
+                        "field-gap": "4px"
+                    },
+                    "fontFamily": {
+                        "mono-data": ["ui-monospace", "monospace"],
+                        "body": ["Inter"],
+                        "figure": ["Inter"],
+                        "meta": ["Inter"],
+                        "furniture": ["Inter"],
+                        "emphasis": ["Inter"],
+                        "section-header": ["Manrope"],
+                        "display": ["Manrope"],
+                        "page-header": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }],
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #131413; color: #e4e2e0; }
+        .holographic-border {
+            position: relative;
+        }
+        .holographic-border::before {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(45deg, #45cd8e33, transparent, #45cd8e33);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+        .glow-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 15px #45cd8e66; }
+            50% { opacity: .7; box-shadow: 0 0 5px #45cd8e33; }
+        }
+        .glass-card { background: rgba(24, 26, 25, 0.7); backdrop-filter: blur(12px); border: 1px solid var(--border-low); }
+
+        /* CRT Overlay & Background Grid */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: 
+                linear-gradient(to right, rgba(69, 205, 142, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(69, 205, 142, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: grid-move 20s linear infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+        @keyframes grid-move {
+            0% { background-position: 0 0; }
+            100% { background-position: 40px 40px; }
+        }
+
+        /* Holographic Ring */
+        .holo-ring-container {
+            position: relative;
+            width: 48px; height: 48px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .holo-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            background: linear-gradient(45deg, #45cd8e, transparent) border-box;
+            -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: breathe-ring 3s ease-in-out infinite alternate;
+        }
+        @keyframes breathe-ring {
+            0% { transform: scale(0.9); box-shadow: 0 0 10px #45cd8e33, inset 0 0 10px #45cd8e33; }
+            100% { transform: scale(1.1); box-shadow: 0 0 30px #45cd8e99, inset 0 0 20px #45cd8e66; }
+        }
+
+        /* Border Flow */
+        .border-flow-card {
+            position: relative;
+        }
+        .border-flow-card::after {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(90deg, transparent, #45cd8e, transparent);
+            background-size: 200% 100%;
+            animation: flow 2s linear infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        .border-flow-card:hover::after {
+            opacity: 1;
+        }
+        @keyframes flow {
+            0% { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+
+        /* Mechanical Press */
+        .mech-btn {
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.1s;
+            transform-style: preserve-3d;
+        }
+        .mech-btn:active {
+            transform: translateY(4px) scale(0.98);
+            box-shadow: 0 0 15px rgba(101, 234, 168, 0.5); /* var(--primary) */
+        }
+        .mech-btn:active .material-symbols-outlined {
+            animation: active-pulse 0.5s infinite;
+        }
+        @keyframes active-pulse {
+            0%, 100% { opacity: 1; text-shadow: 0 0 10px currentColor; }
+            50% { opacity: 0.5; text-shadow: none; }
+        }
+
+        /* Audit Log Slide In */
+        .stagger-row {
+            animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        @keyframes slide-up {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stagger-row:nth-child(1) { animation-delay: 0.1s; }
+        .stagger-row:nth-child(2) { animation-delay: 0.2s; }
+        .stagger-row:nth-child(3) { animation-delay: 0.3s; }
+        .stagger-row:nth-child(4) { animation-delay: 0.4s; }
+    </style>
+</head>
+<body class="font-body text-body bg-background text-on-background flex h-screen overflow-hidden">
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full z-40 overflow-y-auto flex flex-col bg-background text-primary font-furniture text-furniture docked left-0 h-screen w-sidebar-expanded bg-surface-container-low border-r border-outline-variant hidden md:flex">
+<div class="p-page-frame border-b border-outline-variant flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined font-variation-settings-'FILL' 1" data-icon="sync">sync</span>
+</div>
+<div>
+<div class="font-display text-page-header font-bold text-primary">Sync</div>
+<div class="text-ink-secondary text-meta">API Automation</div>
+</div>
+</div>
+<div class="flex-1 py-4 px-2 space-y-1 relative z-10">
+<a class="flex items-center gap-3 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="api">api</span>
+                Integrations
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="healing">healing</span>
+                Self-Healing Queue
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                Telemetry/Traces
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="vpn_key">vpn_key</span>
+                API Keys
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</div>
+</nav>
+<!-- Main Content Chassis -->
+<div class="flex-1 flex flex-col md:ml-[240px] h-screen overflow-hidden relative z-10">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-0 z-30 flex items-center justify-between px-page-frame bg-background text-primary font-furniture text-furniture docked full-width top-0 h-topbar-height bg-surface-container border-b border-outline-variant md:left-[240px]">
+<div class="flex items-center gap-6">
+<div class="font-display text-section-header font-bold text-primary md:hidden">Sync</div>
+<div class="flex items-center gap-2 bg-surface-card border border-control rounded px-3 py-1.5 focus-within:border-primary transition-colors">
+<span class="material-symbols-outlined text-ink-secondary" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body p-0 w-64 text-on-surface placeholder:text-ink-secondary" placeholder="Search commands, logs..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden lg:flex items-center gap-4 h-full">
+<a class="h-topbar-height flex items-center px-2 text-primary font-emphasis border-b-2 border-primary active:translate-y-[1px] transition-all duration-0" href="#">Production</a>
+<a class="h-topbar-height flex items-center px-2 text-ink-secondary font-furniture hover:text-on-surface transition-colors active:translate-y-[1px] transition-all duration-0" href="#">Staging</a>
+</nav>
+<div class="flex items-center gap-3">
+<button class="text-ink-secondary hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-ink-secondary hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<button class="bg-primary text-on-primary px-4 py-1.5 rounded-DEFAULT font-furniture hover:bg-primary-fixed transition-colors active:translate-y-[1px]">Deploy Agent</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant cursor-pointer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAcpRcXCdQZ-eXKo2pC6320tkbEbPHFUA848LolZt7dJCHr7K_zQYeq2cX08P_nCuFkU0-B_W1dfJlooc46DHctm1jV8UxpBCWKdrEa3P6bqJzJ-y-DxpM1vQ5bYF5xhoekUsyS4A_6Ung_t-t3M_-2_Ow5DYAq22gFeLYnw3YZ6bDXwF54nqqVb7y3HUlQFw2XqP-6obQnTbS5YO378L0Ow_wtSOTTcflYmJuvKXUSbZF5YleJsd4z"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 overflow-y-auto mt-topbar-height p-page-frame">
+<div class="max-w-7xl mx-auto space-y-6">
+<!-- Header -->
+<div class="flex items-end justify-between border-b border-outline-variant pb-4">
+<div>
+<h1 class="font-display text-display text-on-surface">Developer Superpowers</h1>
+<p class="font-body text-ink-secondary mt-2">Integration Command Center &amp; Global Telemetry</p>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-6 auto-rows-[minmax(180px,auto)]">
+<!-- Agent Status Center (Hero Widget) -->
+<div class="col-span-12 lg:col-span-8 glass-card rounded-xl p-6 holographic-border flex flex-col justify-between relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container/10 to-transparent opacity-50"></div>
+<div class="relative z-10 flex justify-between items-start">
+<div>
+<div class="flex items-center gap-4 mb-2">
+<div class="holo-ring-container">
+<div class="holo-ring"></div>
+<span class="material-symbols-outlined text-primary relative z-10 text-[28px]" data-icon="cell_tower">cell_tower</span>
+</div>
+<h2 class="font-section-header text-section-header text-on-surface">
+                                        Global Sync Status
+                                    </h2>
+</div>
+<p class="font-meta text-ink-secondary mt-1">Real-time agent telemetry stream active.</p>
+</div>
+<div class="flex items-center gap-2 bg-status-good-bg text-status-good-ink px-3 py-1 rounded-full border border-status-good-ink/20 font-furniture">
+<span class="material-symbols-outlined text-[16px]" data-icon="check_circle">check_circle</span>
+                                ACTIVE
+                            </div>
+</div>
+<div class="relative z-10 mt-8 grid grid-cols-3 gap-4">
+<div class="bg-surface-dim rounded-lg p-4 border border-outline-variant/50">
+<div class="font-meta text-ink-secondary mb-1">Processed Events</div>
+<div class="font-figure text-figure text-on-surface">14.2M</div>
+</div>
+<div class="bg-surface-dim rounded-lg p-4 border border-outline-variant/50">
+<div class="font-meta text-ink-secondary mb-1">Healing Actions</div>
+<div class="font-figure text-figure text-primary">843</div>
+</div>
+<div class="bg-surface-dim rounded-lg p-4 border border-outline-variant/50">
+<div class="font-meta text-ink-secondary mb-1">Latency (p99)</div>
+<div class="font-figure text-figure text-on-surface">12ms</div>
+</div>
+</div>
+</div>
+<!-- Quick Action Command Center -->
+<div class="col-span-12 lg:col-span-4 bg-surface-card border border-outline-variant rounded-xl p-6 flex flex-col">
+<h2 class="font-section-header text-section-header text-on-surface mb-4">Command Center</h2>
+<div class="space-y-3 flex-1 flex flex-col justify-center">
+<button class="mech-btn w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high border border-outline-variant hover:border-primary hover:bg-surface-variant transition-all group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary group-hover:glow-pulse" data-icon="bolt">bolt</span>
+<span class="font-emphasis text-emphasis text-on-surface">Force Sync</span>
+</div>
+<span class="material-symbols-outlined text-ink-secondary text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<button class="mech-btn w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high border border-outline-variant hover:border-primary hover:bg-surface-variant transition-all group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary group-hover:glow-pulse" data-icon="account_tree">account_tree</span>
+<span class="font-emphasis text-emphasis text-on-surface">Index Repo</span>
+</div>
+<span class="material-symbols-outlined text-ink-secondary text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<button class="mech-btn w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high border border-status-warning-ink/30 hover:border-status-warning-ink hover:bg-status-warning-bg/20 transition-all group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-status-warning-ink" data-icon="delete_sweep">delete_sweep</span>
+<span class="font-emphasis text-emphasis text-on-surface">Flush Local Demo</span>
+</div>
+<span class="material-symbols-outlined text-ink-secondary text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Smart Integration Discovery -->
+<div class="col-span-12 bg-surface-card border border-outline-variant rounded-xl p-6">
+<div class="flex justify-between items-end mb-6 border-b border-outline-variant pb-2">
+<h2 class="font-section-header text-section-header text-on-surface">Smart Integration Discovery</h2>
+<span class="font-meta text-ink-secondary">Auto-detected via tree-sitter analysis</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Integration Card 1 -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-4 hover:border-primary/50 transition-colors border-flow-card">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 rounded bg-[#E4405F]/10 border border-[#E4405F]/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#E4405F]" data-icon="webhook">webhook</span>
+</div>
+<span class="bg-status-good-bg text-status-good-ink px-2 py-0.5 rounded text-[10px] font-mono-data border border-status-good-ink/20">HOOKED</span>
+</div>
+<h3 class="font-emphasis text-emphasis text-on-surface">Stripe Webhooks</h3>
+<div class="font-mono-data text-mono-data text-ink-secondary mt-1 line-clamp-1 text-ellipsis">src/api/billing/hooks.ts</div>
+</div>
+<!-- Integration Card 2 -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-4 hover:border-primary/50 transition-colors border-flow-card">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 rounded bg-[#FF9900]/10 border border-[#FF9900]/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#FF9900]" data-icon="storage">storage</span>
+</div>
+<span class="bg-status-good-bg text-status-good-ink px-2 py-0.5 rounded text-[10px] font-mono-data border border-status-good-ink/20">HOOKED</span>
+</div>
+<h3 class="font-emphasis text-emphasis text-on-surface">AWS S3 Client</h3>
+<div class="font-mono-data text-mono-data text-ink-secondary mt-1 line-clamp-1 text-ellipsis">pkg/storage/s3_service.go</div>
+</div>
+<!-- Integration Card 3 -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-4 hover:border-primary/50 transition-colors border-flow-card">
+<div class="flex justify-between items-start mb-3">
+<div class="w-10 h-10 rounded bg-[#0081CB]/10 border border-[#0081CB]/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0081CB]" data-icon="database">database</span>
+</div>
+<span class="bg-status-warning-bg text-status-warning-ink px-2 py-0.5 rounded text-[10px] font-mono-data border border-status-warning-ink/20">PENDING</span>
+</div>
+<h3 class="font-emphasis text-emphasis text-on-surface">PostgreSQL Data</h3>
+<div class="font-mono-data text-mono-data text-ink-secondary mt-1 line-clamp-1 text-ellipsis">config/database.yml</div>
+</div>
+<!-- Integration Card 4 -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-4 border-dashed bg-transparent hover:bg-surface-container-low transition-colors cursor-pointer flex flex-col items-center justify-center text-center border-flow-card">
+<span class="material-symbols-outlined text-ink-secondary mb-2" data-icon="add_circle">add_circle</span>
+<span class="font-furniture text-furniture text-ink-secondary">Manually Add Integration</span>
+</div>
+</div>
+</div>
+<!-- Four Bands Structure (Logs, PRs, Health) -->
+<div class="col-span-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- High Density Audit Log -->
+<div class="bg-surface-card border border-outline-variant rounded-xl flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low">
+<h3 class="font-section-header text-section-header text-on-surface text-sm">System Audit Log</h3>
+</div>
+<div class="flex-1 overflow-y-auto p-2 bg-surface">
+<table class="w-full text-left">
+<tbody>
+<tr class="hover:bg-surface-container-high group transition-colors stagger-row">
+<td class="p-1 font-mono-data text-ink-secondary w-16 text-[10px]">10:42:01</td>
+<td class="p-1"><span class="bg-primary-container/20 text-primary px-1 rounded text-[10px] font-mono-data">AUTH</span></td>
+<td class="p-1 font-mono-data text-on-surface truncate max-w-[150px]">JWT key rotated manually by admin</td>
+</tr>
+<tr class="hover:bg-surface-container-high group transition-colors stagger-row">
+<td class="p-1 font-mono-data text-ink-secondary w-16 text-[10px]">10:39:15</td>
+<td class="p-1"><span class="bg-status-critical-bg text-status-critical-ink px-1 rounded text-[10px] font-mono-data">ERR</span></td>
+<td class="p-1 font-mono-data text-on-surface truncate max-w-[150px]">Rate limit exceeded on Stripe API</td>
+</tr>
+<tr class="hover:bg-surface-container-high group transition-colors stagger-row">
+<td class="p-1 font-mono-data text-ink-secondary w-16 text-[10px]">10:39:16</td>
+<td class="p-1"><span class="bg-tertiary-container/20 text-tertiary px-1 rounded text-[10px] font-mono-data">HEAL</span></td>
+<td class="p-1 font-mono-data text-on-surface truncate max-w-[150px]">Exponential backoff applied to queue</td>
+</tr>
+<tr class="hover:bg-surface-container-high group transition-colors stagger-row">
+<td class="p-1 font-mono-data text-ink-secondary w-16 text-[10px]">10:15:00</td>
+<td class="p-1"><span class="bg-surface-variant text-ink-secondary px-1 rounded text-[10px] font-mono-data">SYS</span></td>
+<td class="p-1 font-mono-data text-on-surface truncate max-w-[150px]">Routine health check completed</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Recent Automation PRs -->
+<div class="bg-surface-card border border-outline-variant rounded-xl flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
+<h3 class="font-section-header text-section-header text-on-surface text-sm">Remediation PRs</h3>
+<span class="material-symbols-outlined text-ink-secondary text-[16px]" data-icon="call_split">call_split</span>
+</div>
+<div class="flex-1 p-2 space-y-1">
+<a class="block p-2 rounded hover:bg-surface-container-high transition-colors border border-transparent hover:border-outline-variant" href="#">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-status-warning-ink text-[14px]" data-icon="merge_type">merge_type</span>
+<span class="font-emphasis text-emphasis text-on-surface text-sm">Bump axios from 0.21.1 to 0.21.4</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-meta text-ink-secondary text-[10px]">#1042 • sync-bot</span>
+<span class="text-[10px] text-ink-secondary">2m ago</span>
+</div>
+</a>
+<a class="block p-2 rounded hover:bg-surface-container-high transition-colors border border-transparent hover:border-outline-variant" href="#">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-[14px]" data-icon="check_circle">check_circle</span>
+<span class="font-emphasis text-emphasis text-on-surface text-sm">Fix deprecated Stripe webhook signature</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-meta text-ink-secondary text-[10px]">#1041 • sync-bot</span>
+<span class="text-[10px] text-ink-secondary">1h ago</span>
+</div>
+</a>
+</div>
+</div>
+<!-- Mini Health Stats -->
+<div class="bg-surface-card border border-outline-variant rounded-xl flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low">
+<h3 class="font-section-header text-section-header text-on-surface text-sm">Resource Telemetry</h3>
+</div>
+<div class="flex-1 p-4 flex flex-col justify-center space-y-4">
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="font-meta text-ink-secondary">Agent CPU Load</span>
+<span class="font-mono-data text-on-surface">24%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[24%] rounded-full"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="font-meta text-ink-secondary">Memory Heap</span>
+<span class="font-mono-data text-status-warning-ink">78%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-status-warning-ink w-[78%] rounded-full"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="font-meta text-ink-secondary">Network I/O</span>
+<span class="font-mono-data text-on-surface">12 MB/s</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[45%] rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - Self-Healing Queue</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Manrope:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "status-good-ink": "#85e0ba",
+                    "tertiary": "#5feba7",
+                    "on-background": "#e4e2e0",
+                    "surface-container-low": "#1b1c1b",
+                    "error": "#ffb4ab",
+                    "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                    "on-error": "#690005",
+                    "surface-dim": "#131413",
+                    "inverse-surface": "#e4e2e0",
+                    "on-surface": "#e4e2e0",
+                    "status-critical-ink": "#fa8880",
+                    "primary-fixed": "#77fbb8",
+                    "secondary-container": "#454746",
+                    "on-tertiary-fixed-variant": "#005233",
+                    "ink-primary": "#edefee",
+                    "primary-fixed-dim": "#59de9d",
+                    "primary-container": "#45cd8e",
+                    "surface-container-lowest": "#0d0e0d",
+                    "surface": "#131413",
+                    "status-critical-bg": "#541c15",
+                    "outline-variant": "#3d4a41",
+                    "surface-tint": "#59de9d",
+                    "on-secondary-fixed": "#1a1c1b",
+                    "secondary": "#c6c7c5",
+                    "surface-container-highest": "#343534",
+                    "status-serious-bg": "#391a0b",
+                    "on-primary": "#003822",
+                    "ink-secondary": "#989a99",
+                    "status-serious-ink": "#fd9565",
+                    "on-error-container": "#ffdad6",
+                    "secondary-fixed-dim": "#c6c7c5",
+                    "inverse-primary": "#006c45",
+                    "on-secondary": "#2f3130",
+                    "on-tertiary-fixed": "#002112",
+                    "background": "#131413",
+                    "tertiary-fixed": "#71fcb6",
+                    "on-primary-container": "#005333",
+                    "border-control": "#787a79",
+                    "status-warning-ink": "#f2af48",
+                    "outline": "#86948a",
+                    "status-good-bg": "#00311d",
+                    "on-primary-fixed": "#002112",
+                    "surface-card": "#181a19",
+                    "surface-container-high": "#292a29",
+                    "tertiary-container": "#3dce8d",
+                    "tertiary-fixed-dim": "#51df9c",
+                    "surface-variant": "#343534",
+                    "on-secondary-fixed-variant": "#454746",
+                    "secondary-fixed": "#e2e3e0",
+                    "inverse-on-surface": "#30312f",
+                    "on-tertiary": "#003822",
+                    "error-container": "#93000a",
+                    "ink-muted": "#bcbdbc",
+                    "on-secondary-container": "#b5b5b3",
+                    "primary": "#65eaa8",
+                    "on-primary-fixed-variant": "#005233",
+                    "surface-container": "#1f201f",
+                    "surface-popover": "#1b1d1c",
+                    "on-tertiary-container": "#005333",
+                    "on-surface-variant": "#bccabe",
+                    "status-warning-bg": "#4a2900",
+                    "surface-bright": "#393938"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "sidebar-expanded": "240px",
+                    "panel-gap": "32px",
+                    "row-padding": "8px",
+                    "page-frame": "40px",
+                    "topbar-height": "48px",
+                    "field-gap": "4px",
+                    "sidebar-collapsed": "48px",
+                    "grid-unit": "4px"
+            },
+            "fontFamily": {
+                    "emphasis": ["Inter"],
+                    "furniture": ["Inter"],
+                    "figure": ["Inter"],
+                    "meta": ["Inter"],
+                    "body": ["Inter"],
+                    "section-header": ["Manrope"],
+                    "page-header": ["Manrope"],
+                    "mono-data": ["\"ui-monospace, monospace\""],
+                    "display": ["Manrope"]
+            },
+            "fontSize": {
+                    "emphasis": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "furniture": ["12px", {"lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500"}],
+                    "figure": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600"}],
+                    "meta": ["12px", {"lineHeight": "16px", "fontWeight": "450"}],
+                    "body": ["13px", {"lineHeight": "20px", "fontWeight": "450"}],
+                    "section-header": ["18px", {"lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "page-header": ["22px", {"lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600"}],
+                    "mono-data": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                    "display": ["46px", {"lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body text-body antialiased selection:bg-primary-container selection:text-on-primary-container min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-sidebar-expanded z-30 flex items-center justify-between px-page-frame h-topbar-height bg-background bg-surface-container border-b border-outline-variant flat no shadows pl-8">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 bg-surface-dim px-3 py-1.5 rounded border border-border-control">
+<span class="material-symbols-outlined text-[16px] text-ink-secondary" data-icon="search">search</span>
+<input class="bg-transparent border-none p-0 text-furniture font-furniture text-on-surface focus:ring-0 placeholder:text-ink-secondary w-64 h-full outline-none" placeholder="Search queue..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<nav class="flex items-center gap-4">
+<a class="text-ink-secondary font-furniture hover:text-on-surface transition-colors" href="#">Production</a>
+<a class="text-ink-secondary font-furniture hover:text-on-surface transition-colors" href="#">Staging</a>
+</nav>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-[20px] text-ink-secondary hover:text-on-surface transition-colors duration-0 active:translate-y-[1px]" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined text-[20px] text-ink-secondary hover:text-on-surface transition-colors duration-0 active:translate-y-[1px]" data-icon="help_outline">help_outline</button>
+<button class="h-[32px] px-4 bg-primary text-on-primary font-emphasis text-emphasis rounded hover:bg-primary-fixed-dim transition-colors duration-0 active:translate-y-[1px]">Deploy Agent</button>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full z-40 overflow-y-auto flex flex-col bg-background bg-surface-container-low border-r border-outline-variant w-sidebar-expanded flat no shadows">
+<div class="p-4 flex items-center gap-3 mb-4 mt-2">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center border border-primary-fixed-dim shrink-0">
+<span class="material-symbols-outlined text-[18px] text-on-primary-container font-bold" data-icon="sync">sync</span>
+</div>
+<div>
+<h1 class="font-display text-section-header font-bold text-primary leading-none">Sync</h1>
+<p class="font-meta text-meta text-ink-secondary mt-0.5">API Automation</p>
+</div>
+</div>
+<div class="flex flex-col gap-1 px-3">
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg font-furniture text-furniture" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg font-furniture text-furniture" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="api">api</span>
+                Integrations
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg font-furniture text-furniture active:translate-y-[1px] transition-all duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="healing">healing</span>
+                Self-Healing Queue
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg font-furniture text-furniture" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="analytics">analytics</span>
+                Telemetry/Traces
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg font-furniture text-furniture" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="vpn_key">vpn_key</span>
+                API Keys
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg font-furniture text-furniture mt-auto mb-4" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+                Settings
+            </a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-sidebar-expanded pt-topbar-height p-page-frame min-h-screen">
+<div class="flex items-end justify-between mb-8">
+<div>
+<h2 class="font-page-header text-page-header text-on-surface">Remediation Queue</h2>
+<p class="font-meta text-meta text-ink-secondary mt-1">Live backlog of detected API breaking changes and autonomous fixes.</p>
+</div>
+<div class="flex gap-4">
+<div class="bg-surface-card border border-border-low rounded px-4 py-2 flex flex-col min-w-[120px]">
+<span class="font-furniture text-furniture text-ink-secondary uppercase tracking-widest text-[10px]">Critical</span>
+<span class="font-figure text-figure text-status-critical-ink">14</span>
+</div>
+<div class="bg-surface-card border border-border-low rounded px-4 py-2 flex flex-col min-w-[120px]">
+<span class="font-furniture text-furniture text-ink-secondary uppercase tracking-widest text-[10px]">Healing</span>
+<span class="font-figure text-figure text-status-warning-ink">08</span>
+</div>
+</div>
+</div>
+<!-- High Density Data Table -->
+<div class="bg-surface-card border border-border-low rounded-lg overflow-hidden relative shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+<div class="overflow-x-auto bg-surface-dim">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-border-low bg-surface-container h-[36px]">
+<th class="px-4 py-row-padding font-furniture text-furniture text-ink-secondary font-normal w-[120px]">Incident ID</th>
+<th class="px-4 py-row-padding font-furniture text-furniture text-ink-secondary font-normal">Impacted Integration</th>
+<th class="px-4 py-row-padding font-furniture text-furniture text-ink-secondary font-normal w-[160px]">Severity</th>
+<th class="px-4 py-row-padding font-furniture text-furniture text-ink-secondary font-normal w-[200px]">Agent Status</th>
+<th class="px-4 py-row-padding font-furniture text-furniture text-ink-secondary font-normal w-[140px] text-right">Action</th>
+</tr>
+</thead>
+<tbody class="font-mono-data text-mono-data">
+<tr class="border-b border-border-low/50 hover:bg-surface-variant transition-colors duration-0 h-[44px] group">
+<td class="px-4 py-row-padding text-ink-primary align-middle">INC-9942</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-on-surface">Stripe Billing API</span>
+<span class="text-ink-secondary text-[10px] bg-surface-container px-1.5 py-0.5 rounded border border-outline-variant">v2023-10-16</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-status-critical-bg border border-status-critical-ink/20">
+<span class="material-symbols-outlined text-[14px] text-status-critical-ink" data-icon="warning">warning</span>
+<span class="font-furniture text-[11px] text-status-critical-ink font-medium leading-none">Serious</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-status-warning-bg/50 border border-status-warning-ink/30">
+<span class="material-symbols-outlined text-[14px] text-status-warning-ink animate-spin" data-icon="autorenew">autorenew</span>
+<span class="font-furniture text-[11px] text-status-warning-ink font-medium leading-none">Proposing Fix</span>
+</div>
+</td>
+<td class="px-4 py-row-padding text-right align-middle">
+<button class="h-[28px] px-3 bg-surface-container border border-border-control rounded text-on-surface font-furniture text-[11px] hover:bg-surface-container-high hover:border-outline-variant active:translate-y-[1px] duration-0 transition-all">Inspect</button>
+</td>
+</tr>
+<tr class="border-b border-border-low/50 hover:bg-surface-variant transition-colors duration-0 h-[44px] group">
+<td class="px-4 py-row-padding text-ink-primary align-middle">INC-9941</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-on-surface">Twilio SMS Webhook</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-status-warning-bg border border-status-warning-ink/20">
+<span class="material-symbols-outlined text-[14px] text-status-warning-ink" data-icon="info">info</span>
+<span class="font-furniture text-[11px] text-status-warning-ink font-medium leading-none">Warning</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-status-warning-bg/50 border border-status-warning-ink/30">
+<span class="material-symbols-outlined text-[14px] text-status-warning-ink animate-pulse" data-icon="science">science</span>
+<span class="font-furniture text-[11px] text-status-warning-ink font-medium leading-none">Testing Sandbox</span>
+</div>
+</td>
+<td class="px-4 py-row-padding text-right align-middle">
+<button class="h-[28px] px-3 bg-surface-container border border-border-control rounded text-on-surface font-furniture text-[11px] hover:bg-surface-container-high hover:border-outline-variant active:translate-y-[1px] duration-0 transition-all">Inspect</button>
+</td>
+</tr>
+<tr class="border-b border-border-low/50 hover:bg-surface-variant transition-colors duration-0 h-[44px] group">
+<td class="px-4 py-row-padding text-ink-primary align-middle">INC-9938</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-on-surface">Salesforce Graph API</span>
+<span class="text-ink-secondary text-[10px] bg-surface-container px-1.5 py-0.5 rounded border border-outline-variant">v59.0</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-status-critical-bg border border-status-critical-ink/20">
+<span class="material-symbols-outlined text-[14px] text-status-critical-ink" data-icon="error">error</span>
+<span class="font-furniture text-[11px] text-status-critical-ink font-medium leading-none">Critical</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-status-critical-bg/50 border border-status-critical-ink/30">
+<span class="material-symbols-outlined text-[14px] text-status-critical-ink" data-icon="troubleshoot">troubleshoot</span>
+<span class="font-furniture text-[11px] text-status-critical-ink font-medium leading-none">Analyzing Traces</span>
+</div>
+</td>
+<td class="px-4 py-row-padding text-right align-middle">
+<button class="h-[28px] px-3 bg-surface-container border border-border-control rounded text-on-surface font-furniture text-[11px] hover:bg-surface-container-high hover:border-outline-variant active:translate-y-[1px] duration-0 transition-all">Inspect</button>
+</td>
+</tr>
+<tr class="border-b border-border-low/50 hover:bg-surface-variant transition-colors duration-0 h-[44px] group opacity-75">
+<td class="px-4 py-row-padding text-ink-primary align-middle">INC-9935</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-ink-secondary line-through decoration-ink-muted">SendGrid Mail Send</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container border border-outline-variant">
+<span class="font-furniture text-[11px] text-ink-secondary font-medium leading-none">Resolved</span>
+</div>
+</td>
+<td class="px-4 py-row-padding align-middle">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-status-good-bg/40 border border-status-good-ink/20">
+<span class="material-symbols-outlined text-[14px] text-status-good-ink" data-icon="check_circle">check_circle</span>
+<span class="font-furniture text-[11px] text-status-good-ink font-medium leading-none">Deployed Fix</span>
+</div>
+</td>
+<td class="px-4 py-row-padding text-right align-middle">
+<button class="h-[28px] px-3 bg-transparent border border-transparent rounded text-ink-secondary font-furniture text-[11px] hover:text-on-surface active:translate-y-[1px] duration-0 transition-all">View Log</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-4 py-3 bg-surface-container border-t border-border-low flex items-center justify-between font-meta text-meta text-ink-secondary">
+<span>Showing 4 of 24 active remediation jobs</span>
+<div class="flex items-center gap-2">
+<button class="material-symbols-outlined text-[18px] hover:text-on-surface cursor-pointer" data-icon="chevron_left">chevron_left</button>
+<span>1 / 6</span>
+<button class="material-symbols-outlined text-[18px] hover:text-on-surface cursor-pointer" data-icon="chevron_right">chevron_right</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

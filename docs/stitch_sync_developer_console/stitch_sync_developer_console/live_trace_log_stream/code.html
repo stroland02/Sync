@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Live Trace &amp; Log Stream - Sync</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary": "#5feba7",
+                        "on-secondary-fixed-variant": "#454746",
+                        "on-surface-variant": "#bccabe",
+                        "inverse-on-surface": "#30312f",
+                        "on-primary-container": "#005333",
+                        "on-secondary-container": "#b5b5b3",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "surface-container-low": "#1b1c1b",
+                        "status-serious-bg": "#391a0b",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-lowest": "#0d0e0d",
+                        "error": "#ffb4ab",
+                        "surface-container": "#1f201f",
+                        "secondary": "#c6c7c5",
+                        "primary-fixed-dim": "#59de9d",
+                        "surface-container-high": "#292a29",
+                        "status-warning-ink": "#f2af48",
+                        "ink-muted": "#bcbdbc",
+                        "primary-container": "#45cd8e",
+                        "primary-fixed": "#77fbb8",
+                        "status-good-bg": "#00311d",
+                        "background": "#131413",
+                        "on-surface": "#e4e2e0",
+                        "on-background": "#e4e2e0",
+                        "error-container": "#93000a",
+                        "on-error": "#690005",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                        "outline": "#86948a",
+                        "secondary-container": "#454746",
+                        "on-tertiary-fixed": "#002112",
+                        "surface-dim": "#131413",
+                        "border-control": "#787a79",
+                        "surface-bright": "#393938",
+                        "primary": "#65eaa8",
+                        "secondary-fixed": "#e2e3e0",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "on-primary-fixed": "#002112",
+                        "status-critical-bg": "#541c15",
+                        "on-secondary": "#2f3130",
+                        "status-warning-bg": "#4a2900",
+                        "on-primary-fixed-variant": "#005233",
+                        "surface-popover": "#1b1d1c",
+                        "on-primary": "#003822",
+                        "status-serious-ink": "#fd9565",
+                        "outline-variant": "#3d4a41",
+                        "tertiary-container": "#3dce8d",
+                        "surface-variant": "#343534",
+                        "surface-tint": "#59de9d",
+                        "on-tertiary": "#003822",
+                        "ink-secondary": "#989a99",
+                        "tertiary-fixed": "#71fcb6",
+                        "surface-container-highest": "#343534",
+                        "ink-primary": "#edefee",
+                        "surface": "#131413",
+                        "status-critical-ink": "#fa8880",
+                        "inverse-primary": "#006c45",
+                        "surface-card": "#181a19",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "on-tertiary-container": "#005333",
+                        "inverse-surface": "#e4e2e0",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "status-good-ink": "#85e0ba"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "topbar-height": "48px",
+                        "grid-unit": "4px",
+                        "field-gap": "4px",
+                        "row-padding": "8px",
+                        "page-frame": "40px",
+                        "panel-gap": "32px",
+                        "sidebar-collapsed": "48px",
+                        "sidebar-expanded": "240px"
+                    },
+                    fontFamily: {
+                        "furniture": ["Inter"],
+                        "emphasis": ["Inter"],
+                        "figure": ["Inter"],
+                        "mono-data": ["ui-monospace", "monospace"],
+                        "section-header": ["Manrope"],
+                        "display": ["Manrope"],
+                        "body": ["Inter"],
+                        "meta": ["Inter"],
+                        "page-header": ["Manrope"]
+                    },
+                    fontSize: {
+                        "furniture": ["12px", { lineHeight: "16px", letterSpacing: "0.025em", fontWeight: "500" }],
+                        "emphasis": ["15px", { lineHeight: "24px", letterSpacing: "-0.02em", fontWeight: "600" }],
+                        "figure": ["28px", { lineHeight: "36px", letterSpacing: "-0.04em", fontWeight: "600" }],
+                        "mono-data": ["12px", { lineHeight: "16px", fontWeight: "400" }],
+                        "section-header": ["18px", { lineHeight: "28px", letterSpacing: "-0.02em", fontWeight: "600" }],
+                        "display": ["46px", { lineHeight: "48px", letterSpacing: "-0.045em", fontWeight: "600" }],
+                        "body": ["13px", { lineHeight: "20px", fontWeight: "450" }],
+                        "meta": ["12px", { lineHeight: "16px", fontWeight: "450" }],
+                        "page-header": ["22px", { lineHeight: "32px", letterSpacing: "-0.04em", fontWeight: "600" }]
+                    }
+                }
+            }
+        };
+    </script>
+<style>
+        /* Custom scrollbar for trace logs */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3d4a41; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #787a79; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body h-screen flex overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar Component -->
+<nav class="fixed left-0 top-0 h-full z-40 overflow-y-auto flex flex-col w-sidebar-expanded bg-background border-r border-outline-variant hidden md:flex">
+<div class="px-6 py-8 flex flex-col gap-1 border-b border-outline-variant/30">
+<span class="font-display text-page-header font-bold text-primary">Sync</span>
+<span class="font-furniture text-furniture text-ink-secondary">API Automation</span>
+</div>
+<div class="flex-1 py-6 flex flex-col gap-2 px-3">
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-furniture text-furniture">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="api">api</span>
+<span class="font-furniture text-furniture">Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="healing">healing</span>
+<span class="font-furniture text-furniture">Self-Healing Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg active:translate-y-[1px] duration-0 font-furniture text-furniture" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Telemetry/Traces</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="vpn_key">vpn_key</span>
+<span class="font-furniture text-furniture">API Keys</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-furniture text-furniture">Settings</span>
+</a>
+</div>
+</nav>
+<!-- TopAppBar Component (Mobile / Desktop Shell) -->
+<header class="fixed top-0 right-0 left-0 z-30 flex items-center justify-between px-page-frame bg-background border-b border-outline-variant h-topbar-height md:left-[240px]">
+<div class="flex items-center gap-8">
+<div class="hidden md:flex gap-6 h-full items-center">
+<a class="text-ink-secondary font-furniture h-full flex items-center hover:text-on-surface transition-colors" href="#">Production</a>
+<a class="text-primary font-emphasis border-b-2 border-primary h-full flex items-center active:translate-y-[1px] duration-0" href="#">Staging</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="font-furniture text-furniture bg-primary text-on-primary px-4 py-1.5 rounded active:translate-y-[1px] duration-0 hover:bg-primary-fixed-dim transition-colors">
+                Deploy Agent
+            </button>
+<div class="flex items-center gap-2 text-ink-secondary">
+<button class="hover:text-on-surface transition-colors active:translate-y-[1px] duration-0"><span class="material-symbols-outlined" data-icon="notifications">notifications</span></button>
+<button class="hover:text-on-surface transition-colors active:translate-y-[1px] duration-0"><span class="material-symbols-outlined" data-icon="help_outline">help_outline</span></button>
+</div>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant bg-surface-container" data-alt="A small circular avatar image of a user with a neutral dark background, highly professional and sharp, suitable for a dark mode enterprise application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfWTRGe_s_Z5iGrkZ3ggc2w2Z3kpHJeZsPnhTlazgUN7_F8AXekypC4n1G4bPjce_Y8GSEUPfhOuPFHoZt4zATisD4r_ZJpFAVoIW2cP11nVGACJmlV2WYawpolpWqrKiRZynVRkH28oXBcntv8QnNMezmygJ5EcEaXHNlg_QKWM3Q9AGgBaQZNeBNrZC3QwaufNwsYSJ53Q6EaLUO2yESzM3r2lbKXV7YcGgIFDmchkTVzP9TlF4p"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-topbar-height md:ml-[240px] flex flex-col h-[calc(100vh-48px)] bg-background">
+<!-- Controls Band -->
+<div class="px-page-frame py-4 flex items-center justify-between border-b border-outline-variant bg-surface-container-low shrink-0">
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary text-[18px]" data-icon="search">search</span>
+<input class="bg-background border border-control rounded px-3 py-1.5 pl-9 font-furniture text-furniture text-on-surface focus:outline-none focus:border-primary w-64 placeholder:text-ink-muted" placeholder="Search traces..." type="text"/>
+</div>
+<div class="flex bg-background border border-control rounded overflow-hidden">
+<button class="px-3 py-1.5 font-furniture text-furniture bg-surface-bright text-on-surface border-r border-control active:translate-y-[1px] duration-0">All</button>
+<button class="px-3 py-1.5 font-furniture text-furniture text-ink-secondary hover:bg-surface-variant hover:text-on-surface border-r border-control transition-colors active:translate-y-[1px] duration-0">Info</button>
+<button class="px-3 py-1.5 font-furniture text-furniture text-ink-secondary hover:bg-surface-variant hover:text-on-surface border-r border-control transition-colors active:translate-y-[1px] duration-0">Warn</button>
+<button class="px-3 py-1.5 font-furniture text-furniture text-ink-secondary hover:bg-surface-variant hover:text-on-surface transition-colors active:translate-y-[1px] duration-0">Error</button>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-variant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary relative"></div>
+<span class="font-furniture text-furniture text-ink-secondary">Auto-scroll</span>
+</label>
+</div>
+</div>
+<!-- Log Stream Canvas -->
+<div class="flex-1 overflow-y-auto bg-[#131413] p-page-frame relative">
+<div class="flex flex-col gap-1 w-full max-w-7xl mx-auto">
+<!-- Log Entry -->
+<div class="flex items-center gap-4 py-1 hover:bg-surface-container-low transition-colors duration-0 rounded px-2 group">
+<div class="font-mono-data text-mono-data text-ink-muted shrink-0 w-24">14:20:11.452</div>
+<div class="shrink-0 w-16">
+<span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-status-good-bg text-status-good-ink font-furniture text-[10px] uppercase tracking-wider border border-status-good-ink/20">INFO</span>
+</div>
+<div class="font-mono-data text-mono-data text-secondary shrink-0 w-32 truncate">Agent Alpha</div>
+<div class="font-mono-data text-mono-data text-on-surface flex-1 truncate">verified endpoint <span class="text-tertiary">/v1/auth</span></div>
+</div>
+<!-- Log Entry (Warning) -->
+<div class="flex items-center gap-4 py-1 bg-status-warning-bg/10 hover:bg-status-warning-bg/20 transition-colors duration-0 rounded px-2 group">
+<div class="font-mono-data text-mono-data text-ink-muted shrink-0 w-24">14:20:12.891</div>
+<div class="shrink-0 w-16">
+<span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-status-warning-bg text-status-warning-ink font-furniture text-[10px] uppercase tracking-wider border border-status-warning-ink/20">WARN</span>
+</div>
+<div class="font-mono-data text-mono-data text-secondary shrink-0 w-32 truncate">Proxy Router</div>
+<div class="font-mono-data text-mono-data text-status-warning-ink flex-1 truncate">Slow response (450ms) on <span class="text-tertiary opacity-80">/v1/payments</span></div>
+</div>
+<!-- Log Entry -->
+<div class="flex items-center gap-4 py-1 hover:bg-surface-container-low transition-colors duration-0 rounded px-2 group">
+<div class="font-mono-data text-mono-data text-ink-muted shrink-0 w-24">14:20:15.112</div>
+<div class="shrink-0 w-16">
+<span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-status-good-bg text-status-good-ink font-furniture text-[10px] uppercase tracking-wider border border-status-good-ink/20">INFO</span>
+</div>
+<div class="font-mono-data text-mono-data text-secondary shrink-0 w-32 truncate">Agent Alpha</div>
+<div class="font-mono-data text-mono-data text-on-surface flex-1 truncate">Schema check passed for <span class="text-tertiary">/v1/users</span></div>
+</div>
+<!-- Log Entry (Error) -->
+<div class="flex items-center gap-4 py-1 bg-status-critical-bg/20 hover:bg-status-critical-bg/30 transition-colors duration-0 rounded px-2 group">
+<div class="font-mono-data text-mono-data text-ink-muted shrink-0 w-24">14:20:18.005</div>
+<div class="shrink-0 w-16">
+<span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-status-critical-bg text-status-critical-ink font-furniture text-[10px] uppercase tracking-wider border border-status-critical-ink/20">ERROR</span>
+</div>
+<div class="font-mono-data text-mono-data text-secondary shrink-0 w-32 truncate">DB Connection</div>
+<div class="font-mono-data text-mono-data text-status-critical-ink flex-1 truncate">Connection timeout after 5000ms <span class="text-on-surface opacity-50 ml-2">code: TIMEOUT</span></div>
+</div>
+<!-- More dummy logs for visual density -->
+<div class="flex items-center gap-4 py-1 hover:bg-surface-container-low transition-colors duration-0 rounded px-2 group">
+<div class="font-mono-data text-mono-data text-ink-muted shrink-0 w-24">14:20:18.150</div>
+<div class="shrink-0 w-16">
+<span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-status-good-bg text-status-good-ink font-furniture text-[10px] uppercase tracking-wider border border-status-good-ink/20">INFO</span>
+</div>
+<div class="font-mono-data text-mono-data text-secondary shrink-0 w-32 truncate">Agent Beta</div>
+<div class="font-mono-data text-mono-data text-on-surface flex-1 truncate">Starting automated remediation sequence RE-492</div>
+</div>
+</div>
+</div>
+<!-- Status Band -->
+<div class="px-4 py-2 border-t border-outline-variant bg-surface-container-low shrink-0 flex items-center justify-between text-ink-secondary">
+<div class="flex items-center gap-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="font-mono-data text-mono-data">Streaming 142 logs/s</span>
+</div>
+<span class="font-mono-data text-mono-data text-ink-muted">Connection: Stable (WebSocket)</span>
+</div>
+</main>
+</body></html>

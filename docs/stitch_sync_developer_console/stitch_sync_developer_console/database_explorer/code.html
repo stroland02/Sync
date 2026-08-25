@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Database Explorer - Sync</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#393939",
+                        "error": "#FA4B4B",
+                        "surface-main": "#1C1C1C",
+                        "primary": "#60eca8",
+                        "on-surface-variant": "#bbcabe",
+                        "on-error": "#690005",
+                        "secondary": "#c8c6c6",
+                        "surface-variant": "#353535",
+                        "on-primary-fixed-variant": "#005233",
+                        "info": "#2081E2",
+                        "border-muted": "#232323",
+                        "tertiary-container": "#ffa072",
+                        "primary-fixed": "#71fcb6",
+                        "surface-container-high": "#2a2a2a",
+                        "tertiary-fixed-dim": "#ffb694",
+                        "on-secondary": "#303030",
+                        "background": "#131313",
+                        "secondary-fixed": "#e4e2e1",
+                        "primary-fixed-dim": "#51df9c",
+                        "inverse-surface": "#e5e2e1",
+                        "primary-container": "#3ecf8e",
+                        "outline-variant": "#3d4a41",
+                        "on-primary": "#003822",
+                        "warning": "#F5A623",
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary-container": "#78350f",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary-fixed-variant": "#76330d",
+                        "on-tertiary-fixed": "#351000",
+                        "tertiary": "#ffc7ae",
+                        "tertiary-fixed": "#ffdbcc",
+                        "text-secondary": "#A0A0A0",
+                        "surface-container-low": "#1b1b1b",
+                        "surface-dim": "#131313",
+                        "surface-container-highest": "#353535",
+                        "surface-tint": "#51df9c",
+                        "surface": "#131313",
+                        "text-primary": "#EDEDED",
+                        "border-subtle": "#2E2E2E",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#474747",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "success": "#3ECF8E",
+                        "secondary-container": "#474747",
+                        "on-primary-fixed": "#002112",
+                        "on-surface": "#e5e2e1",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "surface-card": "#171717",
+                        "surface-container": "#20201f",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary": "#561f00",
+                        "error-container": "#93000a",
+                        "outline": "#869489",
+                        "on-secondary-container": "#b6b5b4",
+                        "inverse-primary": "#006c45",
+                        "on-primary-container": "#005434"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "space-8": "32px",
+                        "space-2": "8px",
+                        "space-1": "4px",
+                        "space-4": "16px",
+                        "space-6": "24px",
+                        "sidebar-width": "240px",
+                        "space-3": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "code-md": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-xs": ["JetBrains Mono"],
+                        "headline-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-xs": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for grid */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1C1C1C;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #353535;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #474747;
+        }
+        
+        .grid-cell {
+            border-right: 1px solid #232323;
+            border-bottom: 1px solid #232323;
+        }
+        
+        .grid-header {
+            border-right: 1px solid #232323;
+            border-bottom: 2px solid #2E2E2E;
+            background-color: #171717;
+        }
+    </style>
+</head>
+<body class="bg-background text-text-primary font-body-sm h-screen overflow-hidden flex flex-col">
+<!-- TopNavBar -->
+<nav class="fixed top-0 right-0 w-[calc(100%-theme(spacing.sidebar-width))] h-space-8 bg-surface-main dark:bg-surface-main border-b border-border-muted flex justify-between items-center px-space-4 z-40">
+<div class="flex items-center gap-space-4">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary mr-space-4">Sync</span>
+<div class="flex gap-space-4">
+<a class="text-on-surface-variant hover:text-text-primary transition-colors duration-200" href="#">Environments</a>
+<a class="text-on-surface-variant hover:text-text-primary transition-colors duration-200" href="#">API Docs</a>
+<a class="text-on-surface-variant hover:text-text-primary transition-colors duration-200" href="#">Team</a>
+</div>
+</div>
+<div class="flex items-center gap-space-4">
+<div class="flex items-center bg-surface-card border border-border-subtle rounded-DEFAULT px-space-2 py-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] mr-2">search</span>
+<span class="font-label-xs text-label-xs">Cmd+K</span>
+</div>
+<button class="bg-primary-container text-on-primary font-body-sm px-space-3 py-1 rounded-DEFAULT hover:opacity-90 transition-opacity">Deploy</button>
+<span class="material-symbols-outlined text-on-surface-variant hover:text-primary cursor-pointer active:scale-95 transition-transform" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-on-surface-variant hover:text-primary cursor-pointer active:scale-95 transition-transform" data-icon="settings">settings</span>
+<div class="w-6 h-6 rounded-full bg-surface-variant overflow-hidden border border-border-subtle">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="A small circular avatar placeholder image for a user profile in a highly technical dashboard. Dark emerald and deep charcoal tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4GkIjAR_Dq8g4bOqyffHNtBa07Gk7Q7wQAcCcXyeVf-c36cyZBuT4aHeTXwUaPm5ZjFjNKW3g6XsQfkcDG5tVG0fkVjlvg6y96Pr9uVAe80NyhZQxrT7PnTpF7vcuCIn9LIAefR5KrA7REHL77YVLrg1-oJpBnYo2hMRfMHQ6Zg_AdruH5cEe0ZF7xJ31kRYCFgYv-VwNCsqNd6d0JDlex_RojjYgfl4kRXNUG7RFKtCkxD9qWK8M"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-screen w-sidebar-width bg-surface-main dark:bg-surface-main border-r border-border-muted flex flex-col py-space-4 z-50">
+<div class="px-space-4 mb-space-6 flex items-center gap-space-3">
+<div class="w-8 h-8 rounded-DEFAULT bg-primary-container flex items-center justify-center text-on-primary font-bold">S</div>
+<div>
+<div class="font-headline-md text-headline-md text-text-primary">Sync</div>
+<div class="font-label-xs text-label-xs text-text-secondary">API Automation</div>
+</div>
+</div>
+<nav class="flex-1 px-space-2 flex flex-col gap-1">
+<div class="px-space-2 py-1 font-label-xs text-label-xs text-text-secondary mb-1">TABLES</div>
+<a class="flex items-center gap-space-3 px-space-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">table_chart</span>
+<span>integrations</span>
+</a>
+<a class="flex items-center gap-space-3 px-space-3 py-2 rounded-DEFAULT bg-surface-variant text-primary border-l-2 border-primary transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">table_chart</span>
+<span>incidents</span>
+</a>
+<a class="flex items-center gap-space-3 px-space-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">table_chart</span>
+<span>traces</span>
+</a>
+<a class="flex items-center gap-space-3 px-space-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">table_chart</span>
+<span>agents</span>
+</a>
+</nav>
+<div class="mt-auto px-space-2 flex flex-col gap-1">
+<a class="flex items-center gap-space-3 px-space-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="help">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-space-3 px-space-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="person">person</span>
+<span>User Profile</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-sidebar-width mt-space-8 h-[calc(100vh-theme(spacing.space-8))] flex flex-col bg-surface-main">
+<!-- Table Toolbar -->
+<div class="h-12 border-b border-border-muted bg-surface-main flex items-center justify-between px-space-4 shrink-0">
+<div class="flex items-center gap-space-4">
+<h1 class="font-headline-md text-headline-md text-text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">table_chart</span>
+                    incidents
+                </h1>
+<div class="h-4 w-px bg-border-muted"></div>
+<button class="flex items-center gap-1 px-2 py-1 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-low hover:text-text-primary border border-transparent hover:border-border-subtle transition-all">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+<span class="font-body-sm text-body-sm">Filter</span>
+</button>
+<button class="flex items-center gap-1 px-2 py-1 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-low hover:text-text-primary border border-transparent hover:border-border-subtle transition-all">
+<span class="material-symbols-outlined text-[16px]">sort</span>
+<span class="font-body-sm text-body-sm">Sort</span>
+</button>
+</div>
+<div class="flex items-center gap-space-3">
+<span class="font-label-xs text-label-xs text-text-secondary">42,091 rows</span>
+<button class="bg-primary-container text-on-primary font-body-sm px-space-3 py-1 rounded-DEFAULT flex items-center gap-1 hover:opacity-90">
+<span class="material-symbols-outlined text-[16px]">add</span>
+                    Insert row
+                </button>
+</div>
+</div>
+<!-- Data Grid -->
+<div class="flex-1 overflow-auto bg-surface-main relative">
+<table class="w-full text-left border-collapse table-fixed min-w-[1200px]">
+<thead class="sticky top-0 z-10">
+<tr>
+<th class="grid-header w-12 px-space-2 py-space-2 text-center">
+<input class="rounded-DEFAULT border-border-subtle bg-surface-card text-primary focus:ring-primary focus:ring-offset-surface-main" type="checkbox"/>
+</th>
+<th class="grid-header w-48 px-space-3 py-space-2 font-label-xs text-label-xs text-text-secondary font-medium tracking-wider">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">vpn_key</span>
+                                    id
+                                </div>
+</div>
+</th>
+<th class="grid-header w-48 px-space-3 py-space-2 font-label-xs text-label-xs text-text-secondary font-medium tracking-wider">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                                created_at
+                            </div>
+</th>
+<th class="grid-header w-32 px-space-3 py-space-2 font-label-xs text-label-xs text-text-secondary font-medium tracking-wider">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">numbers</span>
+                                severity
+                            </div>
+</th>
+<th class="grid-header w-40 px-space-3 py-space-2 font-label-xs text-label-xs text-text-secondary font-medium tracking-wider">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                status
+                            </div>
+</th>
+<th class="grid-header w-64 px-space-3 py-space-2 font-label-xs text-label-xs text-text-secondary font-medium tracking-wider">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">text_fields</span>
+                                title
+                            </div>
+</th>
+</tr>
+</thead>
+<tbody class="font-code-md text-code-md">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="grid-cell text-center px-space-2 py-space-2">
+<input class="rounded-DEFAULT border-border-subtle bg-surface-card text-primary focus:ring-primary focus:ring-offset-surface-main opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="grid-cell px-space-3 py-space-2 text-primary">inc_01H8XF9</td>
+<td class="grid-cell px-space-3 py-space-2 text-text-secondary">2023-10-24 14:32:01</td>
+<td class="grid-cell px-space-3 py-space-2">1</td>
+<td class="grid-cell px-space-3 py-space-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-DEFAULT text-[10px] font-medium bg-error/20 text-error border border-error/30">OPEN</span>
+</td>
+<td class="grid-cell px-space-3 py-space-2 text-text-primary truncate">API Gateway Latency Spike in us-east-1</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="grid-cell text-center px-space-2 py-space-2">
+<input class="rounded-DEFAULT border-border-subtle bg-surface-card text-primary focus:ring-primary focus:ring-offset-surface-main opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="grid-cell px-space-3 py-space-2 text-primary">inc_01H8XFA</td>
+<td class="grid-cell px-space-3 py-space-2 text-text-secondary">2023-10-24 12:15:44</td>
+<td class="grid-cell px-space-3 py-space-2">3</td>
+<td class="grid-cell px-space-3 py-space-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-DEFAULT text-[10px] font-medium bg-success/20 text-success border border-success/30">RESOLVED</span>
+</td>
+<td class="grid-cell px-space-3 py-space-2 text-text-primary truncate">Database connection pool exhausted</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low transition-colors group">
+<td class="grid-cell text-center px-space-2 py-space-2">
+<input class="rounded-DEFAULT border-border-subtle bg-surface-card text-primary focus:ring-primary focus:ring-offset-surface-main opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity" type="checkbox"/>
+</td>
+<td class="grid-cell px-space-3 py-space-2 text-primary">inc_01H8XFB</td>
+<td class="grid-cell px-space-3 py-space-2 text-text-secondary">2023-10-23 09:00:12</td>
+<td class="grid-cell px-space-3 py-space-2">2</td>
+<td class="grid-cell px-space-3 py-space-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-DEFAULT text-[10px] font-medium bg-warning/20 text-warning border border-warning/30">INVESTIGATING</span>
+</td>
+<td class="grid-cell px-space-3 py-space-2 text-text-primary truncate">Webhook delivery failures to Stripe</td>
+</tr>
+</tbody>
+</table>
+<!-- Empty state filler -->
+<div class="h-full border-t border-border-muted border-dashed mt-[1px] opacity-20 pointer-events-none"></div>
+</div>
+</main>
+</body></html>

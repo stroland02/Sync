@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - Infrastructure Logs</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#393939",
+                        "error": "#FA4B4B",
+                        "surface-main": "#1C1C1C",
+                        "primary": "#60eca8",
+                        "on-surface-variant": "#bbcabe",
+                        "on-error": "#690005",
+                        "secondary": "#c8c6c6",
+                        "surface-variant": "#353535",
+                        "on-primary-fixed-variant": "#005233",
+                        "info": "#2081E2",
+                        "border-muted": "#232323",
+                        "tertiary-container": "#ffa072",
+                        "primary-fixed": "#71fcb6",
+                        "surface-container-high": "#2a2a2a",
+                        "tertiary-fixed-dim": "#ffb694",
+                        "on-secondary": "#303030",
+                        "background": "#131313",
+                        "secondary-fixed": "#e4e2e1",
+                        "primary-fixed-dim": "#51df9c",
+                        "inverse-surface": "#e5e2e1",
+                        "primary-container": "#3ecf8e",
+                        "outline-variant": "#3d4a41",
+                        "on-primary": "#003822",
+                        "warning": "#F5A623",
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary-container": "#78350f",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary-fixed-variant": "#76330d",
+                        "on-tertiary-fixed": "#351000",
+                        "tertiary": "#ffc7ae",
+                        "tertiary-fixed": "#ffdbcc",
+                        "text-secondary": "#A0A0A0",
+                        "surface-container-low": "#1b1b1b",
+                        "surface-dim": "#131313",
+                        "surface-container-highest": "#353535",
+                        "surface-tint": "#51df9c",
+                        "surface": "#131313",
+                        "text-primary": "#EDEDED",
+                        "border-subtle": "#2E2E2E",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#474747",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "success": "#3ECF8E",
+                        "secondary-container": "#474747",
+                        "on-primary-fixed": "#002112",
+                        "on-surface": "#e5e2e1",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "surface-card": "#171717",
+                        "surface-container": "#20201f",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary": "#561f00",
+                        "error-container": "#93000a",
+                        "outline": "#869489",
+                        "on-secondary-container": "#b6b5b4",
+                        "inverse-primary": "#006c45",
+                        "on-primary-container": "#005434"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "space-8": "32px",
+                        "space-2": "8px",
+                        "space-1": "4px",
+                        "space-4": "16px",
+                        "space-6": "24px",
+                        "sidebar-width": "240px",
+                        "space-3": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope", "sans-serif"],
+                        "code-md": ["JetBrains Mono", "monospace"],
+                        "body-sm": ["Inter", "sans-serif"],
+                        "body-md": ["Inter", "sans-serif"],
+                        "label-xs": ["JetBrains Mono", "monospace"],
+                        "headline-md": ["Manrope", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "code-md": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-xs": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.text-primary');
+        }
+        
+        .log-row:hover {
+            background-color: theme('colors.surface-container-low');
+        }
+        
+        .log-row.selected {
+            background-color: theme('colors.surface-variant');
+            border-left: 2px solid theme('colors.primary');
+        }
+        
+        /* Scrollbar styling for density */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.background'); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.surface-variant'); 
+            border-radius: theme('borderRadius.DEFAULT');
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.secondary-container'); 
+        }
+        
+        .json-key { color: theme('colors.tertiary-container'); }
+        .json-string { color: theme('colors.primary-fixed-dim'); }
+        .json-number { color: theme('colors.info'); }
+        .json-boolean { color: theme('colors.warning'); }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden font-body-sm text-body-sm antialiased">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-screen w-sidebar-width border-r border-border-muted bg-surface-main dark:bg-surface-main flex flex-col z-50">
+<!-- Brand Header -->
+<div class="flex items-center px-space-4 h-space-8 border-b border-border-muted">
+<div class="flex items-center gap-space-2">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">cloud_sync</span>
+<div>
+<div class="font-headline-md text-headline-md font-bold text-primary dark:text-primary leading-none">Sync</div>
+<div class="font-label-xs text-label-xs text-text-secondary uppercase">API Automation</div>
+</div>
+</div>
+</div>
+<!-- Main Nav -->
+<div class="flex flex-col flex-1 py-space-4 px-space-2 gap-space-1 overflow-y-auto">
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">api</span>
+                APIs
+            </a>
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">account_tree</span>
+                Workflows
+            </a>
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm bg-surface-variant text-primary border-l-2 border-primary transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+                Logs
+            </a>
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+                Settings
+            </a>
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">description</span>
+                Documentation
+            </a>
+</div>
+<!-- Footer Nav -->
+<div class="flex flex-col py-space-4 px-space-2 gap-space-1 border-t border-border-muted">
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">help</span>
+                Support
+            </a>
+<a class="flex items-center gap-space-3 px-space-3 py-space-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[18px]">person</span>
+                User Profile
+            </a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-sidebar-width flex-1 flex flex-col h-full bg-background relative">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center px-space-4 w-full z-40 bg-surface-main dark:bg-surface-main border-b border-border-muted h-space-8 shrink-0">
+<!-- Navigation Links -->
+<div class="flex items-center h-full gap-space-6 hidden md:flex">
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors duration-200 h-full flex items-center border-b-2 border-transparent hover:border-primary" href="#">Environments</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors duration-200 h-full flex items-center border-b-2 border-transparent hover:border-primary" href="#">API Docs</a>
+<a class="font-body-sm text-body-sm text-on-surface-variant hover:text-primary transition-colors duration-200 h-full flex items-center border-b-2 border-transparent hover:border-primary" href="#">Team</a>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-space-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-text-secondary text-[16px]">search</span>
+<input class="bg-surface-card border border-border-subtle rounded pl-8 pr-12 py-1 text-sm focus:border-primary focus:ring-0 text-text-primary w-64 placeholder-text-secondary h-8" placeholder="Search..." type="text"/>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+<span class="font-label-xs text-label-xs text-text-secondary bg-surface-variant px-1 rounded border border-border-muted">Cmd+K</span>
+</div>
+</div>
+<button class="bg-primary-container text-on-primary px-space-3 py-1 rounded font-body-sm text-body-sm font-medium hover:bg-primary transition-colors cursor-pointer active:scale-95 transition-transform h-8">
+                    Deploy
+                </button>
+<div class="flex items-center gap-space-2 border-l border-border-muted pl-space-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded hover:bg-surface-container-low cursor-pointer active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded hover:bg-surface-container-low cursor-pointer active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-border-muted ml-2">
+<img class="w-full h-full object-cover" data-alt="A small, professional user avatar portrait showing a person looking confidently at the camera against a dark minimal background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1o5bO7VPhYwWuSxyXXwgGo0BqEJCq7fDYylOVtz3UQCtmtZ0JWPEFcLKeeMh2XSaxPEpP00sGhD6ecwv1aJaLPKRGvFEMkkN7_Etwp4RDzKA8ubcBLwTVlCjMkLgSTAvVhRZxWwdeMUgypex5lxg-ryHy4ORX6j1vuS1NdHHYrA4ByNcsOZODhP-qjfi95UTGkicon5GEAIBK6vtnr4hQAXJvkIfMA88JMvOekFd5yZsLU9aihEYF"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Log Explorer Toolbar -->
+<div class="flex flex-col shrink-0 bg-surface-card border-b border-border-muted">
+<div class="px-space-4 py-space-3 flex items-center justify-between gap-space-4">
+<div class="flex-1 flex items-center gap-space-3">
+<div class="relative flex-1 max-w-2xl">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-[18px]">terminal</span>
+<input class="w-full bg-background border border-border-subtle rounded font-code-md text-code-md pl-10 pr-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary text-text-primary placeholder-text-secondary h-9" placeholder="Filter logs using SQL-like syntax (e.g. level:error AND status:&gt;500)..." type="text"/>
+</div>
+<button class="flex items-center gap-1 bg-surface-variant border border-border-subtle text-text-primary px-space-3 py-2 rounded hover:bg-surface-container-highest transition-colors h-9">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+<span class="font-body-sm">Last 1h</span>
+<span class="material-symbols-outlined text-[16px] ml-1">expand_more</span>
+</button>
+</div>
+<div class="flex items-center gap-space-2">
+<button class="p-2 text-text-secondary hover:text-text-primary bg-surface-variant border border-border-subtle rounded hover:bg-surface-container-highest transition-colors h-9 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">pause</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-text-primary bg-surface-variant border border-border-subtle rounded hover:bg-surface-container-highest transition-colors h-9 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">download</span>
+</button>
+<button class="flex items-center gap-2 bg-surface-variant border border-border-subtle text-text-primary px-space-3 py-2 rounded hover:bg-surface-container-highest transition-colors h-9">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+<span class="font-body-sm">Filters</span>
+</button>
+</div>
+</div>
+<!-- Quick Filters / Histogram (Mocked) -->
+<div class="px-space-4 pb-space-3 flex items-end gap-1 h-12 overflow-hidden border-t border-border-muted pt-2 opacity-60">
+<!-- Bars for log volume visualization -->
+<div class="flex-1 flex items-end gap-[2px] h-full">
+<div class="w-2 bg-info h-[20%]"></div>
+<div class="w-2 bg-info h-[40%]"></div>
+<div class="w-2 bg-info h-[30%]"></div>
+<div class="w-2 bg-info h-[60%]"></div>
+<div class="w-2 bg-info h-[50%]"></div>
+<div class="w-2 bg-info h-[80%]"></div>
+<div class="w-2 bg-error h-[100%]"></div>
+<div class="w-2 bg-info h-[70%]"></div>
+<div class="w-2 bg-info h-[40%]"></div>
+<div class="w-2 bg-info h-[30%]"></div>
+<div class="w-2 bg-warning h-[45%]"></div>
+<div class="w-2 bg-info h-[20%]"></div>
+<div class="w-2 bg-info h-[10%]"></div>
+<div class="w-2 bg-info h-[35%]"></div>
+<div class="w-2 bg-info h-[50%]"></div>
+<div class="w-2 bg-info h-[40%]"></div>
+<div class="w-2 bg-error h-[90%]"></div>
+<div class="w-2 bg-info h-[60%]"></div>
+<div class="w-2 bg-info h-[30%]"></div>
+<div class="w-2 bg-info h-[20%]"></div>
+</div>
+<div class="font-label-xs text-label-xs text-text-secondary ml-2 shrink-0">124k Events</div>
+</div>
+</div>
+<!-- Log Stream Layout -->
+<div class="flex-1 flex overflow-hidden relative">
+<!-- Main Log List -->
+<div class="flex-1 flex flex-col h-full bg-background overflow-y-auto font-code-md text-code-md border-r border-border-muted" id="log-list">
+<!-- Header Row -->
+<div class="flex items-center px-space-4 py-2 border-b border-border-subtle bg-surface-card sticky top-0 z-10 text-text-secondary font-label-xs text-label-xs uppercase tracking-wider">
+<div class="w-40 shrink-0">Timestamp</div>
+<div class="w-16 shrink-0 text-center">Level</div>
+<div class="w-32 shrink-0 pl-4">Service</div>
+<div class="flex-1 pl-4">Message</div>
+</div>
+<!-- Log Entries -->
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors" onclick="document.getElementById('log-detail').classList.remove('hidden')">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:32:01.102</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-info/20 text-info px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">INFO</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">auth-service</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">User authentication successful for user_id: 'usr_8f7d6a5b'</div>
+</div>
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:32:00.845</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-info/20 text-info px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">INFO</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">api-gateway</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">Request routed to auth-service in 12ms</div>
+</div>
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:31:55.210</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-warning/20 text-warning px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">WARN</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">billing-worker</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">Rate limit approaching for tier 'starter', tenant_id: 'tnt_99x2'</div>
+</div>
+<div class="log-row selected flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:31:42.005</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-error/20 text-error px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">ERROR</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">db-cluster</div>
+<div class="flex-1 pl-4 text-error pt-[2px] truncate">Connection timeout expanding pool connections. Max pool size reached.</div>
+</div>
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:31:41.890</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-info/20 text-info px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">INFO</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">metrics-agent</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">Flushed 14,200 metrics points to sink successfully.</div>
+</div>
+<!-- More mocked rows for density -->
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors opacity-70">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:31:40.112</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-info/20 text-info px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">INFO</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">api-gateway</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">GET /v1/users/profile - 200 OK 45ms</div>
+</div>
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors opacity-70">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:31:38.450</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-info/20 text-info px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">INFO</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">api-gateway</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">POST /v1/events/track - 201 Created 12ms</div>
+</div>
+<div class="log-row flex items-start px-space-4 py-2 border-b border-border-muted cursor-pointer transition-colors opacity-70">
+<div class="w-40 shrink-0 text-text-secondary pt-[2px]">2023-10-27 14:31:35.001</div>
+<div class="w-16 shrink-0 flex justify-center"><span class="bg-info/20 text-info px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">INFO</span></div>
+<div class="w-32 shrink-0 pl-4 text-text-secondary pt-[2px]">worker-pool-a</div>
+<div class="flex-1 pl-4 text-text-primary pt-[2px] truncate">Job queue processed 40 items in batch.</div>
+</div>
+</div>
+<!-- Detail Pane (Slide-out) -->
+<div class="w-[400px] shrink-0 bg-surface-card h-full flex flex-col border-l border-border-subtle shadow-[-4px_0_15px_rgba(0,0,0,0.5)] transform transition-transform duration-300" id="log-detail">
+<div class="flex items-center justify-between px-space-4 py-space-3 border-b border-border-muted bg-surface-main">
+<h3 class="font-headline-md text-headline-md text-text-primary">Log Event Detail</h3>
+<button class="text-text-secondary hover:text-text-primary p-1 rounded hover:bg-surface-variant transition-colors" onclick="document.getElementById('log-detail').classList.add('hidden')">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto p-space-4 flex flex-col gap-space-4">
+<!-- Event Summary Card -->
+<div class="bg-background border border-border-subtle rounded p-space-3 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-label-xs text-label-xs text-text-secondary uppercase">Level</span>
+<span class="bg-error/20 text-error px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">ERROR</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-label-xs text-label-xs text-text-secondary uppercase">Timestamp</span>
+<span class="font-code-md text-code-md text-text-primary">2023-10-27 14:31:42.005</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="font-label-xs text-label-xs text-text-secondary uppercase">Service</span>
+<span class="font-code-md text-code-md text-text-primary">db-cluster</span>
+</div>
+</div>
+<!-- JSON Payload -->
+<div>
+<div class="flex items-center justify-between mb-2">
+<h4 class="font-label-xs text-label-xs text-text-secondary uppercase tracking-wider">JSON Payload</h4>
+<button class="text-text-secondary hover:text-primary transition-colors flex items-center gap-1 text-[11px] font-mono">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+                            </button>
+</div>
+<div class="bg-background border border-border-subtle rounded p-space-3 overflow-x-auto font-code-md text-code-md leading-relaxed">
+<pre class="m-0"><code>{
+  <span class="json-key">"timestamp"</span>: <span class="json-string">"2023-10-27T14:31:42.005Z"</span>,
+  <span class="json-key">"level"</span>: <span class="json-string">"error"</span>,
+  <span class="json-key">"service"</span>: <span class="json-string">"db-cluster"</span>,
+  <span class="json-key">"host"</span>: <span class="json-string">"node-db-04.internal"</span>,
+  <span class="json-key">"message"</span>: <span class="json-string">"Connection timeout expanding pool connections. Max pool size reached."</span>,
+  <span class="json-key">"context"</span>: {
+    <span class="json-key">"pool_size"</span>: <span class="json-number">100</span>,
+    <span class="json-key">"active_connections"</span>: <span class="json-number">100</span>,
+    <span class="json-key">"idle_connections"</span>: <span class="json-number">0</span>,
+    <span class="json-key">"wait_queue_length"</span>: <span class="json-number">45</span>
+  },
+  <span class="json-key">"error"</span>: {
+    <span class="json-key">"code"</span>: <span class="json-string">"ETIMEDOUT"</span>,
+    <span class="json-key">"fatal"</span>: <span class="json-boolean">true</span>,
+    <span class="json-key">"stack"</span>: <span class="json-string">"Error: connect ETIMEDOUT 10.0.1.45:5432\n    at TCPConnectWrap.afterConnect [as oncomplete]"</span>
+  },
+  <span class="json-key">"request_id"</span>: <span class="json-string">"req_a1b2c3d4"</span>,
+  <span class="json-key">"tenant_id"</span>: <span class="json-string">"tnt_99x2"</span>
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync API Documentation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#393939",
+                        "error": "#FA4B4B",
+                        "surface-main": "#1C1C1C",
+                        "primary": "#60eca8",
+                        "on-surface-variant": "#bbcabe",
+                        "on-error": "#690005",
+                        "secondary": "#c8c6c6",
+                        "surface-variant": "#353535",
+                        "on-primary-fixed-variant": "#005233",
+                        "info": "#2081E2",
+                        "border-muted": "#232323",
+                        "tertiary-container": "#ffa072",
+                        "primary-fixed": "#71fcb6",
+                        "surface-container-high": "#2a2a2a",
+                        "tertiary-fixed-dim": "#ffb694",
+                        "on-secondary": "#303030",
+                        "background": "#131313",
+                        "secondary-fixed": "#e4e2e1",
+                        "primary-fixed-dim": "#51df9c",
+                        "inverse-surface": "#e5e2e1",
+                        "primary-container": "#3ecf8e",
+                        "outline-variant": "#3d4a41",
+                        "on-primary": "#003822",
+                        "warning": "#F5A623",
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary-container": "#78350f",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary-fixed-variant": "#76330d",
+                        "on-tertiary-fixed": "#351000",
+                        "tertiary": "#ffc7ae",
+                        "tertiary-fixed": "#ffdbcc",
+                        "text-secondary": "#A0A0A0",
+                        "surface-container-low": "#1b1b1b",
+                        "surface-dim": "#131313",
+                        "surface-container-highest": "#353535",
+                        "surface-tint": "#51df9c",
+                        "surface": "#131313",
+                        "text-primary": "#EDEDED",
+                        "border-subtle": "#2E2E2E",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#474747",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "success": "#3ECF8E",
+                        "secondary-container": "#474747",
+                        "on-primary-fixed": "#002112",
+                        "on-surface": "#e5e2e1",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "surface-card": "#171717",
+                        "surface-container": "#20201f",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary": "#561f00",
+                        "error-container": "#93000a",
+                        "outline": "#869489",
+                        "on-secondary-container": "#b6b5b4",
+                        "inverse-primary": "#006c45",
+                        "on-primary-container": "#005434"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "space-8": "32px",
+                        "space-2": "8px",
+                        "space-1": "4px",
+                        "space-4": "16px",
+                        "space-6": "24px",
+                        "sidebar-width": "240px",
+                        "space-3": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "code-md": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-xs": ["JetBrains Mono"],
+                        "headline-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-xs": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for a sleeker look */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #353535; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #474747; }
+        
+        /* Syntax highlighting placeholders */
+        .token.keyword { color: #3ecf8e; }
+        .token.string { color: #ffa072; }
+        .token.function { color: #2081E2; }
+        .token.comment { color: #869489; }
+    </style>
+</head>
+<body class="bg-background text-text-primary font-body-md antialiased overflow-hidden">
+<!-- Top Navigation (TopNavBar) -->
+<nav class="fixed top-0 right-0 w-[calc(100%-theme(spacing.sidebar-width))] h-space-8 bg-surface-main dark:bg-surface-main flex justify-between items-center px-space-4 z-40 border-b border-border-muted">
+<!-- Search Bar Area -->
+<div class="flex items-center space-x-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-2 top-1/2 transform -translate-y-1/2 text-text-secondary text-sm">search</span>
+<input class="bg-surface-container-high border border-border-subtle text-text-primary text-sm rounded-DEFAULT pl-8 pr-3 py-1 focus:outline-none focus:border-primary w-64" placeholder="Search documentation..." type="text"/>
+<span class="absolute right-2 top-1/2 transform -translate-y-1/2 font-code-md text-text-secondary text-xs border border-border-subtle rounded-sm px-1 bg-surface-main">Cmd+K</span>
+</div>
+</div>
+<!-- Links & Actions -->
+<div class="flex items-center space-x-6">
+<div class="hidden md:flex space-x-6">
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-xs" href="#">Environments</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-xs" href="#">API Docs</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-xs" href="#">Team</a>
+</div>
+<div class="flex items-center space-x-3 border-l border-border-muted pl-4">
+<button class="text-text-secondary hover:text-primary transition-colors duration-200">
+<span class="material-symbols-outlined text-sm">notifications</span>
+</button>
+<button class="text-text-secondary hover:text-primary transition-colors duration-200">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+<button class="bg-primary-container text-on-primary font-label-xs px-3 py-1 rounded-DEFAULT hover:bg-primary transition-colors duration-200 cursor-pointer active:scale-95">Deploy</button>
+<img alt="User Avatar" class="w-6 h-6 rounded-full object-cover border border-border-subtle" data-alt="A small circular avatar of a professional software developer in a dark mode setting, minimalist and sleek." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMM9xDolh1pbaVyig2dt7g0lVzxlyeg3xBiLP5x80woLY8DqUHGoO85MbrPBVPP4Azgo4zy5QYcNRuqCLCZqyrBitLWo7bR8mbHcdZVXI8fkR88m8nUJJcN9ob0YntuznAyMB_og3eIP5F5R1MWJaBNAhFvlwPJHLg57ObNwd6gU21aQ3Ag9i6yBk9yOixlL_yxKmUjYSxbpMXgWKJrrGvcCS3ePfIil_vnYv142P1ALHdo12PhhX8"/>
+</div>
+</div>
+</nav>
+<!-- Sidebar Navigation (SideNavBar) -->
+<aside class="fixed left-0 top-0 h-screen w-sidebar-width bg-surface-main dark:bg-surface-main border-r border-border-muted flex flex-col py-space-4 z-50">
+<!-- Brand -->
+<div class="px-space-4 mb-space-6 flex items-center space-x-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high border border-border-subtle flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">api</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary">Sync</h1>
+<p class="font-body-sm text-text-secondary text-[10px]">API Automation</p>
+</div>
+</div>
+<!-- Main Navigation Tabs -->
+<nav class="flex-1 overflow-y-auto px-space-2 space-y-1">
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs group" href="#">
+<span class="material-symbols-outlined text-sm group-hover:text-primary">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs group" href="#">
+<span class="material-symbols-outlined text-sm group-hover:text-primary">api</span>
+<span>APIs</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs group" href="#">
+<span class="material-symbols-outlined text-sm group-hover:text-primary">account_tree</span>
+<span>Workflows</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs group" href="#">
+<span class="material-symbols-outlined text-sm group-hover:text-primary">receipt_long</span>
+<span>Logs</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs group" href="#">
+<span class="material-symbols-outlined text-sm group-hover:text-primary">settings</span>
+<span>Settings</span>
+</a>
+<div class="pt-4 pb-2 px-3">
+<p class="font-label-xs text-text-secondary uppercase tracking-widest text-[10px]">Documentation</p>
+</div>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT bg-surface-variant text-primary border-l-2 border-primary font-label-xs cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-sm">description</span>
+<span>API Reference</span>
+</a>
+<!-- Sub-nav items for Documentation -->
+<div class="ml-6 space-y-1 mt-1 border-l border-border-subtle pl-2">
+<a class="block px-2 py-1.5 text-text-secondary hover:text-text-primary font-body-sm text-[12px]" href="#authentication">Authentication</a>
+<a class="block px-2 py-1.5 text-text-secondary hover:text-text-primary font-body-sm text-[12px]" href="#users">Users</a>
+<a class="block px-2 py-1.5 text-text-primary font-body-sm text-[12px] font-medium" href="#workflows">Workflows</a>
+<a class="block px-2 py-1.5 text-text-secondary hover:text-text-primary font-body-sm text-[12px]" href="#events">Events</a>
+</div>
+</nav>
+<!-- Footer Navigation -->
+<div class="px-space-2 mt-auto border-t border-border-muted pt-2 space-y-1">
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs" href="#">
+<span class="material-symbols-outlined text-sm">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:text-text-primary hover:bg-surface-container-low transition-colors duration-200 font-label-xs" href="#">
+<span class="material-symbols-outlined text-sm">person</span>
+<span>User Profile</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-sidebar-width mt-space-8 h-[calc(100vh-theme(spacing.space-8))] flex overflow-hidden bg-background">
+<!-- Left: Documentation Content (Markdown style) -->
+<div class="flex-1 overflow-y-auto border-r border-border-muted">
+<div class="max-w-3xl mx-auto py-space-6 px-space-6 pb-24">
+<!-- Section Header -->
+<div class="mb-space-6">
+<div class="flex items-center space-x-2 mb-2">
+<span class="bg-surface-container-highest border border-border-subtle text-text-secondary font-label-xs px-2 py-0.5 rounded-sm">REST API</span>
+<span class="text-text-secondary font-label-xs">v2.0</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-text-primary mb-2">Workflows</h1>
+<p class="font-body-md text-text-secondary">
+                        The Workflows API allows you to programmatically create, manage, and execute automation sequences within the Sync platform. Use these endpoints to integrate internal logic with external systems.
+                    </p>
+</div>
+<!-- Endpoint: List Workflows -->
+<div class="mb-12" id="list-workflows">
+<h2 class="font-headline-md text-headline-md text-text-primary mb-4 border-b border-border-subtle pb-2">List all workflows</h2>
+<p class="font-body-md text-text-secondary mb-4">
+                        Returns a paginated list of all active workflows associated with your current environment.
+                    </p>
+<!-- Endpoint URL Block -->
+<div class="bg-surface-card border border-border-subtle rounded-DEFAULT p-3 mb-6 flex items-center space-x-3">
+<span class="bg-surface-variant text-info font-code-md px-2 py-1 rounded-sm text-xs border border-border-muted font-bold">GET</span>
+<code class="font-code-md text-code-md text-text-primary flex-1">https://api.sync.dev/v2/workflows</code>
+<button class="text-text-secondary hover:text-primary transition-colors" title="Copy URL">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+</button>
+</div>
+<!-- Query Parameters Table -->
+<h3 class="font-label-xs text-text-primary uppercase tracking-widest mb-3">Query Parameters</h3>
+<div class="border border-border-subtle rounded-DEFAULT overflow-hidden mb-8">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high border-b border-border-subtle">
+<th class="py-2 px-3 font-label-xs text-text-secondary">Parameter</th>
+<th class="py-2 px-3 font-label-xs text-text-secondary">Type</th>
+<th class="py-2 px-3 font-label-xs text-text-secondary">Description</th>
+</tr>
+</thead>
+<tbody class="font-body-sm">
+<tr class="border-b border-border-subtle">
+<td class="py-3 px-3 align-top">
+<code class="font-code-md text-text-primary bg-surface-variant px-1 rounded-sm border border-border-muted">limit</code>
+</td>
+<td class="py-3 px-3 align-top text-text-secondary font-code-md text-xs">integer</td>
+<td class="py-3 px-3 align-top text-text-secondary">
+                                        Maximum number of records to return. <br/>
+<span class="text-xs mt-1 block">Default: <code class="font-code-md">20</code>, Max: <code class="font-code-md">100</code></span>
+</td>
+</tr>
+<tr class="border-b border-border-subtle bg-surface-main/30">
+<td class="py-3 px-3 align-top">
+<code class="font-code-md text-text-primary bg-surface-variant px-1 rounded-sm border border-border-muted">status</code>
+</td>
+<td class="py-3 px-3 align-top text-text-secondary font-code-md text-xs">string</td>
+<td class="py-3 px-3 align-top text-text-secondary">
+                                        Filter by workflow status. Valid options are <code class="font-code-md text-primary">active</code>, <code class="font-code-md text-warning">paused</code>, or <code class="font-code-md text-error">failed</code>.
+                                    </td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Endpoint: Create Workflow -->
+<div class="mb-12" id="create-workflow">
+<h2 class="font-headline-md text-headline-md text-text-primary mb-4 border-b border-border-subtle pb-2">Create a workflow</h2>
+<p class="font-body-md text-text-secondary mb-4">
+                        Creates a new automation workflow. You must provide a valid JSON configuration detailing the trigger and steps.
+                    </p>
+<!-- Endpoint URL Block -->
+<div class="bg-surface-card border border-border-subtle rounded-DEFAULT p-3 mb-6 flex items-center space-x-3">
+<span class="bg-surface-variant text-success font-code-md px-2 py-1 rounded-sm text-xs border border-border-muted font-bold">POST</span>
+<code class="font-code-md text-code-md text-text-primary flex-1">https://api.sync.dev/v2/workflows</code>
+</div>
+<!-- Body Parameters Table -->
+<h3 class="font-label-xs text-text-primary uppercase tracking-widest mb-3">Body Parameters</h3>
+<div class="border border-border-subtle rounded-DEFAULT overflow-hidden mb-8">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high border-b border-border-subtle">
+<th class="py-2 px-3 font-label-xs text-text-secondary">Parameter</th>
+<th class="py-2 px-3 font-label-xs text-text-secondary">Type</th>
+<th class="py-2 px-3 font-label-xs text-text-secondary">Description</th>
+</tr>
+</thead>
+<tbody class="font-body-sm">
+<tr class="border-b border-border-subtle">
+<td class="py-3 px-3 align-top">
+<div class="flex items-center space-x-2">
+<code class="font-code-md text-text-primary bg-surface-variant px-1 rounded-sm border border-border-muted">name</code>
+<span class="text-error text-[10px] font-bold uppercase">Required</span>
+</div>
+</td>
+<td class="py-3 px-3 align-top text-text-secondary font-code-md text-xs">string</td>
+<td class="py-3 px-3 align-top text-text-secondary">
+                                        The display name of the workflow. Max 128 characters.
+                                    </td>
+</tr>
+<tr class="border-b border-border-subtle bg-surface-main/30">
+<td class="py-3 px-3 align-top">
+<div class="flex items-center space-x-2">
+<code class="font-code-md text-text-primary bg-surface-variant px-1 rounded-sm border border-border-muted">trigger_type</code>
+<span class="text-error text-[10px] font-bold uppercase">Required</span>
+</div>
+</td>
+<td class="py-3 px-3 align-top text-text-secondary font-code-md text-xs">string</td>
+<td class="py-3 px-3 align-top text-text-secondary">
+                                        Defines how the workflow initiates. Must be <code class="font-code-md">webhook</code>, <code class="font-code-md">schedule</code>, or <code class="font-code-md">event</code>.
+                                    </td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+<!-- Right: Code Sample Pane -->
+<div class="w-[45%] bg-[#0e0e0e] flex flex-col border-l border-border-subtle">
+<!-- Sticky Request Block -->
+<div class="flex-1 flex flex-col p-4 space-y-4">
+<div class="bg-surface-card border border-border-muted rounded-lg overflow-hidden flex flex-col shadow-lg">
+<!-- Tabs -->
+<div class="flex border-b border-border-muted bg-[#141414]">
+<button class="px-4 py-2 font-code-md text-xs text-primary border-b-2 border-primary bg-surface-variant/30">cURL</button>
+<button class="px-4 py-2 font-code-md text-xs text-text-secondary hover:text-text-primary transition-colors">JavaScript</button>
+<button class="px-4 py-2 font-code-md text-xs text-text-secondary hover:text-text-primary transition-colors">Python</button>
+</div>
+<!-- Code Content Request -->
+<div class="p-4 bg-[#111111] overflow-x-auto relative group">
+<button class="absolute top-2 right-2 p-1.5 rounded-md bg-surface-variant border border-border-subtle text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+</button>
+<pre class="font-code-md text-[12px] leading-relaxed text-secondary-fixed-dim"><code><span class="token keyword">curl</span> -X GET \
+  <span class="token string">'https://api.sync.dev/v2/workflows?limit=10&amp;status=active'</span> \
+  -H <span class="token string">'Authorization: Bearer YOUR_API_KEY'</span> \
+  -H <span class="token string">'Content-Type: application/json'</span></code></pre>
+</div>
+</div>
+<!-- Sticky Response Block -->
+<div class="bg-surface-card border border-border-muted rounded-lg overflow-hidden flex flex-col shadow-lg mt-4">
+<!-- Header -->
+<div class="flex items-center justify-between px-4 py-2 border-b border-border-muted bg-[#141414]">
+<span class="font-label-xs text-text-secondary uppercase">Response</span>
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-success"></span>
+<span class="font-code-md text-xs text-success">200 OK</span>
+</div>
+</div>
+<!-- Code Content Response -->
+<div class="p-4 bg-[#111111] overflow-x-auto h-64 overflow-y-auto">
+<pre class="font-code-md text-[12px] leading-relaxed text-secondary-fixed-dim"><code>{
+  <span class="token string">"data"</span>: [
+    {
+      <span class="token string">"id"</span>: <span class="token string">"wf_8x99a2m..."</span>,
+      <span class="token string">"name"</span>: <span class="token string">"User Onboarding Sequence"</span>,
+      <span class="token string">"status"</span>: <span class="token string">"active"</span>,
+      <span class="token string">"trigger_type"</span>: <span class="token string">"event"</span>,
+      <span class="token string">"created_at"</span>: <span class="token string">"2023-10-24T14:32:00Z"</span>,
+      <span class="token string">"metrics"</span>: {
+        <span class="token string">"total_runs"</span>: 1245,
+        <span class="token string">"success_rate"</span>: 99.8
+      }
+    }
+  ],
+  <span class="token string">"meta"</span>: {
+    <span class="token string">"has_more"</span>: <span class="token keyword">true</span>,
+    <span class="token string">"next_cursor"</span>: <span class="token string">"cGFnZTE="</span>
+  }
+}</code></pre>
+</div>
+</div>
+</div>
+<!-- Aesthetic filler at bottom -->
+<div class="h-24 bg-gradient-to-t from-background to-transparent pointer-events-none mt-auto"></div>
+</div>
+</main>
+<script>
+        // Simple script to handle tab switching aesthetics visually (no complex logic needed for UI demo)
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Just a micro-interaction demo
+                this.classList.add('scale-95');
+                setTimeout(() => this.classList.remove('scale-95'), 150);
+            });
+        });
+    </script>
+</body></html>

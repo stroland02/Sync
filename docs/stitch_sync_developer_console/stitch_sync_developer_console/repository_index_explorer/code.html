@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - Repository Index Explorer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        @font-face {
+            font-family: 'ui-monospace';
+            src: local('Menlo'), local('Consolas'), local('Liberation Mono'), local('Courier New'), monospace;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-primary": "#006c45",
+                        "on-tertiary": "#003822",
+                        "status-serious-bg": "#391a0b",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#77fbb8",
+                        "surface-container": "#1f201f",
+                        "status-warning-ink": "#f2af48",
+                        "surface-popover": "#1b1d1c",
+                        "border-control": "#787a79",
+                        "surface-bright": "#393938",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "outline": "#86948a",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "status-critical-ink": "#fa8880",
+                        "secondary-container": "#454746",
+                        "status-critical-bg": "#541c15",
+                        "on-error-container": "#ffdad6",
+                        "on-surface": "#e4e2e0",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed": "#002112",
+                        "ink-muted": "#bcbdbc",
+                        "surface-container-low": "#1b1c1b",
+                        "surface-container-lowest": "#0d0e0d",
+                        "surface-container-highest": "#343534",
+                        "on-secondary": "#2f3130",
+                        "surface-container-high": "#292a29",
+                        "surface-dim": "#131413",
+                        "status-warning-bg": "#4a2900",
+                        "surface": "#131413",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "ink-secondary": "#989a99",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#30312f",
+                        "tertiary-fixed": "#71fcb6",
+                        "outline-variant": "#3d4a41",
+                        "inverse-surface": "#e4e2e0",
+                        "on-tertiary-container": "#005333",
+                        "on-primary": "#003822",
+                        "primary-fixed-dim": "#59de9d",
+                        "on-secondary-container": "#b5b5b3",
+                        "ink-primary": "#edefee",
+                        "background": "#131413",
+                        "primary-container": "#45cd8e",
+                        "on-primary-fixed": "#002112",
+                        "surface-card": "#181a19",
+                        "secondary-fixed": "#e2e3e0",
+                        "on-secondary-fixed-variant": "#454746",
+                        "on-background": "#e4e2e0",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "status-good-bg": "#00311d",
+                        "tertiary-container": "#3dce8d",
+                        "primary": "#65eaa8",
+                        "surface-tint": "#59de9d",
+                        "surface-variant": "#343534",
+                        "on-surface-variant": "#bccabe",
+                        "on-primary-fixed-variant": "#005233",
+                        "status-serious-ink": "#fd9565",
+                        "secondary": "#c6c7c5",
+                        "status-good-ink": "#85e0ba",
+                        "on-primary-container": "#005333",
+                        "tertiary": "#5feba7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-expanded": "240px",
+                        "grid-unit": "4px",
+                        "page-frame": "40px",
+                        "field-gap": "4px",
+                        "panel-gap": "32px",
+                        "topbar-height": "48px",
+                        "row-padding": "8px",
+                        "sidebar-collapsed": "48px"
+                    },
+                    "fontFamily": {
+                        "display": ["Manrope"],
+                        "body": ["Inter"],
+                        "mono-data": ["\"ui-monospace, monospace\""],
+                        "section-header": ["Manrope"],
+                        "emphasis": ["Inter"],
+                        "furniture": ["Inter"],
+                        "figure": ["Inter"],
+                        "page-header": ["Manrope"],
+                        "meta": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface h-screen w-screen overflow-hidden flex font-body text-body selection:bg-primary-container/30 selection:text-primary">
+<!-- SideNavBar -->
+<nav class="bg-surface-container-low w-sidebar-expanded h-full flex flex-col border-r border-border-low fixed left-0 top-0 bottom-0 z-50">
+<!-- Header -->
+<div class="h-topbar-height flex items-center px-4 border-b border-border-low">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">sync</span>
+</div>
+<div>
+<div class="font-display text-page-header font-bold text-primary">Sync</div>
+</div>
+</div>
+</div>
+<!-- Main Tabs -->
+<div class="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-3">
+<div class="px-3 mb-2 font-meta text-meta text-ink-muted uppercase tracking-wider">Menu</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Active Tab: Integrations (closest to Repository Index Explorer) -->
+<a class="flex items-center gap-3 px-3 py-2 rounded bg-primary-container/10 text-primary font-emphasis border-r-2 border-primary active:translate-y-px" href="#">
+<span class="material-symbols-outlined">hub</span>
+<span>Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">healing</span>
+<span>Self-Healing Queue</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">query_stats</span>
+<span>Telemetry/Traces</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">key</span>
+<span>API Keys</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</div>
+<!-- Footer -->
+<div class="p-4 border-t border-border-low flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">description</span>
+<span>Docs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined">help_outline</span>
+<span>Support</span>
+</a>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="bg-surface h-topbar-height w-full border-b border-border-low fixed top-0 right-0 left-sidebar-expanded z-40 flex items-center justify-between px-page-frame">
+<div class="flex items-center gap-4">
+<!-- Search placeholder -->
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-[16px]">search</span>
+<input class="w-full bg-surface-container-highest border border-border-low rounded pl-8 pr-3 py-1 text-body font-body text-ink-primary focus:outline-none focus:border-border-control placeholder:text-ink-muted" placeholder="Search resources..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<!-- Primary Action -->
+<div class="flex items-center gap-2 px-3 py-1 rounded-full bg-status-good-bg text-status-good-ink font-furniture text-furniture">
+<div class="w-2 h-2 rounded-full bg-status-good-ink animate-pulse"></div>
+                System Healthy
+            </div>
+<!-- Actions -->
+<div class="flex items-center gap-2 text-ink-secondary">
+<button class="w-8 h-8 rounded flex items-center justify-center hover:bg-white/5 transition-colors duration-0 active:translate-y-px text-ink-secondary">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 rounded flex items-center justify-center hover:bg-white/5 transition-colors duration-0 active:translate-y-px text-ink-secondary">
+<span class="material-symbols-outlined text-[20px]">terminal</span>
+</button>
+</div>
+<!-- Profile -->
+<div class="w-7 h-7 rounded-full bg-surface-container-highest overflow-hidden border border-border-low cursor-pointer hover:border-border-control transition-colors duration-0">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMOYGTq8vEnMd-9UYWlyoYEUxvpDKzuiUzXkqtD7zjDg1jejuE2-uGbI4PQyyD4p9KkRl_VefgOKTf3yPC877dgNkhV9NSyq61FrNJWn0i9XrWrxBzfmVyxEBEIL_NTKSehYhQWXXIBJJdD8331tu2jhwyNWOO_SDKkBPoMeKavm5XTnInVitK3kGte6OADuJO2kMwW3suced7hL7leZRow7yAo4Sn8T_o8eFJ7yCq8cts2liyH2Bl"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="fixed top-topbar-height right-0 bottom-0 left-sidebar-expanded overflow-hidden flex flex-col p-page-frame gap-6 bg-background">
+<!-- Header -->
+<div class="flex flex-col gap-1 shrink-0">
+<h1 class="font-section-header text-section-header text-ink-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">folder_open</span>
+                Repository Index Explorer
+            </h1>
+<p class="font-body text-body text-ink-secondary">Code-level inspection of monitored integration call sites across the watched repository.</p>
+</div>
+<!-- Three-Pane Layout -->
+<div class="flex-1 min-h-0 flex gap-grid-unit w-full">
+<!-- Left Pane: File Tree -->
+<div class="w-64 bg-surface-card border border-border-low rounded flex flex-col overflow-hidden shrink-0">
+<div class="h-8 bg-surface-container flex items-center px-3 border-b border-border-low font-furniture text-furniture text-ink-secondary uppercase tracking-wider shrink-0">
+                    Project Structure
+                </div>
+<div class="flex-1 overflow-y-auto p-2 font-mono-data text-mono-data text-ink-secondary flex flex-col gap-1">
+<div class="flex items-center gap-2 py-1 px-2 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0">
+<span class="material-symbols-outlined text-[16px]">folder_open</span>
+<span class="text-ink-primary">src/</span>
+</div>
+<div class="flex items-center gap-2 py-1 px-2 pl-6 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>api/</span>
+</div>
+<div class="flex items-center gap-2 py-1 px-2 pl-10 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0">
+<span class="material-symbols-outlined text-[16px] text-tertiary">description</span>
+<span>stripe_client.ts</span>
+</div>
+<div class="flex items-center gap-2 py-1 px-2 pl-10 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0 bg-primary/5 text-primary border border-primary/20">
+<span class="material-symbols-outlined text-[16px]">description</span>
+<span>github_sync.ts</span>
+</div>
+<div class="flex items-center gap-2 py-1 px-2 pl-6 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>models/</span>
+</div>
+<div class="flex items-center gap-2 py-1 px-2 pl-6 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>utils/</span>
+</div>
+<div class="flex items-center gap-2 py-1 px-2 hover:bg-surface-container rounded cursor-pointer transition-colors duration-0">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>tests/</span>
+</div>
+</div>
+</div>
+<!-- Center Pane: Call Sites Table -->
+<div class="flex-1 bg-surface-card border border-border-low rounded flex flex-col overflow-hidden min-w-[400px]">
+<div class="h-8 bg-surface-container flex items-center justify-between px-3 border-b border-border-low font-furniture text-furniture text-ink-secondary uppercase tracking-wider shrink-0">
+<span>Watched Call Sites (src/api/github_sync.ts)</span>
+<span class="bg-surface-container-highest px-2 py-0.5 rounded text-ink-primary">4 Sites</span>
+</div>
+<div class="flex-1 overflow-auto">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-surface-container-low font-furniture text-furniture text-ink-muted border-b border-border-low">
+<tr>
+<th class="py-2 px-3 font-medium">Line</th>
+<th class="py-2 px-3 font-medium">Integration</th>
+<th class="py-2 px-3 font-medium">Method</th>
+<th class="py-2 px-3 font-medium">Sensitivity</th>
+<th class="py-2 px-3 font-medium">Status</th>
+</tr>
+</thead>
+<tbody class="font-mono-data text-mono-data text-ink-secondary divide-y divide-border-low">
+<!-- Row 1 (Active/Selected) -->
+<tr class="bg-primary/5 hover:bg-surface-container transition-colors duration-0 cursor-pointer group">
+<td class="py-2 px-3 text-primary">#42</td>
+<td class="py-2 px-3 text-ink-primary">GitHub REST</td>
+<td class="py-2 px-3">octokit.repos.get</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1 text-status-warning-ink">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                                        High
+                                    </div>
+</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-[14px] animate-spin">refresh</span>
+                                        Verifying
+                                    </div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container transition-colors duration-0 cursor-pointer group">
+<td class="py-2 px-3">#89</td>
+<td class="py-2 px-3 text-ink-primary">GitHub GraphQL</td>
+<td class="py-2 px-3">client.query</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1 text-ink-muted">
+<span class="material-symbols-outlined text-[14px]">info</span>
+                                        Low
+                                    </div>
+</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1.5 text-status-good-ink">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                        Verified
+                                    </div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container transition-colors duration-0 cursor-pointer group">
+<td class="py-2 px-3">#115</td>
+<td class="py-2 px-3 text-ink-primary">GitHub Webhook</td>
+<td class="py-2 px-3">webhooks.verifyAndReceive</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1 text-status-critical-ink">
+<span class="material-symbols-outlined text-[14px]">error</span>
+                                        Critical
+                                    </div>
+</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1.5 text-status-good-ink">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                        Verified
+                                    </div>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container transition-colors duration-0 cursor-pointer group">
+<td class="py-2 px-3">#156</td>
+<td class="py-2 px-3 text-ink-primary">Slack API</td>
+<td class="py-2 px-3">app.client.chat.postMessage</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1 text-ink-muted">
+<span class="material-symbols-outlined text-[14px]">info</span>
+                                        Low
+                                    </div>
+</td>
+<td class="py-2 px-3">
+<div class="flex items-center gap-1.5 text-status-good-ink">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                        Verified
+                                    </div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Right Pane: Code Preview -->
+<div class="w-[450px] bg-surface-card border border-border-low rounded flex flex-col overflow-hidden shrink-0">
+<div class="h-8 bg-surface-container flex items-center justify-between px-3 border-b border-border-low shrink-0">
+<span class="font-furniture text-furniture text-ink-secondary uppercase tracking-wider">Preview (Line 42)</span>
+<button class="text-ink-secondary hover:text-ink-primary transition-colors">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="flex-1 bg-[#0d0e0d] p-4 overflow-auto font-mono-data text-[13px] leading-relaxed text-ink-muted flex">
+<!-- Line Numbers -->
+<div class="flex flex-col text-right pr-4 border-r border-border-low/50 select-none opacity-50">
+<span>40</span>
+<span>41</span>
+<span class="text-primary font-bold opacity-100">42</span>
+<span>43</span>
+<span>44</span>
+<span>45</span>
+<span>46</span>
+<span>47</span>
+</div>
+<!-- Code Content -->
+<div class="flex flex-col pl-4 whitespace-pre">
+<span><span class="text-tertiary">async</span> <span class="text-primary">function</span> fetchRepoDetails(owner: <span class="text-tertiary">string</span>, repo: <span class="text-tertiary">string</span>) {</span>
+<span> <span class="text-tertiary">try</span> {</span>
+<div class="relative group">
+<!-- Highlighted Line Background -->
+<div class="absolute -inset-x-2 inset-y-0 bg-primary/10 border-l-2 border-primary pointer-events-none"></div>
+<span class="relative z-10"> <span class="text-primary">const</span> response = <span class="text-tertiary">await</span> octokit.repos.get({</span>
+</div>
+<span>      owner,</span>
+<span>      repo,</span>
+<span>    });</span>
+<span> <span class="text-tertiary">return</span> response.data;</span>
+<span>  } <span class="text-tertiary">catch</span> (error) {</span>
+</div>
+</div>
+<!-- Telemetry overlay below code -->
+<div class="h-32 border-t border-border-low bg-surface-container-low p-3 flex flex-col gap-2 shrink-0">
+<div class="font-furniture text-furniture text-ink-secondary uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">monitoring</span>
+                        Call Site Telemetry
+                    </div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<span class="font-meta text-[10px] text-ink-muted">P95 LATENCY</span>
+<span class="font-mono-data text-mono-data text-ink-primary">124ms</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-meta text-[10px] text-ink-muted">ERROR RATE (1H)</span>
+<span class="font-mono-data text-mono-data text-status-good-ink">0.02%</span>
+</div>
+<div class="flex flex-col gap-1 col-span-2">
+<span class="font-meta text-[10px] text-ink-muted">LAST OBSERVED</span>
+<span class="font-mono-data text-mono-data text-ink-secondary">2023-10-27 14:32:01 UTC</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

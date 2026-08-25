@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Self-Healing Incident Inspector</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&amp;family=Manrope:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary": "#5feba7",
+                        "on-secondary-fixed-variant": "#454746",
+                        "on-surface-variant": "#bccabe",
+                        "inverse-on-surface": "#30312f",
+                        "on-primary-container": "#005333",
+                        "on-secondary-container": "#b5b5b3",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "surface-container-low": "#1b1c1b",
+                        "status-serious-bg": "#391a0b",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-lowest": "#0d0e0d",
+                        "error": "#ffb4ab",
+                        "surface-container": "#1f201f",
+                        "secondary": "#c6c7c5",
+                        "primary-fixed-dim": "#59de9d",
+                        "surface-container-high": "#292a29",
+                        "status-warning-ink": "#f2af48",
+                        "ink-muted": "#bcbdbc",
+                        "primary-container": "#45cd8e",
+                        "primary-fixed": "#77fbb8",
+                        "status-good-bg": "#00311d",
+                        "background": "#131413",
+                        "on-surface": "#e4e2e0",
+                        "on-background": "#e4e2e0",
+                        "error-container": "#93000a",
+                        "on-error": "#690005",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                        "outline": "#86948a",
+                        "secondary-container": "#454746",
+                        "on-tertiary-fixed": "#002112",
+                        "surface-dim": "#131413",
+                        "border-control": "#787a79",
+                        "surface-bright": "#393938",
+                        "primary": "#65eaa8",
+                        "secondary-fixed": "#e2e3e0",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "on-primary-fixed": "#002112",
+                        "status-critical-bg": "#541c15",
+                        "on-secondary": "#2f3130",
+                        "status-warning-bg": "#4a2900",
+                        "on-primary-fixed-variant": "#005233",
+                        "surface-popover": "#1b1d1c",
+                        "on-primary": "#003822",
+                        "status-serious-ink": "#fd9565",
+                        "outline-variant": "#3d4a41",
+                        "tertiary-container": "#3dce8d",
+                        "surface-variant": "#343534",
+                        "surface-tint": "#59de9d",
+                        "on-tertiary": "#003822",
+                        "ink-secondary": "#989a99",
+                        "tertiary-fixed": "#71fcb6",
+                        "surface-container-highest": "#343534",
+                        "ink-primary": "#edefee",
+                        "surface": "#131413",
+                        "status-critical-ink": "#fa8880",
+                        "inverse-primary": "#006c45",
+                        "surface-card": "#181a19",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "on-tertiary-container": "#005333",
+                        "inverse-surface": "#e4e2e0",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "status-good-ink": "#85e0ba"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "topbar-height": "48px",
+                        "grid-unit": "4px",
+                        "field-gap": "4px",
+                        "row-padding": "8px",
+                        "page-frame": "40px",
+                        "panel-gap": "32px",
+                        "sidebar-collapsed": "48px",
+                        "sidebar-expanded": "240px"
+                    },
+                    "fontFamily": {
+                        "furniture": ["Inter"],
+                        "emphasis": ["Inter"],
+                        "figure": ["Inter"],
+                        "mono-data": ["\"ui-monospace, monospace\""],
+                        "section-header": ["Manrope"],
+                        "display": ["Manrope"],
+                        "body": ["Inter"],
+                        "meta": ["Inter"],
+                        "page-header": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .shadow-float {
+            box-shadow: 0 0 0 1px oklch(0.95 0.001485 159 / 7.51%), 0 24px 48px -12px rgba(0, 0, 0, 0.72);
+        }
+        /* Custom scrollbar for trace logs */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #343534;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #454746;
+        }
+        @keyframes pulse-emerald {
+            0% { box-shadow: 0 0 0 0 rgba(101, 234, 168, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(101, 234, 168, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(101, 234, 168, 0); }
+        }
+        .pulse-breathing {
+            animation: pulse-emerald 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen overflow-hidden flex font-body">
+<!-- Top Navigation (Shell logic implies hiding for focused tasks, but we show a minimized version or background for context) -->
+<div class="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" id="backdrop"></div>
+<!-- Slide-Over Sheet -->
+<div class="fixed inset-y-0 right-0 z-50 w-full max-w-[1200px] bg-surface-popover shadow-float flex flex-col transform transition-transform duration-300 translate-x-0" id="slide-over">
+<!-- Header -->
+<div class="flex-none px-6 py-4 border-b border-outline-variant bg-surface-container-low flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-3">
+<span class="px-2 py-0.5 rounded-sm bg-status-critical-bg text-status-critical-ink font-furniture text-furniture flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">error</span>
+                        Breaking Change Detected
+                    </span>
+<h2 class="font-section-header text-section-header text-on-surface">Incident #7742</h2>
+</div>
+<div class="flex items-center gap-4 text-ink-secondary font-mono-data text-mono-data mt-2">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">api</span>
+                        Endpoint: /v1/users/profile
+                    </span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                        2 mins ago
+                    </span>
+</div>
+</div>
+<button aria-label="Close panel" class="text-ink-secondary hover:text-on-surface transition-colors p-1 rounded hover:bg-surface-container-high">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Split Content Area -->
+<div class="flex-1 overflow-hidden flex flex-col lg:flex-row">
+<!-- Left Panel: Evidence Timeline -->
+<div class="w-full lg:w-5/12 flex flex-col border-r border-outline-variant bg-surface-dim">
+<div class="px-4 py-3 border-b border-outline-variant bg-surface-container-low flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-ink-muted">history</span>
+<h3 class="font-furniture text-furniture text-ink-primary uppercase tracking-wider">Evidence Timeline</h3>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-0 relative">
+<!-- Timeline Line -->
+<div class="absolute left-[39px] top-6 bottom-6 w-[2px] bg-outline-variant z-0"></div>
+<!-- Timeline Item 1: Detected -->
+<div class="relative z-10 flex gap-4 mb-8">
+<div class="flex-none w-8 h-8 rounded-full bg-surface-container-high border-2 border-outline-variant flex items-center justify-center mt-1">
+<span class="material-symbols-outlined text-[16px] text-ink-muted">visibility</span>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-ink-primary">Detected Anomaly</span>
+<span class="font-mono-data text-[10px] text-ink-secondary">10:12:04 AM</span>
+</div>
+<div class="bg-background border border-outline-variant rounded-DEFAULT overflow-hidden">
+<div class="bg-surface-container-low border-b border-outline-variant px-3 py-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-ink-secondary">speed</span>
+<span class="font-furniture text-furniture text-ink-secondary">OpenTelemetry Trace</span>
+</div>
+<div class="p-3 font-mono-data text-mono-data text-ink-muted flex flex-col gap-1">
+<div class="flex items-center justify-between h-[24px] rounded cursor-default transition-colors">
+<span><span class="text-tertiary">GET</span> /v1/users/profile</span>
+<span class="text-ink-secondary">24ms</span>
+</div>
+<div class="flex items-center justify-between h-[24px] rounded cursor-default transition-colors pl-4 border-l-2 border-outline-variant ml-2">
+<span>AuthMiddleware.verifyToken</span>
+<span class="text-ink-secondary">4ms</span>
+</div>
+<div class="flex items-center justify-between bg-status-critical-bg/20 text-status-critical-ink h-[24px] rounded cursor-default pl-4 border-l-2 border-status-critical-ink ml-2">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                        Database.Query(User)
+                    </span>
+<span>500 ERROR</span>
+</div>
+<div class="text-status-critical-ink opacity-80 pl-8 pt-1 text-[11px] leading-tight">
+                    error: unexpected field type for 'middle_name'. expected string, received object.
+                </div>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item 2: Analyzed -->
+<div class="relative z-10 flex gap-4 mb-8">
+<div class="flex-none w-8 h-8 rounded-full bg-surface-container-high border-2 border-outline-variant flex items-center justify-center mt-1">
+<span class="material-symbols-outlined text-[16px] text-ink-muted">search</span>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-ink-primary">Analyzed Deployment</span>
+<span class="font-mono-data text-[10px] text-ink-secondary">10:12:05 AM</span>
+</div>
+<div class="bg-background border border-outline-variant rounded-DEFAULT overflow-hidden">
+<div class="bg-surface-container-low border-b border-outline-variant px-3 py-2 flex items-center gap-2 justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-ink-secondary">difference</span>
+<span class="font-furniture text-furniture text-ink-secondary">Schema Diff (Latest Deployment)</span>
+</div>
+<span class="font-mono-data text-[11px] text-ink-muted">models/user.ts</span>
+</div>
+<div class="p-3 flex flex-col font-mono-data text-mono-data">
+<div class="flex text-ink-muted opacity-50 h-[24px] items-center"><span class="w-8 text-right pr-3 select-none">42</span><span>  first_name: string;</span></div>
+<div class="flex bg-status-critical-bg/30 text-error h-[24px] items-center"><span class="w-8 text-right pr-3 select-none opacity-50">43</span><span>- middle_name?: string;</span></div>
+<div class="flex bg-status-good-bg/30 text-primary-fixed-dim h-[24px] items-center"><span class="w-8 text-right pr-3 select-none opacity-50">43</span><span>+ middle_name?: { initial: string, full?: string };</span></div>
+<div class="flex text-ink-muted opacity-50 h-[24px] items-center"><span class="w-8 text-right pr-3 select-none">44</span><span>  last_name: string;</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item 3: Root Cause -->
+<div class="relative z-10 flex gap-4">
+<div class="flex-none w-8 h-8 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center mt-1">
+<span class="material-symbols-outlined text-[16px] text-primary">psychiatry</span>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="font-furniture text-furniture text-primary">Root Cause Identified</span>
+<span class="font-mono-data text-[10px] text-ink-secondary">10:12:08 AM</span>
+</div>
+<p class="font-body text-body text-ink-muted bg-surface-container border border-outline-variant rounded p-3">
+            Database migration v4.2 changed `middle_name` from primitive string to object structure, but Zod validation schema was not updated to match, causing 500 errors on profile fetch.
+        </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Panel: AI Remediation Feed -->
+<div class="w-full lg:w-7/12 flex flex-col bg-surface-card">
+<div class="px-4 py-3 border-b border-outline-variant bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-tertiary">smart_toy</span>
+<h3 class="font-furniture text-furniture text-ink-primary uppercase tracking-wider">AI Remediation Feed</h3>
+</div>
+<span class="px-2 py-0.5 rounded-sm bg-status-warning-bg text-status-warning-ink font-furniture text-furniture flex items-center gap-2 border border-status-warning-ink/30 pulse-breathing">
+<span class="w-2 h-2 rounded-full bg-status-warning-ink"></span>
+                        Agent Active
+                    </span>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-6">
+<!-- Proposed Fix Card -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-5 flex flex-col gap-4 relative overflow-hidden shadow-sm">
+<div class="absolute -right-10 -top-10 w-40 h-40 bg-primary/5 rounded-full blur-3xl"></div>
+<div class="flex items-center gap-2 pb-3 border-b border-outline-variant/50">
+<span class="material-symbols-outlined text-primary text-[20px]">auto_awesome</span>
+<h4 class="font-emphasis text-emphasis text-on-surface">Proposed Fix</h4>
+</div>
+<p class="font-body text-body text-ink-muted">
+        Updating the Zod validation schema in <code>schemas/user.schema.ts</code> to reflect the new object structure for `middle_name`.
+    </p>
+<div class="bg-background border border-outline-variant rounded-DEFAULT overflow-hidden">
+<div class="bg-surface-container-lowest border-b border-outline-variant px-3 py-2 flex items-center justify-between">
+<span class="font-mono-data text-[11px] text-ink-secondary">schemas/user.schema.ts</span>
+<button class="text-ink-secondary hover:text-on-surface"><span class="material-symbols-outlined text-[14px]">content_copy</span></button>
+</div>
+<div class="p-4 font-mono-data text-mono-data overflow-x-auto text-ink-muted leading-relaxed">
+<pre><code><span class="text-tertiary">const</span> UserSchema = z.object({
+  first_name: z.string(),
+<span class="bg-status-good-bg/20 text-primary-fixed-dim rounded px-1 -mx-1 inline-block w-full border-l-2 border-status-good-ink">  middle_name: z.object({
+    initial: z.string().max(1),
+    full: z.string().optional()
+  }).optional(),</span>
+  last_name: z.string()
+});</code></pre>
+</div>
+</div>
+</div>
+<!-- Verification Results Card -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-5 flex flex-col gap-4 shadow-sm">
+<div class="flex items-center gap-2 pb-3 border-b border-outline-variant/50">
+<span class="material-symbols-outlined text-ink-primary text-[20px]">science</span>
+<h4 class="font-emphasis text-emphasis text-on-surface">Verification Results</h4>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-surface-container-highest border border-outline-variant rounded p-3 flex flex-col gap-1">
+<span class="font-furniture text-furniture text-ink-muted">Unit Tests</span>
+<div class="flex items-center justify-between mt-1">
+<span class="text-status-good-ink flex items-center gap-1 font-furniture text-[13px]"><span class="material-symbols-outlined text-[16px]">check_circle</span> Passed</span>
+<span class="font-mono-data text-[11px] text-ink-secondary">142/142</span>
+</div>
+</div>
+<div class="bg-surface-container-highest border border-outline-variant rounded p-3 flex flex-col gap-1">
+<span class="font-furniture text-furniture text-ink-muted">Type Check</span>
+<div class="flex items-center justify-between mt-1">
+<span class="text-status-good-ink flex items-center gap-1 font-furniture text-[13px]"><span class="material-symbols-outlined text-[16px]">check_circle</span> Passed</span>
+<span class="font-mono-data text-[11px] text-ink-secondary">tsc --noEmit</span>
+</div>
+</div>
+</div>
+<div class="bg-status-good-bg/10 border border-status-good-ink/20 rounded p-3 flex items-center justify-between">
+<span class="font-furniture text-furniture text-primary-fixed-dim">Overall Agent Confidence</span>
+<div class="flex items-center gap-2">
+<div class="w-32 h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-status-good-ink w-full"></div>
+</div>
+<span class="font-mono-data text-mono-data text-status-good-ink">98%</span>
+</div>
+</div>
+</div>
+<!-- Implementation Status Card -->
+<div class="bg-surface-container border border-outline-variant rounded-lg p-5 flex flex-col gap-3 shadow-sm border-dashed">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-ink-muted text-[20px]">pending_actions</span>
+<h4 class="font-emphasis text-emphasis text-ink-muted">Implementation Status</h4>
+</div>
+<div class="flex items-center gap-3 text-ink-secondary font-body text-body ml-7">
+<span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
+        Awaiting user approval to apply fix and generate PR...
+    </div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="flex-none px-6 py-4 border-t border-outline-variant bg-surface-container flex items-center justify-between">
+<button class="h-[36px] px-4 font-furniture text-furniture text-ink-secondary hover:text-on-surface hover:bg-surface-container-highest rounded transition-all active:translate-y-[1px] border border-outline-variant">
+                Dismiss
+            </button>
+<div class="flex items-center gap-3">
+<button class="h-[36px] px-4 font-furniture text-furniture text-on-surface hover:bg-surface-container-highest rounded transition-all active:translate-y-[1px] border border-outline-variant bg-surface-container-low">
+                    Escalate to On-Call
+                </button>
+<button class="h-[36px] px-5 font-furniture text-furniture bg-primary text-on-primary hover:bg-primary-fixed rounded transition-all active:translate-y-[1px] shadow-[0_0_15px_rgba(101,234,168,0.25)] flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">check</span>
+                    Apply Fix &amp; Deploy
+                </button>
+</div>
+</div>
+</div>
+</body></html>

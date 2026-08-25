@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - API Keys</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600&amp;family=Inter:wght@400;450;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "status-good-ink": "#85e0ba",
+                        "tertiary": "#5feba7",
+                        "on-background": "#e4e2e0",
+                        "surface-container-low": "#1b1c1b",
+                        "error": "#ffb4ab",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                        "on-error": "#690005",
+                        "surface-dim": "#131413",
+                        "inverse-surface": "#e4e2e0",
+                        "on-surface": "#e4e2e0",
+                        "status-critical-ink": "#fa8880",
+                        "primary-fixed": "#77fbb8",
+                        "secondary-container": "#454746",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "ink-primary": "#edefee",
+                        "primary-fixed-dim": "#59de9d",
+                        "primary-container": "#45cd8e",
+                        "surface-container-lowest": "#0d0e0d",
+                        "surface": "#131413",
+                        "status-critical-bg": "#541c15",
+                        "outline-variant": "#3d4a41",
+                        "surface-tint": "#59de9d",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "secondary": "#c6c7c5",
+                        "surface-container-highest": "#343534",
+                        "status-serious-bg": "#391a0b",
+                        "on-primary": "#003822",
+                        "ink-secondary": "#989a99",
+                        "status-serious-ink": "#fd9565",
+                        "on-error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "inverse-primary": "#006c45",
+                        "on-secondary": "#2f3130",
+                        "on-tertiary-fixed": "#002112",
+                        "background": "#131413",
+                        "tertiary-fixed": "#71fcb6",
+                        "on-primary-container": "#005333",
+                        "border-control": "#787a79",
+                        "status-warning-ink": "#f2af48",
+                        "outline": "#86948a",
+                        "status-good-bg": "#00311d",
+                        "on-primary-fixed": "#002112",
+                        "surface-card": "#181a19",
+                        "surface-container-high": "#292a29",
+                        "tertiary-container": "#3dce8d",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "surface-variant": "#343534",
+                        "on-secondary-fixed-variant": "#454746",
+                        "secondary-fixed": "#e2e3e0",
+                        "inverse-on-surface": "#30312f",
+                        "on-tertiary": "#003822",
+                        "error-container": "#93000a",
+                        "ink-muted": "#bcbdbc",
+                        "on-secondary-container": "#b5b5b3",
+                        "primary": "#65eaa8",
+                        "on-primary-fixed-variant": "#005233",
+                        "surface-container": "#1f201f",
+                        "surface-popover": "#1b1d1c",
+                        "on-tertiary-container": "#005333",
+                        "on-surface-variant": "#bccabe",
+                        "status-warning-bg": "#4a2900",
+                        "surface-bright": "#393938"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-expanded": "240px",
+                        "panel-gap": "32px",
+                        "row-padding": "8px",
+                        "page-frame": "40px",
+                        "topbar-height": "48px",
+                        "field-gap": "4px",
+                        "sidebar-collapsed": "48px",
+                        "grid-unit": "4px"
+                    },
+                    "fontFamily": {
+                        "emphasis": ["Inter"],
+                        "furniture": ["Inter"],
+                        "figure": ["Inter"],
+                        "meta": ["Inter"],
+                        "body": ["Inter"],
+                        "section-header": ["Manrope"],
+                        "page-header": ["Manrope"],
+                        "mono-data": ["\"ui-monospace, monospace\""],
+                        "display": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Base styles from design system */
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        .shadow-float {
+            box-shadow: 0 0 0 1px theme('colors.border-low'), 0 8px 16px -4px rgba(0, 0, 0, 0.72);
+        }
+
+        /* Utility for 1px baseline grid */
+        .baseline-grid {
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 100% 4px;
+        }
+    </style>
+</head>
+<body class="antialiased font-body text-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- App Container -->
+<div class="flex h-screen overflow-hidden bg-background">
+<!-- SideNavBar (from JSON) -->
+<aside class="fixed left-0 top-0 h-full z-40 overflow-y-auto flex flex-col bg-surface-container-low border-r border-outline-variant w-sidebar-expanded hidden md:flex">
+<!-- Header -->
+<div class="h-topbar-height flex items-center px-4 shrink-0 border-b border-border-low">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px] text-on-primary font-bold">sync</span>
+</div>
+<div class="flex flex-col">
+<span class="font-display text-[16px] leading-tight font-bold text-primary">Sync</span>
+<span class="font-furniture text-[10px] text-ink-secondary uppercase tracking-wider">API Automation</span>
+</div>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex-1 py-4 px-2 space-y-1 overflow-y-auto font-furniture text-furniture">
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] text-ink-secondary group-hover:text-on-surface transition-colors" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] text-ink-secondary group-hover:text-on-surface transition-colors" data-icon="api">api</span>
+<span>Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] text-ink-secondary group-hover:text-on-surface transition-colors" data-icon="healing">healing</span>
+<span>Self-Healing Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] text-ink-secondary group-hover:text-on-surface transition-colors" data-icon="analytics">analytics</span>
+<span>Telemetry/Traces</span>
+</a>
+<!-- ACTIVE TAB -->
+<a class="flex items-center gap-3 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg group active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] text-on-primary-container" data-icon="vpn_key" data-weight="fill" style="font-variation-settings: 'FILL' 1;">vpn_key</span>
+<span class="font-bold">API Keys</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] text-ink-secondary group-hover:text-on-surface transition-colors" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<!-- User Profile (Bottom) -->
+<div class="p-4 border-t border-border-low shrink-0 flex items-center gap-3">
+<img alt="Sync Platform Logo" class="w-8 h-8 rounded-full object-cover border border-outline-variant bg-surface-container-high" data-alt="A stylized, high-contrast, minimalist avatar icon with a dark background and a subtle glowing green geometric element, representing a developer user profile in a highly technical dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5OszfPNYpGiBekn3HJRcsWJnqAGAvrjqoYw7AoEkdn6DSSfi5dxAqB51hBmG9502Zd6p3LPH9YRD4abRECG3v78JFvSN09_ZZ0FmJiPT7AS8uveUY16OeATC7vuOzqPlAPfC2RRHvTYDa7k3Jc6Fg0p0orOJZemPcQSd3fTmGdW7Z7XhxleZxfN6DmDlqRnTtc7aaLvqnLr7K7fHZstIX3RlG1_U_P_pX6HPH7nBWQd33SgAdE1Yn"/>
+<div class="flex flex-col min-w-0">
+<span class="font-furniture text-furniture text-on-surface truncate">sysadmin@sync.io</span>
+<span class="font-meta text-[10px] text-ink-secondary truncate">Workspace Admin</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col md:ml-sidebar-expanded relative min-w-0 bg-background">
+<!-- TopAppBar (from JSON) -->
+<header class="h-topbar-height shrink-0 bg-surface-container border-b border-outline-variant flex items-center justify-between px-page-frame sticky top-0 z-30">
+<!-- Left: Environment/Context -->
+<div class="flex items-center h-full">
+<nav aria-label="Environment Tabs" class="flex h-full">
+<a class="h-full flex items-center px-4 font-furniture text-ink-secondary hover:text-on-surface transition-colors duration-0 border-b-2 border-transparent hover:border-border-low" href="#">
+                            Production
+                        </a>
+<a class="h-full flex items-center px-4 text-primary font-emphasis border-b-2 border-primary active:translate-y-[1px] duration-0" href="#">
+                            Staging
+                        </a>
+</nav>
+</div>
+<!-- Right: Actions & Tools -->
+<div class="flex items-center gap-4">
+<!-- Search -->
+<div class="relative hidden lg:block w-48">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-ink-secondary text-[16px]" data-icon="search">search</span>
+<input class="w-full h-8 pl-8 pr-3 bg-surface border border-control rounded text-furniture text-on-surface placeholder:text-ink-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Search keys..." type="text"/>
+</div>
+<!-- Icon Actions -->
+<div class="flex items-center gap-1">
+<button aria-label="Notifications" class="w-8 h-8 flex items-center justify-center text-ink-secondary hover:text-on-surface hover:bg-surface-container-high rounded transition-colors active:translate-y-[1px] duration-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<button aria-label="Help" class="w-8 h-8 flex items-center justify-center text-ink-secondary hover:text-on-surface hover:bg-surface-container-high rounded transition-colors active:translate-y-[1px] duration-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<!-- Primary Action -->
+<button class="h-8 px-4 bg-primary text-on-primary font-emphasis text-[13px] rounded hover:bg-primary-fixed-dim transition-colors active:translate-y-[1px] duration-0 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+                        Deploy Agent
+                    </button>
+</div>
+</header>
+<!-- Page Canvas -->
+<div class="flex-1 overflow-y-auto p-page-frame">
+<div class="max-w-[1200px] mx-auto space-y-panel-gap">
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+<div>
+<h1 class="font-page-header text-page-header text-on-surface">API Keys</h1>
+<p class="font-body text-body text-ink-secondary mt-1 max-w-2xl">Manage authentication tokens for external services and automation scripts accessing the Sync API. Keep these secure.</p>
+</div>
+<button class="h-8 px-4 bg-primary text-on-primary font-emphasis text-[13px] rounded hover:bg-primary-fixed-dim transition-colors active:translate-y-[1px] duration-0 flex items-center gap-2 shrink-0">
+<span class="material-symbols-outlined text-[16px]" data-icon="key">key</span>
+                            Create New Key
+                        </button>
+</div>
+<!-- Info Alert Banner -->
+<div class="bg-surface-container-low border border-border-low rounded flex items-start gap-3 p-4">
+<span class="material-symbols-outlined text-primary shrink-0 mt-0.5" data-icon="info">info</span>
+<div>
+<h4 class="font-furniture text-furniture text-on-surface font-semibold">Key Rotation Policy</h4>
+<p class="font-meta text-meta text-ink-secondary mt-1">Staging environment keys should be rotated every 30 days. Active sessions will be forcefully terminated upon revocation.</p>
+</div>
+</div>
+<!-- Keys Table Card -->
+<div class="bg-surface-card rounded border border-border-low overflow-hidden flex flex-col">
+<!-- Table Header Actions/Filters -->
+<div class="px-4 py-3 border-b border-border-low flex items-center justify-between bg-surface-container-lowest/50">
+<div class="flex items-center gap-2 font-furniture text-furniture">
+<span class="text-ink-secondary">Showing</span>
+<span class="text-on-surface font-semibold px-2 py-0.5 bg-surface-container rounded border border-outline-variant">Active (3)</span>
+<span class="text-ink-secondary cursor-pointer hover:text-on-surface transition-colors">Revoked (12)</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center text-ink-secondary hover:text-on-surface hover:bg-surface-container-high rounded border border-control transition-colors active:translate-y-[1px] duration-0">
+<span class="material-symbols-outlined text-[16px]" data-icon="filter_list">filter_list</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center text-ink-secondary hover:text-on-surface hover:bg-surface-container-high rounded border border-control transition-colors active:translate-y-[1px] duration-0">
+<span class="material-symbols-outlined text-[16px]" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+<!-- Data Grid -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse whitespace-nowrap">
+<thead>
+<tr class="bg-surface-container font-furniture text-[11px] text-ink-secondary uppercase tracking-wider border-b border-border-low">
+<th class="py-2.5 px-4 font-medium w-4">Status</th>
+<th class="py-2.5 px-4 font-medium">Name</th>
+<th class="py-2.5 px-4 font-medium">Key</th>
+<th class="py-2.5 px-4 font-medium">Scope</th>
+<th class="py-2.5 px-4 font-medium">Created At</th>
+<th class="py-2.5 px-4 font-medium">Last Used</th>
+<th class="py-2.5 px-4 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body text-body divide-y divide-border-low/50">
+<!-- Row 1: Active, High Usage -->
+<tr class="hover:bg-surface-variant/30 transition-colors group h-[36px]">
+<td class="py-row-padding px-4">
+<div class="w-2 h-2 rounded-full bg-status-good-ink animate-pulse" title="Active"></div>
+</td>
+<td class="py-row-padding px-4 text-on-surface font-emphasis">
+                                            Telemetry Pipeline Prod
+                                        </td>
+<td class="py-row-padding px-4">
+<div class="flex items-center gap-2 font-mono-data text-mono-data text-ink-secondary">
+<span>sk_live_············9f4a</span>
+<button class="text-ink-muted hover:text-primary transition-colors focus:outline-none opacity-0 group-hover:opacity-100" title="Copy to clipboard">
+<span class="material-symbols-outlined text-[14px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</td>
+<td class="py-row-padding px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-furniture font-medium bg-surface-container-high text-on-surface border border-outline-variant">Read/Write</span>
+</td>
+<td class="py-row-padding px-4 text-ink-secondary font-mono-data text-[11px]">
+                                            2023-10-12 14:32Z
+                                        </td>
+<td class="py-row-padding px-4">
+<div class="flex items-center gap-1.5 text-status-good-ink font-mono-data text-[11px]">
+<span class="material-symbols-outlined text-[12px]" data-icon="check_circle">check_circle</span>
+                                                Just now
+                                            </div>
+</td>
+<td class="py-row-padding px-4 text-right">
+<div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="px-2 py-1 text-[11px] font-furniture text-ink-secondary hover:text-on-surface hover:bg-surface-container border border-transparent hover:border-outline-variant rounded transition-colors active:translate-y-[1px] duration-0">Rotate</button>
+<button class="px-2 py-1 text-[11px] font-furniture text-status-critical-ink hover:text-on-error hover:bg-status-critical-bg border border-transparent hover:border-status-critical-ink/30 rounded transition-colors active:translate-y-[1px] duration-0">Revoke</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Active, Read Only -->
+<tr class="hover:bg-surface-variant/30 transition-colors group h-[36px]">
+<td class="py-row-padding px-4">
+<div class="w-2 h-2 rounded-full bg-status-good-ink" title="Active"></div>
+</td>
+<td class="py-row-padding px-4 text-on-surface font-emphasis">
+                                            Grafana Dashboard Sync
+                                        </td>
+<td class="py-row-padding px-4">
+<div class="flex items-center gap-2 font-mono-data text-mono-data text-ink-secondary">
+<span>sk_live_············2b8c</span>
+<button class="text-ink-muted hover:text-primary transition-colors focus:outline-none opacity-0 group-hover:opacity-100" title="Copy to clipboard">
+<span class="material-symbols-outlined text-[14px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</td>
+<td class="py-row-padding px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-furniture font-medium bg-surface-container-low text-ink-secondary border border-outline-variant border-dashed">Read Only</span>
+</td>
+<td class="py-row-padding px-4 text-ink-secondary font-mono-data text-[11px]">
+                                            2023-11-05 09:15Z
+                                        </td>
+<td class="py-row-padding px-4">
+<div class="flex items-center gap-1.5 text-ink-secondary font-mono-data text-[11px]">
+                                                2 hours ago
+                                            </div>
+</td>
+<td class="py-row-padding px-4 text-right">
+<div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="px-2 py-1 text-[11px] font-furniture text-ink-secondary hover:text-on-surface hover:bg-surface-container border border-transparent hover:border-outline-variant rounded transition-colors active:translate-y-[1px] duration-0">Rotate</button>
+<button class="px-2 py-1 text-[11px] font-furniture text-status-critical-ink hover:text-on-error hover:bg-status-critical-bg border border-transparent hover:border-status-critical-ink/30 rounded transition-colors active:translate-y-[1px] duration-0">Revoke</button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Warning/Stale -->
+<tr class="hover:bg-surface-variant/30 transition-colors group h-[36px]">
+<td class="py-row-padding px-4">
+<div class="w-2 h-2 rounded-full bg-status-warning-ink" title="Stale - Not used in 30 days"></div>
+</td>
+<td class="py-row-padding px-4 text-on-surface font-emphasis">
+                                            Legacy Webhook Processor
+                                        </td>
+<td class="py-row-padding px-4">
+<div class="flex items-center gap-2 font-mono-data text-mono-data text-ink-secondary">
+<span>sk_live_············77da</span>
+<button class="text-ink-muted hover:text-primary transition-colors focus:outline-none opacity-0 group-hover:opacity-100" title="Copy to clipboard">
+<span class="material-symbols-outlined text-[14px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</td>
+<td class="py-row-padding px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-furniture font-medium bg-surface-container-high text-on-surface border border-outline-variant">Read/Write</span>
+</td>
+<td class="py-row-padding px-4 text-ink-secondary font-mono-data text-[11px]">
+                                            2023-01-22 18:00Z
+                                        </td>
+<td class="py-row-padding px-4">
+<div class="flex items-center gap-1.5 text-status-warning-ink font-mono-data text-[11px]">
+<span class="material-symbols-outlined text-[12px]" data-icon="warning">warning</span>
+                                                45 days ago
+                                            </div>
+</td>
+<td class="py-row-padding px-4 text-right">
+<div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="px-2 py-1 text-[11px] font-furniture text-ink-secondary hover:text-on-surface hover:bg-surface-container border border-transparent hover:border-outline-variant rounded transition-colors active:translate-y-[1px] duration-0">Rotate</button>
+<button class="px-2 py-1 text-[11px] font-furniture text-status-critical-ink hover:text-on-error hover:bg-status-critical-bg border border-transparent hover:border-status-critical-ink/30 rounded transition-colors active:translate-y-[1px] duration-0">Revoke</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Pagination -->
+<div class="px-4 py-3 border-t border-border-low bg-surface-container-lowest flex items-center justify-between font-meta text-[11px] text-ink-secondary">
+<span>Showing 3 of 3 active keys</span>
+<div class="flex items-center gap-1">
+<button class="w-6 h-6 flex items-center justify-center rounded hover:bg-surface-container disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<span class="px-2 text-on-surface">1</span>
+<button class="w-6 h-6 flex items-center justify-center rounded hover:bg-surface-container disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Live Telemetry &amp; Code Trace - Sync</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-primary": "#006c45",
+                        "on-tertiary": "#003822",
+                        "status-serious-bg": "#391a0b",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#77fbb8",
+                        "surface-container": "#1f201f",
+                        "status-warning-ink": "#f2af48",
+                        "surface-popover": "#1b1d1c",
+                        "border-control": "#787a79",
+                        "surface-bright": "#393938",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "outline": "#86948a",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "status-critical-ink": "#fa8880",
+                        "secondary-container": "#454746",
+                        "status-critical-bg": "#541c15",
+                        "on-error-container": "#ffdad6",
+                        "on-surface": "#e4e2e0",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed": "#002112",
+                        "ink-muted": "#bcbdbc",
+                        "surface-container-low": "#1b1c1b",
+                        "surface-container-lowest": "#0d0e0d",
+                        "surface-container-highest": "#343534",
+                        "on-secondary": "#2f3130",
+                        "surface-container-high": "#292a29",
+                        "surface-dim": "#131413",
+                        "status-warning-bg": "#4a2900",
+                        "surface": "#131413",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "ink-secondary": "#989a99",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#30312f",
+                        "tertiary-fixed": "#71fcb6",
+                        "outline-variant": "#3d4a41",
+                        "inverse-surface": "#e4e2e0",
+                        "on-tertiary-container": "#005333",
+                        "on-primary": "#003822",
+                        "primary-fixed-dim": "#59de9d",
+                        "on-secondary-container": "#b5b5b3",
+                        "ink-primary": "#edefee",
+                        "background": "#131413",
+                        "primary-container": "#45cd8e",
+                        "on-primary-fixed": "#002112",
+                        "surface-card": "#181a19",
+                        "secondary-fixed": "#e2e3e0",
+                        "on-secondary-fixed-variant": "#454746",
+                        "on-background": "#e4e2e0",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "status-good-bg": "#00311d",
+                        "tertiary-container": "#3dce8d",
+                        "primary": "#65eaa8",
+                        "surface-tint": "#59de9d",
+                        "surface-variant": "#343534",
+                        "on-surface-variant": "#bccabe",
+                        "on-primary-fixed-variant": "#005233",
+                        "status-serious-ink": "#fd9565",
+                        "secondary": "#c6c7c5",
+                        "status-good-ink": "#85e0ba",
+                        "on-primary-container": "#005333",
+                        "tertiary": "#5feba7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-expanded": "240px",
+                        "grid-unit": "4px",
+                        "page-frame": "40px",
+                        "field-gap": "4px",
+                        "panel-gap": "32px",
+                        "topbar-height": "48px",
+                        "row-padding": "8px",
+                        "sidebar-collapsed": "48px"
+                    },
+                    "fontFamily": {
+                        "display": ["Manrope"],
+                        "body": ["Inter"],
+                        "mono-data": ["\"ui-monospace\", \"monospace\""],
+                        "section-header": ["Manrope"],
+                        "emphasis": ["Inter"],
+                        "furniture": ["Inter"],
+                        "figure": ["Inter"],
+                        "page-header": ["Manrope"],
+                        "meta": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 9999;
+            position: absolute;
+            pointer-events: none;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(255,255,255,0.02) 10%, rgba(0,0,0,0.1) 100%);
+            opacity: 0.1;
+            animation: scanline 10s linear infinite;
+        }
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
+        }
+        
+        .crt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9998;
+            background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,0.2) 100%);
+        }
+
+        .code-row {
+            transition: background-color 0s;
+        }
+        
+        .code-row:hover {
+            background-color: var(--surface-container-highest);
+        }
+
+        .code-row.active {
+            background-color: var(--surface-container-highest);
+            border-left: 2px solid var(--status-critical-ink);
+        }
+        
+        .log-row {
+            transition: background-color 0s;
+            cursor: pointer;
+        }
+        
+        .log-row:hover {
+            background-color: var(--surface-container-highest);
+        }
+
+        .btn-futuristic {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-futuristic::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.3s ease;
+        }
+
+        .btn-futuristic:hover::after {
+            left: 100%;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen w-screen overflow-hidden flex flex-col font-body selection:bg-primary-container/30 selection:text-primary">
+<div class="crt-overlay"></div>
+<div class="scanline"></div>
+<!-- SideNavBar (from JSON) -->
+<nav class="fixed left-0 top-0 bottom-0 z-50 w-sidebar-expanded h-full flex flex-col bg-surface-container-low border-r border-border-low hidden md:flex">
+<div class="h-topbar-height flex items-center px-4 border-b border-border-low">
+<span class="font-display text-page-header font-bold text-primary">Sync</span>
+</div>
+<div class="px-4 py-3 border-b border-border-low">
+<p class="font-furniture text-furniture text-ink-secondary uppercase tracking-wider mb-1">AI API Orchestrator</p>
+</div>
+<div class="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-2">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+<span class="font-body text-body">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]">hub</span>
+<span class="font-body text-body">Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]">healing</span>
+<span class="font-body text-body">Self-Healing Queue</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded bg-primary-container/10 text-primary font-emphasis border-r-2 border-primary transition-colors duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]">query_stats</span>
+<span class="font-body text-body">Telemetry/Traces</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]">key</span>
+<span class="font-body text-body">API Keys</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span class="font-body text-body">Settings</span>
+</a>
+</div>
+<div class="p-4 border-t border-border-low flex flex-col gap-2">
+<button class="w-full bg-primary-container/10 text-primary border border-primary/20 rounded h-8 font-furniture text-furniture flex items-center justify-center gap-2 hover:bg-primary-container/20 transition-colors duration-0 active:translate-y-px btn-futuristic">
+                Deploy Integration
+            </button>
+<div class="flex gap-2 mt-2">
+<a class="flex items-center gap-2 text-ink-secondary hover:text-ink-primary font-meta text-meta" href="#">
+<span class="material-symbols-outlined text-[14px]">description</span> Docs
+                </a>
+<a class="flex items-center gap-2 text-ink-secondary hover:text-ink-primary font-meta text-meta" href="#">
+<span class="material-symbols-outlined text-[14px]">help_outline</span> Support
+                </a>
+</div>
+</div>
+</nav>
+<!-- TopAppBar (from JSON) -->
+<header class="fixed top-0 right-0 left-0 md:left-sidebar-expanded z-40 h-topbar-height w-full bg-surface border-b border-border-low flex items-center justify-between px-page-frame">
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-ink-secondary text-[16px]">search</span>
+<input class="bg-surface-dim border border-control rounded pl-8 pr-3 py-1 font-mono-data text-mono-data text-ink-primary placeholder:text-ink-muted w-64 focus:outline-none focus:border-primary/50 transition-colors" placeholder="Search traces, logs, endpoints..." type="text"/>
+</div>
+<span class="font-display text-section-header font-semibold text-ink-primary md:hidden">Sync</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-status-good-bg border border-status-good-ink/20 rounded text-status-good-ink font-furniture text-furniture">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                System Healthy
+            </div>
+<button class="text-ink-secondary hover:text-ink-primary hover:bg-white/5 p-1 rounded transition-colors duration-0 active:translate-y-px">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="text-ink-secondary hover:text-ink-primary hover:bg-white/5 p-1 rounded transition-colors duration-0 active:translate-y-px">
+<span class="material-symbols-outlined text-[20px]">terminal</span>
+</button>
+<img alt="User Profile" class="w-7 h-7 rounded-full border border-border-control object-cover" data-alt="A small, stylized avatar image representing a generic user profile, featuring geometric shapes in muted dark tones with a subtle glowing primary color accent, suitable for a highly technical dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUxYw54K9swYLy6f97EcFnS77pXV68gdl9rIxwWrYEOWVndoWtLXz6hHvrwW2O6pQin7PpeGCafiexQH5n1hyzJ_6kkxgYQ-_aOlc4sulRBki0d7MKcdTeIrTbJ7ofuPxsUqx-CjsJX0Sh6LOsmx2BYJMGCxPzRPfp7w4HnMHrQ9T1hzl5Nu0sp1qT1ioriOCfFt3TNwJ0NIySXRazS6-el73VOL7PAUFUtoFbfm7VSh-MlJAg7rLN"/>
+</div>
+</header>
+<!-- Main Chassis -->
+<main class="flex-1 mt-topbar-height ml-0 md:ml-sidebar-expanded flex flex-col p-page-frame gap-panel-gap h-[calc(100vh-48px)] overflow-hidden">
+<!-- Header Actions -->
+<div class="flex items-center justify-between shrink-0">
+<div>
+<h1 class="font-display text-page-header font-bold text-ink-primary flex items-center gap-3">
+<span class="material-symbols-outlined text-status-serious-ink">troubleshoot</span>
+                    Trace Analysis
+                </h1>
+<p class="font-meta text-meta text-ink-secondary mt-1">Request ID: <span class="font-mono-data text-mono-data text-primary">req_88a9f2c1_90b</span></p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-surface-container-high border border-border-control rounded font-emphasis text-emphasis text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px flex items-center gap-2 btn-futuristic">
+<span class="material-symbols-outlined text-[16px]">sync</span> Trigger Re-Index
+                </button>
+<button class="px-4 py-2 bg-status-serious-bg border border-status-serious-ink/30 rounded font-emphasis text-emphasis text-status-serious-ink hover:bg-status-serious-bg/80 transition-colors duration-0 active:translate-y-px flex items-center gap-2 btn-futuristic">
+<span class="material-symbols-outlined text-[16px]">campaign</span> Escalate to On-Call
+                </button>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-4 min-h-0">
+<!-- Code Trace View (Top Pane) -->
+<div class="flex-1 bg-surface-card border border-border-low rounded flex flex-col overflow-hidden min-h-0 relative">
+<div class="h-8 bg-surface-container-low border-b border-border-low flex items-center px-4 justify-between shrink-0">
+<div class="flex items-center gap-2 text-ink-secondary font-furniture text-furniture">
+<span class="material-symbols-outlined text-[14px]">data_object</span>
+<span>api/v1/orchestrator/resolve.go</span>
+</div>
+<div class="flex gap-4 font-meta text-meta text-ink-muted">
+<span>Latency: <span class="text-status-warning-ink font-mono-data">420ms</span></span>
+<span>CPU: <span class="text-ink-primary font-mono-data">84%</span></span>
+</div>
+</div>
+<div class="flex-1 overflow-auto bg-surface-dim font-mono-data text-mono-data leading-relaxed p-4 selection:bg-primary/20">
+<div class="code-row flex w-full group relative" id="line-42">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">42</div>
+<div class="flex-1 text-ink-muted"><span class="text-tertiary">func</span> <span class="text-primary-fixed">ResolvePayload</span>(ctx context.Context, p *Payload) <span class="text-tertiary">error</span> {</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-43">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">43</div>
+<div class="flex-1 text-ink-muted">    start := time.<span class="text-primary-fixed">Now</span>()</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-44">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">44</div>
+<div class="flex-1 text-ink-muted">    <span class="text-tertiary">defer</span> metrics.<span class="text-primary-fixed">ObserveLatency</span>(start)</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-45">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">45</div>
+<div class="flex-1 text-ink-muted"></div>
+</div>
+<div class="code-row flex w-full group relative" id="line-46">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">46</div>
+<div class="flex-1 text-ink-muted">    cacheKey := fmt.<span class="text-primary-fixed">Sprintf</span>(<span class="text-status-warning-ink">"resolve:%s"</span>, p.ID)</div>
+</div>
+<div class="code-row flex w-full group relative active bg-status-critical-bg/10" id="line-47">
+<div class="w-12 text-right pr-4 text-status-critical-ink font-bold select-none border-r border-border-low mr-4">47</div>
+<div class="flex-1 text-ink-primary">    data, err := redisClient.<span class="text-primary-fixed">Get</span>(ctx, cacheKey).<span class="text-primary-fixed">Result</span>()</div>
+<div class="absolute right-4 top-0 h-full flex items-center">
+<span class="px-2 py-0.5 bg-status-critical-bg text-status-critical-ink text-[10px] rounded border border-status-critical-ink/30 font-furniture flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]">timer</span> 385ms blocking
+                            </span>
+</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-48">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">48</div>
+<div class="flex-1 text-ink-muted">    <span class="text-tertiary">if</span> err != <span class="text-tertiary">nil</span> {</div>
+</div>
+<div class="code-row flex w-full group relative active bg-status-serious-bg/20" id="line-49">
+<div class="w-12 text-right pr-4 text-status-serious-ink font-bold select-none border-r border-border-low mr-4">49</div>
+<div class="flex-1 text-ink-primary">        <span class="text-tertiary">if</span> err == redis.Nil {</div>
+<div class="absolute right-4 top-0 h-full flex items-center">
+<span class="px-2 py-0.5 bg-status-serious-bg text-status-serious-ink text-[10px] rounded border border-status-serious-ink/30 font-furniture">
+                                Cache Miss Rate: 82%
+                            </span>
+</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-50">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">50</div>
+<div class="flex-1 text-ink-muted">            log.<span class="text-primary-fixed">Warn</span>(<span class="text-status-warning-ink">"cache miss, escalating to DB"</span>)</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-51">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">51</div>
+<div class="flex-1 text-ink-muted">        } <span class="text-tertiary">else</span> {</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-52">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">52</div>
+<div class="flex-1 text-ink-muted">            <span class="text-tertiary">return</span> fmt.<span class="text-primary-fixed">Errorf</span>(<span class="text-status-warning-ink">"redis connection failed: %w"</span>, err)</div>
+</div>
+<div class="code-row flex w-full group relative" id="line-53">
+<div class="w-12 text-right pr-4 text-ink-secondary select-none border-r border-border-low mr-4 opacity-50 group-hover:opacity-100">53</div>
+<div class="flex-1 text-ink-muted">        }</div>
+</div>
+</div>
+</div>
+<!-- Live Terminal Log (Bottom Pane) -->
+<div class="h-64 bg-surface-card border border-border-low rounded flex flex-col overflow-hidden shrink-0">
+<div class="h-8 bg-surface-container-low border-b border-border-low flex items-center px-4 justify-between shrink-0">
+<div class="flex items-center gap-2 text-ink-secondary font-furniture text-furniture">
+<span class="material-symbols-outlined text-[14px]">terminal</span>
+<span>Live Stream</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-status-good-ink opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-status-good-ink"></span>
+</span>
+<span class="font-meta text-meta text-status-good-ink">Tailing...</span>
+</div>
+</div>
+<div class="flex-1 overflow-auto bg-surface-dim font-mono-data text-mono-data p-2 flex flex-col">
+<div class="log-row flex items-start gap-3 px-2 py-1 row-padding" onclick="document.getElementById('line-43').scrollIntoView({behavior: 'smooth'})">
+<span class="text-ink-muted w-24 shrink-0">14:02:01.442</span>
+<span class="text-ink-secondary w-16 shrink-0">[INFO]</span>
+<span class="text-ink-primary">Incoming request received</span>
+<span class="text-ink-muted ml-auto">req_88a9f2c1_90b</span>
+</div>
+<div class="log-row flex items-start gap-3 px-2 py-1 row-padding" onclick="document.getElementById('line-47').scrollIntoView({behavior: 'smooth'})">
+<span class="text-ink-muted w-24 shrink-0">14:02:01.445</span>
+<span class="text-ink-secondary w-16 shrink-0">[DEBUG]</span>
+<span class="text-ink-primary">Attempting redis fetch for key: resolve:usr_992</span>
+<span class="text-ink-muted ml-auto">req_88a9f2c1_90b</span>
+</div>
+<div class="log-row flex items-start gap-3 px-2 py-1 row-padding bg-status-serious-bg/10 border-l-2 border-status-serious-ink" onclick="document.getElementById('line-49').scrollIntoView({behavior: 'smooth'})">
+<span class="text-ink-muted w-24 shrink-0">14:02:01.830</span>
+<span class="text-status-serious-ink w-16 shrink-0">[WARN]</span>
+<span class="text-status-serious-ink">Cache miss, escalating to DB (latency: 385ms)</span>
+<span class="text-ink-muted ml-auto">req_88a9f2c1_90b</span>
+</div>
+<div class="log-row flex items-start gap-3 px-2 py-1 row-padding bg-status-critical-bg/20 border-l-2 border-status-critical-ink" onclick="document.getElementById('line-52').scrollIntoView({behavior: 'smooth'})">
+<span class="text-ink-muted w-24 shrink-0">14:02:01.835</span>
+<span class="text-status-critical-ink w-16 shrink-0 font-bold">[ERROR]</span>
+<span class="text-status-critical-ink font-bold">redis connection failed: context deadline exceeded</span>
+<span class="text-ink-muted ml-auto">req_88a9f2c1_90b</span>
+</div>
+<div class="log-row flex items-start gap-3 px-2 py-1 row-padding">
+<span class="text-ink-muted w-24 shrink-0">14:02:01.836</span>
+<span class="text-ink-secondary w-16 shrink-0">[INFO]</span>
+<span class="text-ink-primary">Request terminated with 500 Internal Server Error</span>
+<span class="text-ink-muted ml-auto">req_88a9f2c1_90b</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Simple interaction to simulate log clicking focusing code
+        document.querySelectorAll('.log-row').forEach(row => {
+            row.addEventListener('click', function() {
+                // Remove active class from all code rows
+                document.querySelectorAll('.code-row').forEach(cr => {
+                    cr.classList.remove('active', 'bg-status-critical-bg/10', 'bg-status-serious-bg/20');
+                    cr.style.borderLeft = 'none';
+                });
+                
+                // visual feedback on log
+                this.style.backgroundColor = 'var(--surface-container-highest)';
+                setTimeout(() => {
+                    this.style.backgroundColor = '';
+                }, 200);
+            });
+        });
+    </script>
+</body></html>

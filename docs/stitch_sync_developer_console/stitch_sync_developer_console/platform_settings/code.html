@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - Platform Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "status-good-ink": "#85e0ba",
+                    "tertiary": "#5feba7",
+                    "on-background": "#e4e2e0",
+                    "surface-container-low": "#1b1c1b",
+                    "error": "#ffb4ab",
+                    "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                    "on-error": "#690005",
+                    "surface-dim": "#131413",
+                    "inverse-surface": "#e4e2e0",
+                    "on-surface": "#e4e2e0",
+                    "status-critical-ink": "#fa8880",
+                    "primary-fixed": "#77fbb8",
+                    "secondary-container": "#454746",
+                    "on-tertiary-fixed-variant": "#005233",
+                    "ink-primary": "#edefee",
+                    "primary-fixed-dim": "#59de9d",
+                    "primary-container": "#45cd8e",
+                    "surface-container-lowest": "#0d0e0d",
+                    "surface": "#131413",
+                    "status-critical-bg": "#541c15",
+                    "outline-variant": "#3d4a41",
+                    "surface-tint": "#59de9d",
+                    "on-secondary-fixed": "#1a1c1b",
+                    "secondary": "#c6c7c5",
+                    "surface-container-highest": "#343534",
+                    "status-serious-bg": "#391a0b",
+                    "on-primary": "#003822",
+                    "ink-secondary": "#989a99",
+                    "status-serious-ink": "#fd9565",
+                    "on-error-container": "#ffdad6",
+                    "secondary-fixed-dim": "#c6c7c5",
+                    "inverse-primary": "#006c45",
+                    "on-secondary": "#2f3130",
+                    "on-tertiary-fixed": "#002112",
+                    "background": "#131413",
+                    "tertiary-fixed": "#71fcb6",
+                    "on-primary-container": "#005333",
+                    "border-control": "#787a79",
+                    "status-warning-ink": "#f2af48",
+                    "outline": "#86948a",
+                    "status-good-bg": "#00311d",
+                    "on-primary-fixed": "#002112",
+                    "surface-card": "#181a19",
+                    "surface-container-high": "#292a29",
+                    "tertiary-container": "#3dce8d",
+                    "tertiary-fixed-dim": "#51df9c",
+                    "surface-variant": "#343534",
+                    "on-secondary-fixed-variant": "#454746",
+                    "secondary-fixed": "#e2e3e0",
+                    "inverse-on-surface": "#30312f",
+                    "on-tertiary": "#003822",
+                    "error-container": "#93000a",
+                    "ink-muted": "#bcbdbc",
+                    "on-secondary-container": "#b5b5b3",
+                    "primary": "#65eaa8",
+                    "on-primary-fixed-variant": "#005233",
+                    "surface-container": "#1f201f",
+                    "surface-popover": "#1b1d1c",
+                    "on-tertiary-container": "#005333",
+                    "on-surface-variant": "#bccabe",
+                    "status-warning-bg": "#4a2900",
+                    "surface-bright": "#393938"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "sidebar-expanded": "240px",
+                    "panel-gap": "32px",
+                    "row-padding": "8px",
+                    "page-frame": "40px",
+                    "topbar-height": "48px",
+                    "field-gap": "4px",
+                    "sidebar-collapsed": "48px",
+                    "grid-unit": "4px"
+            },
+            "fontFamily": {
+                    "emphasis": ["Inter"],
+                    "furniture": ["Inter"],
+                    "figure": ["Inter"],
+                    "meta": ["Inter"],
+                    "body": ["Inter"],
+                    "section-header": ["Manrope"],
+                    "page-header": ["Manrope"],
+                    "mono-data": ["\"ui-monospace, monospace\""],
+                    "display": ["Manrope"]
+            },
+            "fontSize": {
+                    "emphasis": ["15px", {"lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "furniture": ["12px", {"lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500"}],
+                    "figure": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600"}],
+                    "meta": ["12px", {"lineHeight": "16px", "fontWeight": "450"}],
+                    "body": ["13px", {"lineHeight": "20px", "fontWeight": "450"}],
+                    "section-header": ["18px", {"lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "page-header": ["22px", {"lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600"}],
+                    "mono-data": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                    "display": ["46px", {"lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        /* Custom scrollbar for high-density feel */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: theme('colors.surface-variant'); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: theme('colors.outline-variant'); }
+        
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body text-body antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- Shared Component: SideNavBar -->
+<nav class="hidden md:flex fixed left-0 top-0 h-full z-40 overflow-y-auto flex-col w-sidebar-expanded bg-surface-container-low border-r border-outline-variant flat no shadows">
+<!-- Header -->
+<div class="px-4 py-6 flex flex-col gap-1 border-b border-border-low">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary icon-fill" data-icon="sync">sync</span>
+</div>
+<div class="flex flex-col">
+<span class="font-display text-section-header font-bold text-primary leading-none">Sync</span>
+<span class="font-meta text-meta text-ink-secondary">API Automation</span>
+</div>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex flex-col px-3 py-4 gap-1 font-furniture text-furniture">
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-3 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded active:translate-y-[1px] duration-0 group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface transition-colors" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded active:translate-y-[1px] duration-0 group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface transition-colors" data-icon="api">api</span>
+                Integrations
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded active:translate-y-[1px] duration-0 group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface transition-colors" data-icon="healing">healing</span>
+                Self-Healing Queue
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded active:translate-y-[1px] duration-0 group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface transition-colors" data-icon="analytics">analytics</span>
+                Telemetry/Traces
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded active:translate-y-[1px] duration-0 group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface transition-colors" data-icon="vpn_key">vpn_key</span>
+                API Keys
+            </a>
+<!-- Active -->
+<a class="flex items-center gap-3 px-3 py-2 bg-primary-container text-on-primary-container rounded active:translate-y-[1px] duration-0" href="#">
+<span class="material-symbols-outlined text-[18px] icon-fill" data-icon="settings">settings</span>
+                Settings
+            </a>
+</div>
+</nav>
+<!-- Shared Component: TopAppBar -->
+<header class="hidden md:flex fixed top-0 right-0 left-0 z-30 items-center justify-between px-page-frame h-topbar-height bg-surface-container border-b border-outline-variant flat no shadows md:pl-[calc(theme(spacing.sidebar-expanded)+theme(spacing.page-frame))]">
+<!-- Left: Search/Links Area -->
+<div class="flex items-center gap-6 h-full">
+<div class="flex bg-surface-container-lowest border border-border-low rounded px-2 py-1 items-center gap-2 w-64 focus-within:border-outline transition-colors">
+<span class="material-symbols-outlined text-ink-secondary text-[16px]" data-icon="search">search</span>
+<input class="bg-transparent border-none p-0 text-furniture font-furniture text-on-surface focus:ring-0 w-full placeholder:text-ink-muted" placeholder="Search resources..." type="text"/>
+</div>
+<nav class="flex h-full border-l border-border-low pl-6">
+<a class="flex items-center h-full px-4 text-ink-secondary font-furniture hover:text-on-surface transition-colors" href="#">Production</a>
+<a class="flex items-center h-full px-4 text-primary font-emphasis border-b-2 border-primary pt-[2px]" href="#">Staging</a>
+</nav>
+</div>
+<!-- Right: Actions & Profile -->
+<div class="flex items-center gap-5">
+<button class="h-[28px] px-3 rounded bg-primary text-on-primary font-furniture text-furniture flex items-center justify-center active:translate-y-[1px] transition-none hover:bg-primary-fixed-dim">
+                Deploy Agent
+            </button>
+<div class="flex items-center gap-3 text-ink-secondary">
+<button class="hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span></button>
+<button class="hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]" data-icon="help_outline">help_outline</span></button>
+</div>
+<div class="w-7 h-7 rounded-full overflow-hidden border border-border-low cursor-pointer hover:border-outline transition-colors">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA35_yaBC1H7rrb8CG8t6Zskoo0daZ-EhVoaYKU5O2WVZcHANOB1G5blmUiugEwSm8dhkfrW4d975M_g3hKa2NbZ1UdFYHWEFQRi9Z36C2-RrfvZnV_optp5s0iYBveTCVq_t41jdNyez3lsoxyMXuEJGy0F5f-Xx4t61dCyKIUPAmKztAMoSVsx3GPfxI1jW_Nqe2kaX-UOwbMU2tJvfJJTePZBIDEo2ugnunIDO_f-EA9YhaINCGN"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="md:ml-sidebar-expanded pt-topbar-height min-h-screen pb-16">
+<div class="px-page-frame pt-8 max-w-[1200px] mx-auto">
+<!-- Page Header -->
+<div class="mb-8">
+<h1 class="font-display text-page-header text-on-surface">Platform Settings</h1>
+<p class="font-body text-body text-ink-secondary mt-1">Manage your organization workspace and agent configurations.</p>
+</div>
+<!-- Settings Layout Grid -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+<!-- Left Vertical Tabs (Local Navigation) -->
+<nav class="md:col-span-3 flex flex-col gap-[2px]">
+<a class="flex items-center justify-between px-3 py-2 rounded bg-surface-container text-on-surface font-emphasis text-emphasis" href="#">
+                        General
+                        <span class="material-symbols-outlined text-[16px] text-primary" data-icon="chevron_right">chevron_right</span>
+</a>
+<a class="flex items-center px-3 py-2 rounded text-ink-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors font-furniture text-furniture" href="#">
+                        Team
+                    </a>
+<a class="flex items-center px-3 py-2 rounded text-ink-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors font-furniture text-furniture" href="#">
+                        Billing
+                    </a>
+<a class="flex items-center px-3 py-2 rounded text-ink-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors font-furniture text-furniture" href="#">
+                        Notifications
+                    </a>
+<a class="flex items-center justify-between px-3 py-2 rounded text-ink-secondary hover:bg-surface-container-low hover:text-on-surface transition-colors font-furniture text-furniture" href="#">
+                        Webhooks
+                        <span class="px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-[10px] text-ink-primary">2 Active</span>
+</a>
+</nav>
+<!-- Right Content Area (General Tab) -->
+<div class="md:col-span-9 flex flex-col gap-6">
+<!-- Section: Organization Profile -->
+<section class="bg-surface-card border border-border-low rounded-lg overflow-hidden shadow-[inset_0_1px_0_0_theme(colors.border-low)] relative before:absolute before:inset-0 before:pointer-events-none before:border before:border-white/5 before:rounded-lg">
+<div class="px-6 py-5 border-b border-border-low bg-surface-container-lowest/50">
+<h2 class="font-section-header text-section-header text-on-surface">Organization Profile</h2>
+<p class="font-meta text-meta text-ink-secondary mt-1">Basic identification for your workspace ecosystem.</p>
+</div>
+<div class="p-6 flex flex-col gap-6">
+<!-- Field: Org Name -->
+<div>
+<label class="block font-furniture text-furniture text-ink-primary mb-2" for="orgName">Organization Name</label>
+<input class="w-full max-w-md bg-surface border border-border-control rounded px-3 h-[32px] text-on-surface font-body text-body focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow placeholder:text-ink-muted" id="orgName" type="text" value="Acme Corp Engineering"/>
+</div>
+<!-- Field: Platform Slug -->
+<div>
+<label class="block font-furniture text-furniture text-ink-primary mb-2" for="orgSlug">Platform Slug</label>
+<div class="flex max-w-md rounded shadow-sm">
+<span class="inline-flex items-center px-3 rounded-l border border-r-0 border-border-control bg-surface-container-low text-ink-secondary font-mono-data text-mono-data sm:text-sm">
+                                        sync.app/
+                                    </span>
+<input class="flex-1 min-w-0 block w-full px-3 h-[32px] bg-surface border border-border-control rounded-none rounded-r text-on-surface font-body text-body focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow font-mono-data text-mono-data" id="orgSlug" type="text" value="acme-eng"/>
+</div>
+<p class="font-meta text-meta text-ink-secondary mt-2">Used for API routing and direct dashboard access.</p>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="px-6 py-4 bg-surface-container-lowest/80 border-t border-border-low flex justify-end">
+<button class="h-[32px] px-4 rounded bg-surface-variant text-on-surface border border-border-control font-emphasis text-emphasis hover:bg-surface-container-highest transition-colors active:translate-y-[1px] duration-0">
+                                Save Changes
+                            </button>
+</div>
+</section>
+<!-- Section: Agent Deployment Configuration -->
+<section class="bg-surface-card border border-border-low rounded-lg overflow-hidden shadow-[inset_0_1px_0_0_theme(colors.border-low)] relative before:absolute before:inset-0 before:pointer-events-none before:border before:border-white/5 before:rounded-lg">
+<div class="px-6 py-5 border-b border-border-low bg-surface-container-lowest/50 flex justify-between items-center">
+<div>
+<h2 class="font-section-header text-section-header text-on-surface">Agent Deployment Configurations</h2>
+<p class="font-meta text-meta text-ink-secondary mt-1">Global parameters for local agents reporting to this workspace.</p>
+</div>
+<div class="flex items-center gap-2 px-2 py-1 bg-status-good-bg rounded border border-status-good-ink/20">
+<span class="material-symbols-outlined text-[14px] text-status-good-ink" data-icon="check_circle">check_circle</span>
+<span class="font-meta text-meta text-status-good-ink">Global Sync Active</span>
+</div>
+</div>
+<div class="p-6 flex flex-col gap-6">
+<!-- Field: Default Telemetry Level -->
+<div>
+<label class="block font-furniture text-furniture text-ink-primary mb-2">Default Telemetry Injection</label>
+<select class="w-full max-w-sm bg-surface border border-border-control rounded px-3 h-[32px] text-on-surface font-body text-body focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow appearance-none">
+<option value="standard">Standard (Errors &amp; Warnings)</option>
+<option selected="" value="verbose">Verbose (All Traces)</option>
+<option value="minimal">Minimal (Fatal Only)</option>
+</select>
+</div>
+<hr class="border-border-low"/>
+<!-- Data Table / List for specific config keys -->
+<div>
+<h3 class="font-furniture text-furniture text-ink-primary mb-3">Global Environment Variables</h3>
+<div class="border border-border-low rounded bg-surface-container-lowest overflow-hidden">
+<!-- Table Header -->
+<div class="grid grid-cols-12 gap-4 px-4 py-2 bg-surface-container-low border-b border-border-low font-meta text-meta text-ink-secondary">
+<div class="col-span-4">Key</div>
+<div class="col-span-6">Value</div>
+<div class="col-span-2 text-right">Actions</div>
+</div>
+<!-- Row 1 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center border-b border-border-low hover:bg-surface-variant transition-colors group">
+<div class="col-span-4 font-mono-data text-mono-data text-on-surface">SYNC_RETRY_LIMIT</div>
+<div class="col-span-6 font-mono-data text-mono-data text-ink-secondary">3</div>
+<div class="col-span-2 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-ink-secondary hover:text-on-surface"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-surface-variant transition-colors group">
+<div class="col-span-4 font-mono-data text-mono-data text-on-surface">SYNC_TIMEOUT_MS</div>
+<div class="col-span-6 font-mono-data text-mono-data text-ink-secondary">5000</div>
+<div class="col-span-2 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-ink-secondary hover:text-on-surface"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+</div>
+<button class="mt-3 flex items-center gap-1 font-furniture text-furniture text-primary hover:text-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span> Add Variable
+                                </button>
+</div>
+</div>
+</section>
+</div>
+</div>
+</div>
+</main>
+</body></html>

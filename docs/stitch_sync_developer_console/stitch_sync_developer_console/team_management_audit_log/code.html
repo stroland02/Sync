@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync | Team &amp; Access Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-low": "#1b1c1b",
+                      "on-tertiary-container": "#005333",
+                      "status-warning-ink": "#f2af48",
+                      "error": "#ffb4ab",
+                      "tertiary-fixed": "#71fcb6",
+                      "primary-fixed-dim": "#59de9d",
+                      "secondary-fixed-dim": "#c6c7c5",
+                      "on-secondary-fixed-variant": "#454746",
+                      "status-warning-bg": "#4a2900",
+                      "primary-fixed": "#77fbb8",
+                      "ink-secondary": "#989a99",
+                      "on-tertiary": "#003822",
+                      "surface-card": "#181a19",
+                      "ink-primary": "#edefee",
+                      "on-error": "#690005",
+                      "inverse-on-surface": "#30312f",
+                      "secondary-fixed": "#e2e3e0",
+                      "status-critical-bg": "#541c15",
+                      "on-primary-container": "#005333",
+                      "on-error-container": "#ffdad6",
+                      "surface-container-high": "#292a29",
+                      "status-good-ink": "#85e0ba",
+                      "surface-dim": "#131413",
+                      "secondary": "#c6c7c5",
+                      "on-surface-variant": "#bccabe",
+                      "background": "#131413",
+                      "status-serious-ink": "#fd9565",
+                      "inverse-surface": "#e4e2e0",
+                      "on-tertiary-fixed-variant": "#005233",
+                      "on-primary": "#003822",
+                      "primary": "#65eaa8",
+                      "error-container": "#93000a",
+                      "on-background": "#e4e2e0",
+                      "on-primary-fixed": "#002112",
+                      "on-secondary-fixed": "#1a1c1b",
+                      "surface-container": "#1f201f",
+                      "secondary-container": "#454746",
+                      "status-serious-bg": "#391a0b",
+                      "surface-tint": "#59de9d",
+                      "on-secondary-container": "#b5b5b3",
+                      "outline-variant": "#3d4a41",
+                      "surface-popover": "#1b1d1c",
+                      "surface-variant": "#343534",
+                      "primary-container": "#45cd8e",
+                      "surface-container-lowest": "#0d0e0d",
+                      "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                      "tertiary": "#5feba7",
+                      "surface": "#131413",
+                      "ink-muted": "#bcbdbc",
+                      "on-surface": "#e4e2e0",
+                      "surface-bright": "#393938",
+                      "tertiary-container": "#3dce8d",
+                      "tertiary-fixed-dim": "#51df9c",
+                      "on-primary-fixed-variant": "#005233",
+                      "status-critical-ink": "#fa8880",
+                      "on-secondary": "#2f3130",
+                      "inverse-primary": "#006c45",
+                      "on-tertiary-fixed": "#002112",
+                      "status-good-bg": "#00311d",
+                      "outline": "#86948a",
+                      "surface-container-highest": "#343534",
+                      "border-control": "#787a79"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "row-padding": "8px",
+                      "sidebar-collapsed": "48px",
+                      "sidebar-expanded": "240px",
+                      "topbar-height": "48px",
+                      "field-gap": "4px",
+                      "grid-unit": "4px",
+                      "page-frame": "40px",
+                      "panel-gap": "32px"
+              },
+              "fontFamily": {
+                      "figure": [
+                              "Inter"
+                      ],
+                      "section-header": [
+                              "Manrope"
+                      ],
+                      "body": [
+                              "Inter"
+                      ],
+                      "display": [
+                              "Manrope"
+                      ],
+                      "mono-data": [
+                              "\"ui-monospace, monospace\""
+                      ],
+                      "emphasis": [
+                              "Inter"
+                      ],
+                      "furniture": [
+                              "Inter"
+                      ],
+                      "page-header": [
+                              "Manrope"
+                      ],
+                      "meta": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "figure": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "letterSpacing": "-0.04em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "section-header": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body": [
+                              "13px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "450"
+                              }
+                      ],
+                      "display": [
+                              "46px",
+                              {
+                                      "lineHeight": "48px",
+                                      "letterSpacing": "-0.045em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "mono-data": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "emphasis": [
+                              "15px",
+                              {
+                                      "lineHeight": "24px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "furniture": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.025em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "page-header": [
+                              "22px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.04em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "meta": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "450"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for high-density tables */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #343534;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #454746;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body text-body antialiased overflow-hidden flex h-screen w-full">
+<!-- JSON Component: SideNavBar -->
+<nav class="fixed left-0 top-0 h-full z-40 overflow-y-auto flex flex-col bg-background text-primary font-furniture text-furniture docked left-0 h-screen w-sidebar-expanded bg-surface-container-low border-r border-outline-variant flat no shadows hidden md:flex">
+<!-- Header -->
+<div class="h-topbar-height flex items-center px-4 border-b border-outline-variant">
+<span class="font-display text-page-header font-bold text-primary mr-2" data-icon="sync">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">sync</span>
+</span>
+<div class="flex flex-col">
+<span class="font-display text-page-header font-bold text-primary leading-tight">Sync</span>
+<span class="text-ink-secondary text-[10px] leading-tight">API Automation</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 py-4 flex flex-col gap-1 px-2">
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface transition-colors" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface transition-colors" data-icon="api">api</span>
+<span>Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface transition-colors" data-icon="healing">healing</span>
+<span>Self-Healing Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface transition-colors" data-icon="analytics">analytics</span>
+<span>Telemetry/Traces</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-ink-secondary hover:bg-surface-container-high hover:text-on-surface transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface transition-colors" data-icon="vpn_key">vpn_key</span>
+<span>API Keys</span>
+</a>
+<!-- Active State Navigation -->
+<a class="flex items-center gap-3 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg group" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</div>
+<!-- User Profile (Bottom of Sidebar) -->
+<div class="p-4 border-t border-outline-variant mt-auto flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A macro shot of a sleek, dark metallic server rack with a single glowing green indicator light, representing secure access. High contrast, technical, modern engineering aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDb3CmYL9_z39eXaKNhBJhZ-YOhBInVfIokxcRwDUfiuErhZVEqvnwNCIKlaBTVRf5vQD3UHepElHsccx5-fuVwnhIWisH08PwCFu5JSMODLHXbP9VbsSvnt1pCezY7Ed7_R6Bp4RmoIjayc30T7iI21eq-ilvDlopxdTFKG1wtQ2BD9YVv1260QBeqX414YeTIIXqSF9OZ4w_kCKHdHiXwsY_crdrbhCAJilw5j-2DWODEgtztoqFG"/>
+</div>
+<div class="flex flex-col flex-1 truncate">
+<span class="font-emphasis text-emphasis text-on-surface truncate">Admin User</span>
+<span class="font-meta text-meta text-ink-secondary truncate">admin@sync.io</span>
+</div>
+</div>
+</nav>
+<!-- Main Content Chassis -->
+<main class="flex-1 flex flex-col h-screen md:ml-sidebar-expanded relative bg-background">
+<!-- JSON Component: TopAppBar -->
+<header class="fixed top-0 right-0 left-0 z-30 flex items-center justify-between px-page-frame bg-background text-primary font-furniture text-furniture docked full-width top-0 h-topbar-height bg-surface-container border-b border-outline-variant flat no shadows md:left-sidebar-expanded transition-all">
+<div class="flex items-center gap-4">
+<!-- Mobile Menu Trigger -->
+<button class="md:hidden text-ink-secondary hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="flex items-center gap-2">
+<span class="text-ink-secondary">Settings</span>
+<span class="material-symbols-outlined text-ink-secondary text-sm">chevron_right</span>
+<span class="text-on-surface font-emphasis">Team &amp; Access</span>
+</div>
+</div>
+<div class="flex flex-1 max-w-md mx-8 items-center bg-surface-container-low border border-border-control rounded-DEFAULT px-3 h-8 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+<span class="material-symbols-outlined text-ink-secondary text-[16px] mr-2" data-icon="search">search</span>
+<input class="w-full bg-transparent border-none focus:ring-0 text-body text-on-surface placeholder:text-ink-secondary p-0" placeholder="Search members or roles..." type="text"/>
+</div>
+<div class="flex items-center gap-4 h-full">
+<!-- Navigation Links inside Top Bar (Desktop) -->
+<nav class="hidden lg:flex items-center h-full space-x-6 mr-4">
+<a class="text-ink-secondary font-furniture hover:text-on-surface transition-colors flex items-center h-full" href="#">Production</a>
+<a class="text-ink-secondary font-furniture hover:text-on-surface transition-colors flex items-center h-full" href="#">Staging</a>
+</nav>
+<div class="flex items-center gap-3 border-l border-outline-variant pl-4 h-full">
+<button class="text-ink-secondary hover:text-on-surface transition-colors flex items-center justify-center w-8 h-8 rounded hover:bg-surface-container-high" title="notifications">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-ink-secondary hover:text-on-surface transition-colors flex items-center justify-center w-8 h-8 rounded hover:bg-surface-container-high" title="help_outline">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<button class="bg-primary text-on-primary-fixed h-8 px-4 rounded-DEFAULT font-emphasis text-emphasis flex items-center gap-2 hover:bg-primary-fixed-dim transition-colors active:translate-y-[1px]">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+                        Deploy Agent
+                    </button>
+</div>
+</div>
+</header>
+<!-- Page Content -->
+<div class="flex-1 overflow-y-auto pt-topbar-height p-page-frame">
+<div class="max-w-[1200px] mx-auto flex flex-col gap-panel-gap">
+<!-- Controls Band -->
+<section class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border-low pb-4">
+<div>
+<h1 class="font-display text-page-header text-on-surface">Team Management</h1>
+<p class="font-body text-body text-ink-secondary mt-1">Manage platform access, roles, and view system audit logs.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="bg-surface-container-high text-on-surface border border-outline-variant h-8 px-3 rounded-DEFAULT font-emphasis text-emphasis flex items-center gap-2 hover:bg-surface-variant transition-colors active:translate-y-[1px]">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+                            Filter Roles
+                        </button>
+<button class="bg-primary text-on-primary-fixed h-8 px-4 rounded-DEFAULT font-emphasis text-emphasis flex items-center gap-2 hover:bg-primary-fixed-dim transition-colors active:translate-y-[1px]">
+<span class="material-symbols-outlined text-[16px]">person_add</span>
+                            Invite Member
+                        </button>
+</div>
+</section>
+<!-- Tables Content Band -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+<!-- User Management Table (Takes up 2 cols on wide screens) -->
+<div class="xl:col-span-2 bg-surface-card border border-border-low rounded-lg overflow-hidden flex flex-col shadow-[0_1px_2px_rgba(0,0,0,0.4)] relative">
+<!-- Header -->
+<div class="px-4 py-3 border-b border-border-low flex justify-between items-center bg-surface-container-low">
+<h2 class="font-section-header text-section-header text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-ink-secondary" style="font-variation-settings: 'FILL' 1;">group</span>
+                                 Active Members
+                             </h2>
+<span class="font-meta text-meta text-ink-secondary">6 Total</span>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-border-low bg-surface-dim font-furniture text-furniture text-ink-secondary">
+<th class="px-4 py-2 font-medium">Name / Email</th>
+<th class="px-4 py-2 font-medium">Role</th>
+<th class="px-4 py-2 font-medium">Status</th>
+<th class="px-4 py-2 font-medium">Last Activity</th>
+<th class="px-4 py-2 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-low">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high transition-colors group cursor-pointer h-[48px]">
+<td class="px-4 py-2">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary font-emphasis">
+                                                     A
+                                                 </div>
+<div class="flex flex-col">
+<span class="font-emphasis text-emphasis text-on-surface">Alex Mercer</span>
+<span class="font-mono-data text-mono-data text-ink-secondary">alex@sync.io</span>
+</div>
+</div>
+</td>
+<td class="px-4 py-2">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container-highest border border-outline-variant font-meta text-meta text-on-surface">
+                                                 Admin
+                                             </span>
+</td>
+<td class="px-4 py-2">
+<span class="inline-flex items-center gap-1.5 font-meta text-meta text-status-good-ink">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                                 Active
+                                             </span>
+</td>
+<td class="px-4 py-2 font-mono-data text-mono-data text-ink-secondary">
+                                             Just now
+                                         </td>
+<td class="px-4 py-2 text-right">
+<button class="text-ink-secondary hover:text-on-surface opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-high transition-colors group cursor-pointer h-[48px]">
+<td class="px-4 py-2">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-secondary font-emphasis">
+                                                     J
+                                                 </div>
+<div class="flex flex-col">
+<span class="font-emphasis text-emphasis text-on-surface">Jordan Lee</span>
+<span class="font-mono-data text-mono-data text-ink-secondary">jordan@sync.io</span>
+</div>
+</div>
+</td>
+<td class="px-4 py-2">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container-highest border border-outline-variant font-meta text-meta text-on-surface">
+                                                 Developer
+                                             </span>
+</td>
+<td class="px-4 py-2">
+<span class="inline-flex items-center gap-1.5 font-meta text-meta text-status-good-ink">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                                 Active
+                                             </span>
+</td>
+<td class="px-4 py-2 font-mono-data text-mono-data text-ink-secondary">
+                                             2 hours ago
+                                         </td>
+<td class="px-4 py-2 text-right">
+<button class="text-ink-secondary hover:text-on-surface opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 (Invited) -->
+<tr class="hover:bg-surface-container-high transition-colors group cursor-pointer h-[48px]">
+<td class="px-4 py-2">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full border border-dashed border-outline-variant flex items-center justify-center text-ink-muted font-emphasis">
+<span class="material-symbols-outlined text-[16px]">mail</span>
+</div>
+<div class="flex flex-col">
+<span class="font-emphasis text-emphasis text-ink-secondary">Pending Invite</span>
+<span class="font-mono-data text-mono-data text-ink-secondary">sam@sync.io</span>
+</div>
+</div>
+</td>
+<td class="px-4 py-2">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container-highest border border-outline-variant font-meta text-meta text-ink-secondary">
+                                                 Viewer
+                                             </span>
+</td>
+<td class="px-4 py-2">
+<span class="inline-flex items-center gap-1.5 font-meta text-meta text-status-warning-ink">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                                                 Invited
+                                             </span>
+</td>
+<td class="px-4 py-2 font-mono-data text-mono-data text-ink-muted">
+                                             --
+                                         </td>
+<td class="px-4 py-2 text-right">
+<button class="text-ink-secondary hover:text-on-surface opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Audit Log Section (High Density) -->
+<div class="bg-surface-card border border-border-low rounded-lg overflow-hidden flex flex-col shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
+<div class="px-4 py-3 border-b border-border-low flex justify-between items-center bg-surface-container-low">
+<h2 class="font-section-header text-section-header text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-ink-secondary" style="font-variation-settings: 'FILL' 1;">list_alt</span>
+                                 Audit Log
+                             </h2>
+<button class="text-ink-secondary hover:text-on-surface text-[12px] flex items-center gap-1">
+                                 View All <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto bg-surface-dim p-2">
+<ul class="flex flex-col gap-1">
+<!-- Log Entry 1 -->
+<li class="px-3 py-2 bg-surface-container-low rounded border border-border-low hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-1">
+<span class="font-mono-data text-[10px] text-primary">SYS-EVT-091</span>
+<span class="font-mono-data text-[10px] text-ink-muted">10:42:01 UTC</span>
+</div>
+<p class="font-mono-data text-mono-data text-on-surface leading-tight">
+<span class="text-ink-secondary">Alex M. applied fix to</span> INC-9942
+                                     </p>
+</li>
+<!-- Log Entry 2 -->
+<li class="px-3 py-2 bg-surface-container-low rounded border border-border-low hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-1">
+<span class="font-mono-data text-[10px] text-status-warning-ink">SEC-EVT-112</span>
+<span class="font-mono-data text-[10px] text-ink-muted">09:15:33 UTC</span>
+</div>
+<p class="font-mono-data text-mono-data text-on-surface leading-tight">
+<span class="text-ink-secondary">Jordan L. rotated API Key:</span> Telemetry Pipeline
+                                     </p>
+</li>
+<!-- Log Entry 3 -->
+<li class="px-3 py-2 bg-surface-container-low rounded border border-border-low hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-1">
+<span class="font-mono-data text-[10px] text-ink-secondary">SYS-EVT-090</span>
+<span class="font-mono-data text-[10px] text-ink-muted">08:00:12 UTC</span>
+</div>
+<p class="font-mono-data text-mono-data text-on-surface leading-tight">
+<span class="text-ink-secondary">System initiated automated backup</span> DB_PRD_01
+                                     </p>
+</li>
+<!-- Log Entry 4 -->
+<li class="px-3 py-2 bg-surface-container-low rounded border border-border-low hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-1">
+<span class="font-mono-data text-[10px] text-status-good-ink">USR-EVT-044</span>
+<span class="font-mono-data text-[10px] text-ink-muted">Yesterday</span>
+</div>
+<p class="font-mono-data text-mono-data text-on-surface leading-tight">
+<span class="text-ink-secondary">Admin invited new user</span> sam@sync.io
+                                     </p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<!-- Status Footer Band -->
+<footer class="border-t border-border-low pt-4 mt-4 flex items-center justify-between text-ink-secondary font-meta text-meta">
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-status-good-ink"></div> 5 Active Seats</span>
+<span class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-status-warning-ink"></div> 1 Pending Invite</span>
+</div>
+<div>
+                        Plan limit: 6 / 10 seats used
+                    </div>
+</footer>
+</div>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync - Code Graph &amp; Service Map</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-primary": "#006c45",
+                        "on-tertiary": "#003822",
+                        "status-serious-bg": "#391a0b",
+                        "border-low": "oklch(0.95 0.001485 159 / 7.51%)",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#77fbb8",
+                        "surface-container": "#1f201f",
+                        "status-warning-ink": "#f2af48",
+                        "surface-popover": "#1b1d1c",
+                        "border-control": "#787a79",
+                        "surface-bright": "#393938",
+                        "secondary-fixed-dim": "#c6c7c5",
+                        "outline": "#86948a",
+                        "on-secondary-fixed": "#1a1c1b",
+                        "status-critical-ink": "#fa8880",
+                        "secondary-container": "#454746",
+                        "status-critical-bg": "#541c15",
+                        "on-error-container": "#ffdad6",
+                        "on-surface": "#e4e2e0",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed": "#002112",
+                        "ink-muted": "#bcbdbc",
+                        "surface-container-low": "#1b1c1b",
+                        "surface-container-lowest": "#0d0e0d",
+                        "surface-container-highest": "#343534",
+                        "on-secondary": "#2f3130",
+                        "surface-container-high": "#292a29",
+                        "surface-dim": "#131413",
+                        "status-warning-bg": "#4a2900",
+                        "surface": "#131413",
+                        "on-tertiary-fixed-variant": "#005233",
+                        "ink-secondary": "#989a99",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#30312f",
+                        "tertiary-fixed": "#71fcb6",
+                        "outline-variant": "#3d4a41",
+                        "inverse-surface": "#e4e2e0",
+                        "on-tertiary-container": "#005333",
+                        "on-primary": "#003822",
+                        "primary-fixed-dim": "#59de9d",
+                        "on-secondary-container": "#b5b5b3",
+                        "ink-primary": "#edefee",
+                        "background": "#131413",
+                        "primary-container": "#45cd8e",
+                        "on-primary-fixed": "#002112",
+                        "surface-card": "#181a19",
+                        "secondary-fixed": "#e2e3e0",
+                        "on-secondary-fixed-variant": "#454746",
+                        "on-background": "#e4e2e0",
+                        "tertiary-fixed-dim": "#51df9c",
+                        "status-good-bg": "#00311d",
+                        "tertiary-container": "#3dce8d",
+                        "primary": "#65eaa8",
+                        "surface-tint": "#59de9d",
+                        "surface-variant": "#343534",
+                        "on-surface-variant": "#bccabe",
+                        "on-primary-fixed-variant": "#005233",
+                        "status-serious-ink": "#fd9565",
+                        "secondary": "#c6c7c5",
+                        "status-good-ink": "#85e0ba",
+                        "on-primary-container": "#005333",
+                        "tertiary": "#5feba7"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-expanded": "240px",
+                        "grid-unit": "4px",
+                        "page-frame": "40px",
+                        "field-gap": "4px",
+                        "panel-gap": "32px",
+                        "topbar-height": "48px",
+                        "row-padding": "8px",
+                        "sidebar-collapsed": "48px"
+                    },
+                    "fontFamily": {
+                        "display": ["Manrope"],
+                        "body": ["Inter"],
+                        "mono-data": ["\"ui-monospace, monospace\""],
+                        "section-header": ["Manrope"],
+                        "emphasis": ["Inter"],
+                        "furniture": ["Inter"],
+                        "figure": ["Inter"],
+                        "page-header": ["Manrope"],
+                        "meta": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display": ["46px", { "lineHeight": "48px", "letterSpacing": "-0.045em", "fontWeight": "600" }],
+                        "body": ["13px", { "lineHeight": "20px", "fontWeight": "450" }],
+                        "mono-data": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "section-header": ["18px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "emphasis": ["15px", { "lineHeight": "24px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "furniture": ["12px", { "lineHeight": "16px", "letterSpacing": "0.025em", "fontWeight": "500" }],
+                        "figure": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "page-header": ["22px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "meta": ["12px", { "lineHeight": "16px", "fontWeight": "450" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Glassmorphism Inspector */
+        .glass-panel {
+            background: rgba(27, 29, 28, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-left: 1px solid rgba(134, 148, 138, 0.2);
+        }
+
+        /* Node Animations */
+        @keyframes pulse-emerald {
+            0% { box-shadow: 0 0 0 0 rgba(101, 234, 168, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(101, 234, 168, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(101, 234, 168, 0); }
+        }
+        @keyframes pulse-amber {
+            0% { box-shadow: 0 0 0 0 rgba(242, 175, 72, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(242, 175, 72, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(242, 175, 72, 0); }
+        }
+        
+        .node-healthy {
+            animation: pulse-emerald 3s infinite;
+        }
+        .node-warning {
+            animation: pulse-amber 2s infinite;
+        }
+        
+        /* Edge Lines connecting nodes - CSS representation */
+        .edge-line-h {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, rgba(134, 148, 138, 0.5), rgba(101, 234, 168, 0.8));
+            z-index: 0;
+        }
+        .edge-line-v {
+            position: absolute;
+            width: 2px;
+            background: linear-gradient(180deg, rgba(134, 148, 138, 0.5), rgba(101, 234, 168, 0.8));
+            z-index: 0;
+        }
+        .edge-line-warning {
+            background: linear-gradient(90deg, rgba(134, 148, 138, 0.5), rgba(242, 175, 72, 0.8));
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen w-screen overflow-hidden flex font-body selection:bg-primary-container/30">
+<!-- SideNavBar (Shared Component) -->
+<nav class="w-sidebar-expanded h-full flex flex-col bg-surface-container-low dark:bg-surface-container-low text-primary dark:text-primary font-body text-body border-r border-border-low fixed left-0 top-0 bottom-0 z-50">
+<!-- Brand Header -->
+<div class="h-topbar-height flex items-center px-4 border-b border-border-low">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="sync">sync</span>
+</div>
+<div>
+<h1 class="font-display text-page-header font-bold text-primary dark:text-primary leading-tight">Sync</h1>
+<p class="font-meta text-meta text-ink-secondary leading-none">AI API Orchestrator</p>
+</div>
+</div>
+</div>
+<!-- Main Nav -->
+<div class="flex-1 py-4 px-3 flex flex-col gap-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded bg-primary-container/10 text-primary font-emphasis border-r-2 border-primary active:translate-y-px" href="#">
+<span class="material-symbols-outlined" data-icon="hub" data-weight="fill">hub</span>
+<span>Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined" data-icon="healing">healing</span>
+<span>Self-Healing Queue</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span>Telemetry/Traces</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined" data-icon="key">key</span>
+<span>API Keys</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 active:translate-y-px" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</div>
+<!-- CTA & Footer Nav -->
+<div class="p-4 border-t border-border-low flex flex-col gap-4">
+<button class="w-full bg-primary text-on-primary font-emphasis text-emphasis py-2 rounded flex items-center justify-center gap-2 hover:bg-primary-fixed-dim transition-colors active:translate-y-px">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+                Deploy Integration
+            </button>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 text-body" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span>Docs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-ink-secondary hover:text-ink-primary hover:bg-surface-container-highest transition-colors duration-0 text-body" href="#">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+<span>Support</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- TopAppBar (Shared Component) -->
+<header class="fixed top-0 right-0 left-sidebar-expanded z-40 flex items-center justify-between px-page-frame h-topbar-height w-full bg-surface dark:bg-surface border-b border-border-low">
+<!-- Search/Context (on_left) -->
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-ink-secondary bg-surface-container px-3 py-1.5 rounded border border-border-control w-64 hover:border-outline transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="search">search</span>
+<input class="bg-transparent border-none p-0 focus:ring-0 text-body text-ink-primary w-full placeholder-ink-muted outline-none" placeholder="Search services..." type="text"/>
+</div>
+<div class="flex items-center gap-2 font-furniture text-furniture uppercase tracking-wider text-ink-secondary">
+<span class="material-symbols-outlined text-[16px]" data-icon="account_tree">account_tree</span>
+<span>Service Map : us-east-1</span>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-4">
+<!-- Trailing Primary Action -->
+<div class="flex items-center gap-2 px-3 py-1 rounded bg-status-good-bg text-status-good-ink border border-status-good-ink/20">
+<span class="material-symbols-outlined text-[16px]" data-icon="check_circle" data-weight="fill">check_circle</span>
+<span class="font-furniture text-furniture uppercase tracking-wider">System Healthy</span>
+</div>
+<div class="w-px h-6 bg-border-low mx-1"></div>
+<!-- Trailing Icon Actions -->
+<button class="text-ink-secondary hover:text-ink-primary hover:bg-white/5 p-1.5 rounded transition-colors duration-0 active:translate-y-px">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-ink-secondary hover:text-ink-primary hover:bg-white/5 p-1.5 rounded transition-colors duration-0 active:translate-y-px">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+</button>
+<!-- Profile -->
+<button class="w-8 h-8 rounded-full bg-surface-container-highest border border-border-low flex items-center justify-center overflow-hidden hover:border-outline transition-colors ml-2">
+<img class="w-full h-full object-cover" data-alt="A futuristic minimalist avatar placeholder featuring a subtle geometric design in shades of dark grey and emerald green, illuminated by soft rim lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDt2JYJBZKss6yfk_oGvh1c5J2fXRtcsO8ZPGwO0dyA7eUuqEJZ0BssCHCQgZQKXvVPXiig-RscZuC8iDkVUPqaryu4jzJr9gEvrmTy3kvyZnF7c98c491k8TT5SaMmBWRfNhE80qA_km3TMpJ8M5Xc_0um6Ddnd7-9XeW5O-0Pq44X3WjoSi5Hg3bv9MEykE9XiIpGjndR5fK7KSKMScAMM93ULAk3zv1n0Xqo-LDrS2NiBz_L_9Fk"/>
+</button>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 ml-[240px] mt-[48px] relative bg-zinc-950 flex h-[calc(100vh-48px)]">
+<!-- Graph Area -->
+<div class="flex-1 relative overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-surface-dim to-background">
+<!-- Grid Background Pattern -->
+<div class="absolute inset-0 opacity-[0.03]" style="background-image: radial-gradient(#86948a 1px, transparent 1px); background-size: 24px 24px;"></div>
+<!-- Static Map Implementation (Visual Representation) -->
+<div class="absolute inset-0 flex items-center justify-center p-page-frame relative">
+<!-- Edges -->
+<!-- Sync Core to Stripe -->
+<div class="edge-line-h w-48 top-1/2 left-[calc(50%-100px)] transform -translate-y-1/2"></div>
+<!-- Sync Core to Twilio -->
+<div class="edge-line-h w-32 top-[calc(50%-120px)] left-[calc(50%+40px)] transform -rotate-[35deg] origin-left"></div>
+<!-- Sync Core to Salesforce (Warning Edge) -->
+<div class="edge-line-h edge-line-warning w-32 top-[calc(50%+120px)] left-[calc(50%+40px)] transform rotate-[35deg] origin-left"></div>
+<!-- Node: Core Service -->
+<button class="absolute z-10 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group focus:outline-none">
+<div class="w-20 h-20 rounded-full bg-surface-card border-2 border-primary node-healthy flex items-center justify-center shadow-[0_0_20px_rgba(101,234,168,0.15)] relative z-10 transition-transform group-active:scale-95">
+<span class="material-symbols-outlined text-primary text-[32px]" data-icon="hub">hub</span>
+</div>
+<div class="mt-3 bg-surface-container-high px-3 py-1.5 rounded border border-border-low text-center">
+<div class="font-emphasis text-emphasis text-ink-primary">Sync.Core</div>
+<div class="font-mono-data text-mono-data text-status-good-ink mt-0.5">100% Uptime</div>
+</div>
+</button>
+<!-- Node: Stripe API -->
+<button class="absolute z-10 top-1/2 left-[20%] transform -translate-y-1/2 flex flex-col items-center group focus:outline-none">
+<div class="w-16 h-16 rounded-full bg-surface-card border-2 border-primary node-healthy flex items-center justify-center shadow-[0_0_15px_rgba(101,234,168,0.1)] relative z-10 transition-transform group-active:scale-95 hover:border-tertiary-container">
+<span class="material-symbols-outlined text-primary text-[28px]" data-icon="credit_card">credit_card</span>
+</div>
+<div class="mt-3 bg-surface-container-high px-3 py-1.5 rounded border border-border-low text-center">
+<div class="font-emphasis text-emphasis text-ink-primary">Stripe API</div>
+<div class="font-mono-data text-mono-data text-status-good-ink mt-0.5">34ms avg</div>
+</div>
+</button>
+<!-- Node: Twilio -->
+<button class="absolute z-10 top-[20%] right-[30%] flex flex-col items-center group focus:outline-none">
+<div class="w-16 h-16 rounded-full bg-surface-card border-2 border-primary node-healthy flex items-center justify-center shadow-[0_0_15px_rgba(101,234,168,0.1)] relative z-10 transition-transform group-active:scale-95">
+<span class="material-symbols-outlined text-primary text-[28px]" data-icon="sms">sms</span>
+</div>
+<div class="mt-3 bg-surface-container-high px-3 py-1.5 rounded border border-border-low text-center">
+<div class="font-emphasis text-emphasis text-ink-primary">Twilio SMS</div>
+<div class="font-mono-data text-mono-data text-status-good-ink mt-0.5">85ms avg</div>
+</div>
+</button>
+<!-- Node: Salesforce (Warning) -->
+<button class="absolute z-10 bottom-[20%] right-[30%] flex flex-col items-center group focus:outline-none ring-2 ring-primary ring-offset-2 ring-offset-background rounded">
+<!-- This node is selected, simulated active state -->
+<div class="w-16 h-16 rounded-full bg-surface-card border-2 border-status-warning-ink node-warning flex items-center justify-center shadow-[0_0_15px_rgba(242,175,72,0.15)] relative z-10 transition-transform group-active:scale-95">
+<span class="material-symbols-outlined text-status-warning-ink text-[28px]" data-icon="cloud">cloud</span>
+</div>
+<div class="mt-3 bg-status-serious-bg px-3 py-1.5 rounded border border-status-serious-ink/30 text-center">
+<div class="font-emphasis text-emphasis text-ink-primary flex items-center gap-1 justify-center">
+                            Salesforce
+                        </div>
+<div class="font-mono-data text-mono-data text-status-warning-ink mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" data-icon="warning">warning</span>
+                            High Latency
+                        </div>
+</div>
+</button>
+</div>
+<!-- Graph Controls (Bottom Left) -->
+<div class="absolute bottom-6 left-6 flex gap-2">
+<button class="w-8 h-8 rounded bg-surface-container border border-border-low flex items-center justify-center text-ink-secondary hover:text-ink-primary hover:bg-surface-container-high transition-colors active:translate-y-px">
+<span class="material-symbols-outlined text-[18px]" data-icon="zoom_in">zoom_in</span>
+</button>
+<button class="w-8 h-8 rounded bg-surface-container border border-border-low flex items-center justify-center text-ink-secondary hover:text-ink-primary hover:bg-surface-container-high transition-colors active:translate-y-px">
+<span class="material-symbols-outlined text-[18px]" data-icon="zoom_out">zoom_out</span>
+</button>
+<button class="w-8 h-8 rounded bg-surface-container border border-border-low flex items-center justify-center text-ink-secondary hover:text-ink-primary hover:bg-surface-container-high transition-colors active:translate-y-px ml-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="center_focus_strong">center_focus_strong</span>
+</button>
+</div>
+</div>
+<!-- Glassmorphism Inspector Panel (Right Side) -->
+<aside class="w-[420px] h-full glass-panel flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)] z-20 relative">
+<!-- Inspector Header -->
+<div class="p-5 border-b border-border-low/50 flex justify-between items-start">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded bg-status-warning-bg text-status-warning-ink font-furniture text-furniture uppercase tracking-wider border border-status-warning-ink/20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="warning">warning</span>
+                            Degraded
+                        </span>
+<span class="font-mono-data text-mono-data text-ink-muted">node_id: sf_prod_01</span>
+</div>
+<h2 class="font-section-header text-section-header text-ink-primary mt-2">Salesforce Integration</h2>
+<p class="font-body text-body text-ink-secondary mt-1">REST API Gateway • us-east-1</p>
+</div>
+<button class="text-ink-secondary hover:text-ink-primary p-1 rounded transition-colors duration-0 active:translate-y-px">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Inspector Content (Scrollable) -->
+<div class="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
+<!-- Telemetry Summary -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-card/50 border border-border-low/50 rounded p-3">
+<div class="font-furniture text-furniture text-ink-secondary uppercase tracking-wider mb-1">Latency (99p)</div>
+<div class="font-figure text-figure text-status-warning-ink">1,402ms</div>
+<div class="font-meta text-meta text-status-warning-ink mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> +45% 1h
+                        </div>
+</div>
+<div class="bg-surface-card/50 border border-border-low/50 rounded p-3">
+<div class="font-furniture text-furniture text-ink-secondary uppercase tracking-wider mb-1">Error Rate</div>
+<div class="font-figure text-figure text-ink-primary">0.12%</div>
+<div class="font-meta text-meta text-ink-muted mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="horizontal_rule">horizontal_rule</span> Steady
+                        </div>
+</div>
+</div>
+<!-- Code Viewer Section -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center">
+<h3 class="font-emphasis text-emphasis text-ink-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-ink-secondary" data-icon="code">code</span>
+                            Source Definition
+                        </h3>
+<a class="font-furniture text-furniture text-primary hover:text-primary-fixed-dim flex items-center gap-1 transition-colors" href="#">
+                            View on GitHub
+                            <span class="material-symbols-outlined text-[14px]" data-icon="open_in_new">open_in_new</span>
+</a>
+</div>
+<div class="bg-surface-dim rounded border border-border-low overflow-hidden">
+<div class="bg-surface-container-low px-3 py-2 border-b border-border-low flex items-center gap-2">
+<span class="material-symbols-outlined text-ink-secondary text-[16px]" data-icon="description">description</span>
+<span class="font-mono-data text-mono-data text-ink-primary">src/gateways/salesforce.py</span>
+</div>
+<div class="p-4 overflow-x-auto">
+<pre class="font-mono-data text-mono-data leading-relaxed"><code class="text-ink-secondary"><span class="text-tertiary">import</span> requests
+<span class="text-tertiary">from</span> core.circuit_breaker <span class="text-tertiary">import</span> Breaker
+
+<span class="text-primary-fixed-dim">@Breaker</span>(timeout=2000, fallback=<span class="text-status-good-ink">"queue"</span>)
+<span class="text-tertiary">class</span> <span class="text-ink-primary">SalesforceGateway</span>:
+    <span class="text-tertiary">def</span> <span class="text-ink-primary">__init__</span>(self, config):
+        self.endpoint = config.get(<span class="text-status-good-ink">'SF_ENDPOINT'</span>)
+        <span class="text-[#787a79]"># Current timeout set to 5s. </span>
+        <span class="text-[#787a79]"># Consider lowering to fail fast?</span>
+        self.timeout = <span class="text-status-warning-ink">5.0</span>
+        
+    <span class="text-tertiary">def</span> <span class="text-ink-primary">sync_record</span>(self, payload):
+        res = requests.post(
+            self.endpoint, 
+            json=payload,
+            timeout=self.timeout
+        )
+        <span class="text-tertiary">return</span> res.json()</code></pre>
+</div>
+</div>
+</div>
+<!-- Remediation Action -->
+<div class="mt-auto pt-4 border-t border-border-low/50">
+<button class="w-full bg-surface-container-high border border-border-control text-ink-primary font-emphasis text-emphasis py-2 rounded flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors active:translate-y-px">
+<span class="material-symbols-outlined text-[18px]" data-icon="manufacturing">manufacturing</span>
+                        Run Diagnostic Trace
+                    </button>
+</div>
+</div>
+</aside>
+</main>
+</body></html>
