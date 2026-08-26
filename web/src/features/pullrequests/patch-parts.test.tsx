@@ -5,9 +5,10 @@
  * it, so a patch that opened a pull request looked exactly like one that never did. These hold the
  * three states apart: opened with a number, opened without one, and never opened at all.
  *
- * The pull-request numbers here are four digits because `test_no_colour_literal_outside_index_css`
- * reads `#101` as a three-digit hex colour. A four-digit number matches neither `#RGB` nor
- * `#RRGGBB`.
+ * The pull-request numbers here are FIVE digits because `test_no_colour_literal_outside_index_css`
+ * reads a `#`-prefixed hex run as a colour literal. Valid hex colours are 3, 4, 6 or 8 digits --
+ * `#101` tripped it as `#RGB` and `#1017` then tripped it as `#RGBA`, since every decimal digit
+ * is also a hex digit. Five is the shortest length no hex colour can take.
  */
 
 import { cleanup, render, screen } from "@testing-library/react"
@@ -27,10 +28,10 @@ const target = (over: Partial<{ repo_id: string | null; branch: string | null; p
 
 describe("where the patch went", () => {
   it("links the pull request by number when the record holds one", () => {
-    render(<PatchTargetList target={target({ pr_url: "https://github.com/acme/web/pull/1017", pr_number: 1017 })} />)
+    render(<PatchTargetList target={target({ pr_url: "https://github.com/acme/web/pull/10173", pr_number: 10173 })} />)
 
-    const link = screen.getByRole("link", { name: "#1017" })
-    expect(link.getAttribute("href")).toBe("https://github.com/acme/web/pull/1017")
+    const link = screen.getByRole("link", { name: "#10173" })
+    expect(link.getAttribute("href")).toBe("https://github.com/acme/web/pull/10173")
   })
 
   it("falls back to the url when a pull request carries no number", () => {
