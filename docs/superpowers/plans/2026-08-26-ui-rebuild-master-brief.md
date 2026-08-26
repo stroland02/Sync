@@ -92,6 +92,40 @@ identity demoted to a small muted value · the sidebar's five stage sentences (s
 **Getting Started leads the Overview** and is a stepper: icon bubble, N-of-M ready with a progress
 bar, one chip per prerequisite, the first unmet one expanded with a single CTA.
 
+## 6a. The audit of 2026-08-26 — read this before believing anything is done
+
+Five agents read all 46 plans, every spec, `DESIGN.md` and `web/CLAUDE.md`, and reconciled what
+they mandate against what the console is. The owner's report — *the plans mandate a full rebuild
+and the work is reskinning the old UI* — **was correct.**
+
+**The measurement:** eighteen of twenty-one screen files render `ScreenFrame` at its default
+`flow` layout, one long scrolling column. Only `call-sites-page.tsx` is `locked`; `file-tree-page`
+and `index-graph-page` are `fill`. The eval loop's own systemic finding #1 — impact 5, nine
+screens — is still open across the console.
+
+**Every screen mandated as a rebuild is still the old screen under new tokens.** `findings-page`
+still renders `TriageTabs` (spec: *dies*). `finding-page` and `workflow-page` still render
+`DetailGrid` (spec: *drops it entirely*). `workflow-page` still renders `Tabs`/`RunFactRail`/
+`SettledOutput`, all named DELETED. `runs-table.tsx` still exists (spec: DELETE). Every file the
+specs name as new is absent: `bento-pane`, `findings-inspector`, `evidence-pane`,
+`remediation-pane`, `runs-stream`, `split-panes`, `chip-tabs`, `patch-parts`.
+
+**The mechanical cause, now fixed (`CI-W642`).** `web/CLAUDE.md` loads on every console edit and
+opened with *"Before you change a screen, open the mock — `docs/console-mock/screens/`"*. That
+mock was demoted on 2026-08-25, but both directories sit side by side on disk, so an agent obeying
+the every-turn rule opened the wrong drawing and conformed to the old UI.
+
+**The second cause:** three of four parallel builders hit a session limit mid-run and returned
+nothing (`CI-W639`). Dispatch rebuilds in waves of three, never six.
+
+**The execution sequence is a 10-row table in the spec.** Steps 1, 2, 3 and 5 landed
+(`d87287da`, `5ea0cb7c`, `03013d7f`, `a719967c`). **Steps 4, 6, 7, 8, 9, 10 are unbuilt and every
+one is L-effort.** The work stopped at the cheap end of its own mandate.
+
+Reskin was *mandated* for six screens — Vendors, Services, Telemetry, Trends, Settings and the
+secondary set. What went wrong is not that reskin happened; it is that reskin arrived instead of
+the six rebuilds that head the build order.
+
 ## 7. Still to build
 
 - **The six remaining screen rebuilds** (Findings, Overview, Runs, Finding detail, Workflow,
