@@ -1,8 +1,8 @@
 /**
  * Codebase: the selected repository, as a viewport-locked bento of four panes.
  *
- * Two maps across the top row, the setup stepper and the stage doors across the bottom; the grid
- * fills the window and each pane scrolls its own body, so nothing on this screen is below a fold.
+ * The setup stepper first at full width, then the two maps sharing a row, then the stage doors full
+ * width below the fold; each pane scrolls its own body and the grid owns the one page-level scroll.
  * Every figure here and on every screen below is scoped to `repoId` and names the scope it was
  * computed in. Owner ruling 2026-08-19: this screen shows the shape of the loop and the doors into
  * it, never a truncated copy of a screen below it, and no figure combines the five stages -- a
@@ -89,14 +89,19 @@ function CodebaseScreen({ repoId }: { repoId: string }) {
           the bento rather than being auto-placed into a cell. */}
       <PipelineStrip repoId={repoId} />
 
-      {/* Row A holds the two maps at equal span, which is the 2026-08-19 ruling made structural:
-          neither map summarises the other, so no viewport may rank them. Row B takes the compact
-          action column beside the wide card grid. */}
-      <div className="bento-lock grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-8 lg:grid-cols-12">
+      {/* Owner ruling 2026-08-26, and the ORDER is the ruling: Getting Started full width, then the
+          two maps side by side, then the stage doors full width at the bottom. This is the landing
+          screen, so what a reader lands on is the decision -- the first two rows are sized to fill
+          the viewport, and the doors sit deliberately below the fold. Somebody who has not finished
+          setting up meets the stepper; somebody who has meets the codebase.
+
+          The two maps keep equal span, which is the 2026-08-19 ruling made structural: neither map
+          summarises the other, so no viewport may rank them. */}
+      <div className="bento-lock-overview grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-8 lg:grid-cols-12">
+        <GettingStartedCard repoId={repoId} span="lg:col-span-12" />
         <IntegrationMapPane repoId={repoId} span="lg:col-span-6" />
         <FileTreePane repoId={repoId} span="lg:col-span-6" />
-        <GettingStartedCard repoId={repoId} span="lg:col-span-4" />
-        <WorkflowGrid repoId={repoId} span="lg:col-span-8" />
+        <WorkflowGrid repoId={repoId} span="lg:col-span-12" />
       </div>
     </ScreenFrame>
   )

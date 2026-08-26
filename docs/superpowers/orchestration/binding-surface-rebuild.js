@@ -1,0 +1,205 @@
+export const meta = {
+  name: 'binding-surface-rebuild',
+  description: 'Rebuild the binding surface page against its Stitch reference',
+  phases: [
+    { title: 'Choose reference' },
+    { title: 'Rebuild' },
+    { title: 'Verify' },
+  ],
+}
+
+const ROOT = 'C:/Users/sebastianr/Desktop/Terminal/Claude/Sync'
+const STITCH = 'docs/stitch_sync_developer_console/stitch_sync_developer_console'
+
+const BASE = [
+  'You are working in ' + ROOT + ' on the Sync operator console.',
+  '',
+  'READ FIRST, in this order:',
+  '- docs/superpowers/plans/2026-08-26-ui-rebuild-master-brief.md (objective and authority order)',
+  '- web/CLAUDE.md (what a screen may and may not claim -- this OUTRANKS the reference)',
+  '- .claude/rules/console-surface.md and DESIGN.md (the token contract)',
+  '- docs/superpowers/specs/2026-08-25-stitch-rebuild-specs.md (per-file KEEP/REBUILD/DELETE format)',
+  '',
+  'THE SCREEN: web/src/features/bindings/binding-surface-page.tsx',
+  'ROUTE: /repositories/:repoId/bindings/vendors/:vendorId/operations/:operationId',
+  'LIVE URL for verification (the console runs at localhost:5173 against a real API on 8787):',
+  '  http://localhost:5173/repositories/synthetic%2Fevery-state/bindings/vendors/stripe/operations/PostPaymentIntents',
+  '',
+  'THE OWNER SAID, VERBATIM: "we still need to redesign the binding surface page as this page is',
+  'unorganized and has cluttered information."',
+  '',
+  'MEASURED IN CHROME 2026-08-26, which is what "cluttered" means concretely:',
+  '- The page is 1397px of content in a 720px viewport -- **1.9 screens of scrolling**.',
+  '- It renders that to show **FOUR total data rows**. Content-to-data ratio is the defect.',
+  '- The call-sites table has **NINE columns**.',
+  '- 346 words and 6 paragraphs of prose for 3 headings.',
+  '- ScreenFrame carries NO layout prop, so it is the default "flow" -- one long unbounded column.',
+  '',
+  'THE HONESTY RULES ARE NOT NEGOTIABLE AND OUTRANK THE REFERENCE:',
+  '- No composite score, health figure, traffic light or liveness pulse. If your reference has one,',
+  '  REFUSE IT and say so in your report. A badge from a closed vocabulary, legible without its',
+  '  colour, is permitted.',
+  '- Absence is not zero. Staleness is not liveness. Never-measured is not nothing-here. Every',
+  '  nothing gets its own sentence saying WHICH nothing it is.',
+  '- No figure without its scope, and no percentage without its denominator on screen.',
+  '- The provenance rung stays monochrome and is never a hideable column.',
+  '- Cutting prose is REQUIRED here, but the CLAIM stays visible in the fewest honest words while',
+  '  only the ARGUMENT moves behind an info hint. A reader who never hovers must still be able to',
+  '  tell what a figure covers and whether it was measured.',
+].join('\n')
+
+phase('Choose reference')
+
+const REFERENCE_SHORTLIST = [
+  'api_documentation',
+  'high_density_technical_console',
+  'code_graph_service_map',
+  'repository_index_explorer',
+  'integration_performance_explorer',
+  'database_explorer',
+].join(', ')
+
+const choice = await agent([
+  BASE,
+  '',
+  'YOUR TASK: choose the Stitch reference this screen should be rebuilt against, and justify it.',
+  '',
+  'Look under ' + STITCH + '/. Each subdirectory holds a screen.png and the code.html behind it.',
+  'Shortlist worth opening: ' + REFERENCE_SHORTLIST + '. You may pick one outside the shortlist if',
+  'it genuinely fits better -- say why.',
+  '',
+  'The binding surface answers ONE question: *which call sites in this codebase bind this one vendor',
+  'operation, what evidence puts them at their rung, and what has changed about that operation.*',
+  'It is a detail view over one operation, not a directory and not a dashboard.',
+  '',
+  'Open the actual PNGs. Report the composition you are taking from the reference: how many panes,',
+  'what each pane holds, what is locked and what scrolls. Also report anything in the reference you',
+  'must REFUSE on honesty grounds.',
+].join('\n'), {
+  label: 'choose-reference',
+  phase: 'Choose reference',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['reference', 'why', 'composition', 'refusals'],
+    properties: {
+      reference: { type: 'string' },
+      why: { type: 'string' },
+      composition: { type: 'string', description: 'panes, what each holds, what locks and what scrolls' },
+      refusals: { type: 'string', description: 'anything in the reference refused on honesty grounds' },
+    },
+  },
+})
+
+log('reference chosen: ' + (choice ? choice.reference : 'NONE'))
+
+phase('Rebuild')
+
+const built = await agent([
+  BASE,
+  '',
+  'YOUR TASK: rebuild the binding surface page. Another agent already chose the reference:',
+  '',
+  'REFERENCE: ' + (choice ? choice.reference : 'high_density_technical_console'),
+  'WHY: ' + (choice ? choice.why : ''),
+  'COMPOSITION TO BUILD: ' + (choice ? choice.composition : ''),
+  'REFUSALS IT FOUND: ' + (choice ? choice.refusals : ''),
+  '',
+  'Open ' + STITCH + '/' + (choice ? choice.reference : '') + '/screen.png and its code.html yourself',
+  'before writing anything. Then build it.',
+  '',
+  'WHAT THE REBUILD MUST ACHIEVE, and each of these is checkable:',
+  '1. **A bounded layout.** ScreenFrame layout="locked" (or "fill" if the content genuinely needs',
+  '   it), so the page itself does not scroll and named regions scroll instead. The mechanic is',
+  '   web/src/layouts/pane.tsx (Pane / PaneScroll) and web/src/components/pane.tsx (PanelPane).',
+  '2. **A real multi-pane composition**, not one column. Nine of the console\'s screens are already',
+  '   locked multi-pane compositions -- read features/findings/finding-page.tsx for the pattern that',
+  '   landed, and features/vendors/repository-vendors-page.tsx for a cards deck with a drawer.',
+  '3. **The nine-column table goes.** Nine columns for four rows is the clutter itself. Decide what a',
+  '   reader actually needs in the row and move the rest into a drawer or an expandable -- the',
+  '   existing DetailLayout docked drawer (components/detail-layout.tsx) renders a right-hand Sheet',
+  '   that never squeezes the table, and that is the owner-ruled shape for a call site.',
+  '4. **Cut the prose hard** under the rule quoted above: claim visible, argument behind the hint.',
+  '5. Keep every honest distinction the current page draws. Read it first and inventory them -- if',
+  '   the page currently says which nothing it is somewhere, the rebuild still says it.',
+  '',
+  'DISCIPLINE:',
+  '- **Test first, and watch each new guard fail for the reason you expect** before trusting it',
+  '  (.claude/rules/test-discipline.md). Break the subject deliberately, watch the named test go',
+  '  red, restore. Console tests are classification, derivation and structural invariants only --',
+  '  NEVER class names, NEVER snapshots.',
+  '- Tailwind v4 trap: h-* derives from --spacing-*, so `h-row-lg` generates NOTHING. Use',
+  '  `h-[var(--row-lg)]`. This silently rendered a header at 29px once.',
+  '- Cascade layers: Tailwind utilities outrank @layer components regardless of specificity. Three',
+  '  viewport rules were inert for their whole life because of this.',
+  '- No new token. A colour, type step, spacing value or radius is argued in DESIGN.md, never added',
+  '  at a call site. No `bg-x/10` or `text-y/70` spelled inline.',
+  '- If you factor shared code out of a file OUTSIDE features/bindings/, say so LOUDLY and FIRST in',
+  '  forCoordinator -- two lanes once extracted the same renderer into rival modules.',
+  '',
+  'GATE BEFORE REPORTING: `npx tsc -b` and `npx vitest run --maxWorkers=4` from web/. Read the FAILED',
+  'list, never the count.',
+  '',
+  'VERIFY ON THE LIVE CONSOLE at the URL above, at 1920x1080 AND 1366x768. Screenshots do not work',
+  'in this session -- the pane does not composite frames -- so MEASURE THE DOM instead: computed',
+  'overflow on main, document scrollHeight vs clientHeight, the pane geometry, how many regions',
+  'actually scroll, and that nothing is clipped inside its own box. Report the numbers.',
+].join('\n'), {
+  label: 'rebuild:binding-surface',
+  phase: 'Rebuild',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['done', 'isLocked', 'tscClean', 'vitestClean', 'files', 'deleted', 'measurements', 'forCoordinator'],
+    properties: {
+      done: { type: 'string', description: 'what the screen is now, top to bottom' },
+      isLocked: { type: 'boolean' },
+      tscClean: { type: 'boolean' },
+      vitestClean: { type: 'boolean' },
+      files: { type: 'array', items: { type: 'string' } },
+      testsChanged: { type: 'array', items: { type: 'string' } },
+      deleted: { type: 'array', items: { type: 'string' }, description: 'what was removed, and why' },
+      measurements: { type: 'string', description: 'the live DOM numbers at both resolutions' },
+      blocked: { type: 'array', items: { type: 'string' } },
+      forCoordinator: { type: 'string', description: 'cross-directory work FIRST, then rulings taken' },
+    },
+  },
+})
+
+phase('Verify')
+
+const verdict = await agent([
+  BASE,
+  '',
+  'A rebuild of the binding surface page claims to be finished. Try to REFUTE it. Default to',
+  'refuted=true if you cannot confirm.',
+  '',
+  'THEIR CLAIM: ' + (built ? built.done : ''),
+  'THEIR MEASUREMENTS: ' + (built ? built.measurements : ''),
+  '',
+  'Check, in the tree and on the live console:',
+  '1. Is the layout genuinely bounded, or did they set the prop without composing panes? A screen',
+  '   that sets layout="locked" and still renders one stacked column is NOT rebuilt.',
+  '2. Is the nine-column table actually gone, or renamed?',
+  '3. Did any honest distinction get lost in the prose cut? Read the CURRENT page against git HEAD\'s',
+  '   version -- `git diff HEAD -- web/src/features/bindings/` -- and list any sentence that stated',
+  '   WHICH nothing something was and no longer does.',
+  '4. Does anything on the page now assert a claim the payload cannot support -- a score, a health',
+  '   figure, a pulse, a percentage without its denominator?',
+  '5. Run `npx tsc -b` and `npx vitest run --maxWorkers=4` yourself. Do not trust the report.',
+].join('\n'), {
+  label: 'refute:binding-surface',
+  phase: 'Verify',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['refuted', 'findings'],
+    properties: {
+      refuted: { type: 'boolean' },
+      findings: { type: 'array', items: { type: 'string' } },
+      gatesPassed: { type: 'boolean' },
+    },
+  },
+})
+
+return { choice, built, verdict }

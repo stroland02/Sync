@@ -1,157 +1,200 @@
 /**
  * One vendor operation: every call site the index binds to it, and what the vendor changed.
  *
- * `sync.dashboard.graph_views.binding_surface` reads `GraphStore` alone, never `GraphSurface`
- * — an aggregate across every repository the index has seen is a real question and a detector
- * per finding is not what is asking it here.
+ * **Rebuilt 2026-08-26 against `docs/stitch_sync_developer_console/.../repository_index_explorer/`,
+ * on the owner's report that the screen was "unorganized and has cluttered information".** The
+ * measurement behind that word, taken in Chrome at 1280x720 before this rebuild: 1397px of content
+ * in a 720px viewport to show **four data rows**, a nine-column table, 346 words in six paragraphs,
+ * and `ScreenFrame` at its default `flow` layout — one unbounded column. The rebuild is
+ * `layout="locked"`: nothing scrolls as a page and four named regions scroll their own bodies.
  *
- * Not a `Provenance` page. `ProvenanceStrip` renders an envelope `whats_at_risk` and
- * `whats_changed` genuinely carry — a feed-fetch timestamp and a context-savings figure this
- * route never computes. Forcing that shape here would invent two fields the transport does
- * not send, which is exactly what keeps `WorkflowState` and `RunsPage` off it elsewhere in
- * this console; the honest page-level rung sentence below is written in prose instead, the
- * fourth such sentence beside the three `ProvenanceStrip` already carries.
+ * The reference answers this screen's question in this screen's words — its centre pane is titled
+ * *Watched call sites* with a count chip, its left pane chooses the scope, its right pane previews
+ * the selected call's source. Three of its nine claims are refused and named where they would have
+ * landed: the composite health pill, the invented `Sensitivity` and `Status` columns, and the
+ * call-site telemetry figures this route never computes (see `SelectedCallSite` below).
  *
- * B91 ruling: `BindingCallSite.args_keys`, `.response_fields_read` and `.loop_depth` are
- * screen gaps, not payload to retire — `parameter_deprecation`, `vendor_change` and
- * `observed_drift` all query the first two, and `loop_depth` is the static evidence a
- * repeated-call finding rests on (`sync.signals.reachability`). All three are now columns
- * below. `ObservedCallRow.server_address` and `.url_template` are the same class of gap one
- * level over, in `features/telemetry`, which this feature does not own.
+ * ## What each region is, and why it is where it is
  *
- * ---
+ * **Left — the operation's own facts, and the two ways to narrow the table.** The facts used to sit
+ * in a 22rem rail beside an empty half-screen; here they are the pane's subject. Their scope is the
+ * whole workspace and the table's is the window, which is the disagreement the six deleted
+ * paragraphs existed to explain — it is now one visible sentence with the argument behind the ⓘ.
  *
- * **M7-W164 moved this screen onto the chassis, and two of its decisions are about density
- * rather than composition, because this is the console's densest screen.**
+ * **Centre, dominant — the call sites.** Nine columns become five. The four that left are not
+ * hidden and not hideable: `call-site-columns.ts` partitions them, and every one is rendered in
+ * full for the selected row, which is when a reader actually wants them. B91's ruling that
+ * `args_keys`, `response_fields_read` and `loop_depth` are screen gaps rather than payload to
+ * retire is honoured — all three are still on screen.
  *
- * *No stat tiles.* `FactList` sits beside the header, where it costs nothing above the fold; a
- * row of `FactTile`s under it would cost about a hundred vertical pixels on a screen whose
- * scarce resource is rows above the fold on a 2,500-row table. Every count a tile row would
- * have carried is already on screen — the repository facet counts them per repository, and the
- * footer bar counts the page against the total.
+ * **The rung stays first and stays monochrome.** `vendor-findings-table.tsx` carries the argument
+ * the honesty guard pins by its "sideways scroll" fragment: the call site is the widest cell, so a
+ * rung column further right is a column the layout does not protect. It is not one of the four that
+ * moved, and it is not a column-visibility option.
  *
- * *No card around either table.* A `Card` costs 32px of horizontal room, and this table is the
- * one place in the console where 32px changes a row's height. B115 records that the row falls
- * from 77px to 57px at 1,170px of table width; the card was inside that budget. The two regions
- * are told apart by their headings and by the rule each footer bar draws under itself, which is
- * what separates them on a screen that is one subject rather than two.
+ * **Centre, below — vendor changes**, the one region the reference has no counterpart for. A
+ * vertical split rather than a tab pair: tabs would cost no height and hide half the question the
+ * screen exists to answer. Recorded as a reversible ruling; the fallback if the split ever starves
+ * the call-site table is a chip-tab pair labelled with both counts.
  *
- * ## Ported onto the vendored substrate by M7-W176
+ * **Right — the selected call site**, replacing `BindingDrawer` (deleted with it). The pane stays
+ * mounted with nothing selected: a pane that appears and disappears reflows the table under the
+ * reader's cursor. `binding-selection.ts` and its URL parameter are unchanged, so Back still closes
+ * a selection and a deep link to a call site this page does not hold still opens something saying
+ * so.
  *
- * `docs/superpowers/briefs/2026-08-07-substrate-binding-surface.md` is the mapping table this port
- * was gated on. Read that before porting a level, not this docstring.
+ * ## Two corrections this rebuild makes rather than reskins
  *
- * **This is the level where the substrate is refused on a number.** Every level before it put its
- * regions inside the vendored `Card`, which costs its contents 32px of horizontal room. Measured at
- * 1440x900 against the 2,500-row scale fixture, the call-site table's rows stand at 56px with
- * 1097px to draw in and at 76px with 1081px — so a card does not merely cost twenty pixels a row,
- * it clears a cliff sixteen pixels wide with nothing to spare. B115 recorded the same effect before
- * the substrate existed and the two paragraphs above are what it left behind; this port re-measured
- * it on the ported anatomy and kept the arrangement. The changes table would fit in a card and does
- * not get one either, because one ringed panel beside one bare table on a screen that is one
- * subject draws a grouping claim across a boundary that is not there.
+ * **The repository facet was a dead control.** `M14-W386` moved the scope into the route, and the
+ * chips went on writing a `repo_id` search parameter that nothing reads — pressing one changed the
+ * URL and no rows. They are links to the same operation under that repository now, which is what
+ * choosing a repository means once the route is the scope.
  *
- * What the substrate does land on this level: both tables take the Studio anatomy through
- * `components/data-table`, and the vendored `Card` composes the drawer, where 32px buys something
- * and costs no row anything.
- *
- * **The rung moves to the first column.** It was eighth of nine — the last table in the console
- * still ordering it that way, and the widest. `vendor-findings-table.tsx` carries the argument in
- * the comment this repository's honesty guard pins by its "sideways scroll" fragment: the call site
- * is the widest cell, and a rung column that is safe only because no fixture has yet been long
- * enough is protected by the fixture rather than by the layout. The identifying column is therefore
- * second, which departs from Studio's anatomy on the console's own rule.
+ * **The rung claim keeps all three of its branches.** `RungNote`'s three paragraphs said different
+ * things — every row rests on `static`, no row carries a rung because a filter excluded them all,
+ * no row carries one because none is bound. All three survive as the *value* of the Binding rung
+ * fact, in the fewest honest words, with the argument behind its ⓘ.
  */
 
-import { useState } from "react"
-import { useParams } from "react-router"
+import { useState, type ReactNode } from "react"
+import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
+import { Link, useParams } from "react-router"
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { useBindingSurface } from "@/api/queries"
 import type { BindingSurfaceResponse } from "@/api/types"
+import { CodeSnippet, absentSnippetReason } from "@/components/code-snippet"
 import {
   Table,
   TableBody,
   TableCell,
+  TableFrame,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/data-table"
-import { ChangeKindTag, SeverityTag } from "@/components/tag"
+import { DetailClose } from "@/components/detail-layout"
 import { type Fact, FactList } from "@/components/fact-list"
-import { ActiveFilters, FacetChips, PrefixFilter } from "@/components/filters"
+import { PrefixFilter } from "@/components/filters"
 import { InfoHint } from "@/components/info-hint"
+import { PageControls } from "@/components/page-controls"
+import { PanelPane } from "@/components/pane"
 import { RungBadge } from "@/components/provenance"
-import {
-  CALL_SITE_COLUMNS,
-  nextSortDirection,
-  sortCallSites,
-  type SortState,
-} from "./call-site-columns"
-import { Pending } from "@/features/findings/pending"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { Absent, Formatted } from "@/components/status"
-import { BindingDrawer } from "@/features/bindings/binding-drawer"
+import { ChangeKindTag, SeverityTag } from "@/components/tag"
 import {
   BINDING_KEY,
   bindingKey,
   selectBinding,
+  type BindingSelection,
 } from "@/features/bindings/binding-selection"
+import {
+  CALL_SITE_TABLE_COLUMNS,
+  nextSortDirection,
+  sortCallSites,
+  type SortState,
+} from "@/features/bindings/call-site-columns"
 import { joinOrAbsent } from "@/features/bindings/call-site-fields"
-import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
-import { DetailGrid } from "@/layouts/detail-grid"
-import { FooterBar } from "@/layouts/footer-bar"
+import { Pending } from "@/features/findings/pending"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { formatTimestamp, orAbsent, pathAfter } from "@/lib/format"
+import { bindingSurfaceHref } from "@/lib/hrefs"
 import { describeRecordWindow } from "@/lib/record-window"
-import { useClearFilters, useFilterParam } from "@/lib/use-filter-param"
+import { chipSurface } from "@/lib/selectable-surface"
+import { useFilterParam } from "@/lib/use-filter-param"
 import { useOffsetParam } from "@/lib/use-offset-param"
-
+import { cn } from "@/lib/utils"
 
 const CALL_SITES_OFFSET_KEY = "call_sites_offset"
+const CHANGES_OFFSET_KEY = "changes_offset"
 const PATH_PREFIX_KEY = "path_prefix"
 
-/**
- * The repository scope, which arrives as a link parameter and is now also a control.
- *
- * `repo_id` was already read here — a link from a repository's own screen carries it so the
- * surface that opens is scoped to where the operator started. It was never settable from this
- * page, so the only way back out of that scope was the browser's Back button. The chips make
- * it a filter, reading and writing the same parameter every existing link already builds.
- */
-const REPO_KEY = "repo_id"
-
-/** Both call-site filters clear the call-site page position and leave the changes page alone:
- * the two sets page independently, and narrowing one says nothing about where the other is. */
+/** The path filter clears the call-site page position and leaves the changes page alone: the two
+ * sets page independently, and narrowing one says nothing about where the other is. */
 const CALL_SITE_RESETS = [CALL_SITES_OFFSET_KEY]
+
+const QUESTION = "What calls this operation, on what evidence, and what the vendor changed about it."
 
 /**
  * Call sites bound to this operation across every repository, before any filter on this page.
  *
- * `repositories` is the facet's own scope rather than the table's: it is the option list the
- * repository chips are built from, so it stays the same whichever chip is selected. That makes it
+ * `repositories` is the facet's own scope rather than the table's: it is the list of repositories
+ * the operation is called from, so it stays the same whichever one the reader is in. That makes it
  * the right denominator for a stated fact about the operation and the wrong one for the table,
- * which is why the number under the table is a different number and the sentence beside the facts
- * says so.
+ * which is why the figure in the centre pane is a different figure and each says which.
  */
 function boundCallSites(data: BindingSurfaceResponse): number {
   return data.repositories.reduce((sum, repo) => sum + repo.call_site_count, 0)
 }
 
+/** A recorded figure in the register the reference gives its count chips. */
+function Chip({ children }: { children: ReactNode }) {
+  return (
+    <span className="furniture rounded-control border border-line px-field py-0.5 font-mono text-meta text-ink">
+      {children}
+    </span>
+  )
+}
+
 /**
- * The operation's own facts, label left and value right, beside the header rather than under it.
+ * The page-level rung, as the value of a fact rather than as three paragraphs.
  *
- * Three states per counted fact and they are three different claims. `<Pending>` says the query
- * is in flight — `components/skeleton.tsx` carries why that is not one of `states.tsx`'s five
- * sentences. `<Absent>` says the query failed, which is not the same as a count of zero, and the
- * error state under it names what failed. A number says the number.
+ * `binding_surface` hardcodes every call-site row to `static` — a call site is what the static
+ * index found, so a row built from it alone can honestly carry no other rung. The two empty
+ * branches are different claims and neither is the badge: under a filter that matched nothing the
+ * absence is a fact about the filter, and with nothing bound it is a fact about the index.
+ */
+function rungFact(data: BindingSurfaceResponse | null, filtered: boolean): ReactNode {
+  const hint = (
+    <InfoHint label="About the binding rung">
+      The rung records how a binding was established, never how much to trust it. Every row here is{" "}
+      <code className="font-mono">static</code> because this route reads what the index found by
+      reading the source — never a resolution or a correlation step. A stronger rung for the same
+      operation, traffic Sync has actually observed calling it, is a separate kind of evidence on the
+      repository&rsquo;s coverage page and is never blended into these rows.
+    </InfoHint>
+  )
+  if (data === null) return hint
+  if (data.call_sites.total === 0 && filtered) {
+    return (
+      <span className="flex items-center gap-field">
+        <Absent>none under this filter</Absent>
+        {hint}
+      </span>
+    )
+  }
+  if (data.call_sites.total === 0) {
+    return (
+      <span className="flex items-center gap-field">
+        <Absent>none bound, so none carried</Absent>
+        {hint}
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-field">
+      <RungBadge rung="static" />
+      {hint}
+    </span>
+  )
+}
+
+/**
+ * The operation's own facts, label left and value right.
+ *
+ * Three states per counted fact and they are three different claims. `<Pending>` says the query is
+ * in flight. `<Absent>` says the query failed, which is not a count of zero, and the error state
+ * beside it names what failed. A number says the number.
  */
 function operationFacts(
   vendorId: string,
   operationId: string,
   data: BindingSurfaceResponse | null,
-  failed: boolean
+  failed: boolean,
+  filtered: boolean
 ): Fact[] {
   const counted = (value: number) => {
     if (data !== null) return value.toLocaleString()
@@ -159,146 +202,91 @@ function operationFacts(
   }
 
   return [
-    { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
-    { label: "Operation", value: <span className="font-mono">{operationId}</span> },
-    // No "Repository scope" row: the workspace is the only scope (`M14-W386`), so the frame's
-    // workspace control and the `Narrowed by` chip already spell it twice.
+    { label: "Vendor", value: <span className="font-mono break-words">{vendorId}</span> },
+    { label: "Operation", value: <span className="font-mono break-words">{operationId}</span> },
+    { label: "Binding rung", value: rungFact(data, filtered) },
     { label: "Call sites bound", value: counted(data ? boundCallSites(data) : 0) },
     { label: "Repositories", value: counted(data ? data.repositories.length : 0) },
     { label: "Vendor changes", value: counted(data ? data.changes.total : 0) },
-    // Hardcoded because the payload hardcodes it, and `RungNote` below carries the argument. A
-    // badge rather than the word so the page-level rung and the column read as the same claim.
-    { label: "Binding rung", value: <RungBadge rung="static" /> },
   ]
 }
 
 /**
- * The section's name, and beside it the one thing its counts do not say for themselves.
+ * Which repositories call this operation, with their counts, each a link to its own surface.
  *
- * It sits in the grid's content column so the facts have something to sit beside: the rail was
- * composed to flank a header (`M7-W164` above), the headers were removed later, and nothing moved
- * the rail — which left 22rem of figures beside an empty half-screen.
+ * **Not a filter, and that is a correction rather than a downgrade.** These were chips writing a
+ * `repo_id` search parameter, which stopped being read the day `M14-W386` moved the scope into the
+ * route: the control looked pressed and no row moved. The workspace is the route now, so choosing
+ * a repository is going to that repository's binding surface — a real destination with a real
+ * address, which is also what makes the choice shareable.
  *
- * The paragraph this replaced stated three things already on screen closer to the control each
- * described: the `Narrowed by` chip, the repository facet's `countScope` caption, and the footer
- * bar's range. Its "across every repository" wording had already outlived the workspace becoming
- * the only scope, which is what a fact written twice does.
+ * There is no "every repository" option. The route requires a workspace, so a fleet-wide chip would
+ * be an address that does not exist.
  */
-function CallSitesHeading() {
+function RepositoryFacet({
+  data,
+  repoId,
+  vendorId,
+  operationId,
+}: {
+  data: BindingSurfaceResponse
+  repoId: string
+  vendorId: string
+  operationId: string
+}) {
+  if (data.repositories.length === 0) return null
+
   return (
-    <div className="flex min-w-0 flex-col gap-field">
-      <div className="flex items-center gap-row">
-        <h2 className="text-section">Call sites</h2>
-        <InfoHint label="About the figures beside this heading">
-          The figures beside this heading are counted across every call site this workspace holds
-          on the operation, whatever is selected below — they are the choices available, not the
-          rows on screen. The two deliberately disagree once a filter is on: an option list
-          narrowed by the filter it sets would collapse to whatever is already selected. The
-          number that moves with a filter is the range under the table.
+    <div className="flex min-w-0 flex-col gap-row">
+      <span className="furniture flex items-center gap-field text-meta text-ink-muted">
+        Repository
+        <InfoHint label="About the repository counts">
+          Counted over every call site the index holds on this operation, with neither the workspace
+          nor the path filter applied — an option list narrowed by the filter it sets collapses to
+          whatever is already selected and leaves no way back to the rest. So these numbers and the
+          figure on the call-site pane answer two different questions, and the one that moves with a
+          filter is the one beside the table.
         </InfoHint>
+      </span>
+      <div className="flex flex-wrap items-center gap-row">
+        {data.repositories.map((repo) => (
+          <Link
+            key={repo.repo_id}
+            to={bindingSurfaceHref(repo.repo_id, vendorId, operationId)}
+            // The current repository is marked by `aria-current` as well as by the surface step,
+            // so the selection is readable without colour.
+            aria-current={repo.repo_id === repoId ? "page" : undefined}
+            className={cn(
+              "inline-flex min-w-0 items-center gap-field rounded-control border px-field py-0.5 text-meta",
+              chipSurface(repo.repo_id === repoId)
+            )}
+          >
+            <span className="font-mono break-all">{repo.repo_id}</span>
+            <span className="text-ink-muted">{repo.call_site_count.toLocaleString()}</span>
+          </Link>
+        ))}
       </div>
-      <p className="max-w-prose text-body text-ink-muted">
-        What in the codebase calls this operation, and how the system knows it does. The figures
-        beside this cover the whole workspace, not the rows below.
-      </p>
     </div>
-  )
-}
-
-/**
- * The directory every call site on this page shares, stated once so the column does not repeat it.
- *
- * Measured on 2026-08-06 at 1440x900 against `--scale 10000`: the path column wanted 854px on one
- * line and was granted 572px, because eight other columns are ahead of it — and **65% of what it
- * held was a prefix identical on all 2,500 rows**. Four columns were wrapping to three lines at
- * once, so the row stood at 76px and eleven fit above the fold.
- *
- * This is not a truncation and nothing is hidden. The whole path is the sentence below plus the
- * cell beside it, and both are on screen; a reader matching a row to their editor needs the
- * filename and line, which is exactly what the cell keeps. `break-words` stays on that cell, so a
- * customer-supplied path with no break opportunity still grows the row instead of overflowing the
- * column and pushing the rung out of the viewport.
- *
- * Empty means the rows share no directory — two trees calling one operation — and then the column
- * carries the whole path and this says nothing. `pathAfter` is what makes that fallback one branch
- * rather than a slice that would render `ing/charges/create.ts` and read like a real file.
- *
- * **It stays above the table rather than moving into the footer bar's `left` slot**, which that
- * component's docstring offers it. A reader meets this sentence to understand a column they are
- * about to read; under the table it would arrive after the reading it exists to make possible.
- */
-function SharedDirectoryNote({ directory }: { directory: string }) {
-  // Truthiness rather than `=== ""`, and it earned that during this item's own measurement: a dev
-  // API still serving the Python from before the field existed sent no key at all, and the strict
-  // comparison let `undefined` through to render "Every call site below is under , so...". The
-  // payload always carries a string, so this is not a condition the API can produce — it is a
-  // sentence that must not be able to render half-formed, which is a different bar.
-  if (!directory) return null
-
-  return (
-    <p className="max-w-prose text-body text-muted-foreground">
-      Every call site below is under <code className="font-mono">{directory}</code>, so the call-site
-      column carries what follows it. The whole path is that prefix and the cell together — nothing
-      here is shortened away.
-    </p>
-  )
-}
-
-/**
- * The page-level rung, in prose rather than through `ProvenanceStrip`.
- *
- * `binding_surface` hardcodes every call-site row to `static` — a call site is what the
- * static index found, so a row built from it alone can honestly carry no other rung. That
- * makes the page-level claim provable rather than merely asserted: there is nothing here for
- * the rungs to mix over, unlike a page assembled from more than one detector's findings.
- */
-function RungNote({ data, filtered }: { data: BindingSurfaceResponse; filtered: boolean }) {
-  if (data.call_sites.total === 0 && filtered) {
-    // The unfiltered sentence below would be false here: call sites are bound, the filter
-    // excluded them. A rung claim about rows a filter removed is a claim about the filter.
-    return (
-      <p className="max-w-prose text-body text-muted-foreground">
-        No call site carries a rung under this filter. That is a fact about the filter and not
-        about the operation — the repositories above are the ones the index holds call sites in,
-        and they are counted without it.
-      </p>
-    )
-  }
-  if (data.call_sites.total === 0) {
-    return (
-      <p className="max-w-prose text-body text-muted-foreground">
-        No call site carries a rung here, because none is bound to this operation — see below
-        for what that absence does and does not mean.
-      </p>
-    )
-  }
-  return (
-    <p className="max-w-prose text-body text-muted-foreground">
-      Every call site below rests on the <RungBadge rung="static" /> rung: what the index found
-      by reading the source, never a resolution or a correlation step. A stronger rung for this
-      same operation — traffic Sync has actually observed calling it — is a separate kind of
-      evidence on the repository's own coverage page, never blended into this row.
-    </p>
   )
 }
 
 /**
  * Which kind of nothing the call-site table is showing.
  *
- * Three, and each is a different fact. Nothing bound at all is an answer about the index. A
- * filter that matched nothing is an answer about the filter, and the repository facet beside
- * it proves the operation is called from somewhere. A page position past the end of a narrowed
- * set is an answer about the URL: the table is not empty, the window is.
+ * Three, and each is a different fact. Nothing bound at all is an answer about the index. A filter
+ * that matched nothing is an answer about the filter, and the repository facet beside it proves the
+ * operation is called from somewhere. A page position past the end of a narrowed set is an answer
+ * about the URL: the table is not empty, the window is.
  */
 function CallSitesEmptyState({
   data,
   repoId,
-  filters,
+  pathPrefix,
   offset,
 }: {
   data: BindingSurfaceResponse
   repoId: string
-  filters: { label: string; value: string }[]
+  pathPrefix: string | null
   offset: number
 }) {
   const bound = boundCallSites(data)
@@ -311,12 +299,12 @@ function CallSitesEmptyState({
       />
     )
   }
-  if (filters.length > 0) {
+  if (pathPrefix !== null) {
     return (
       <EmptyState
         headline="No call site matches this filter."
         detail={
-          `The API answered with an empty list for ${filters.map((f) => `${f.label} ${f.value}`).join(" and ")}. ` +
+          `The API answered with an empty list for paths under ${pathPrefix}. ` +
           `The index holds ${bound.toLocaleString()} call ${bound === 1 ? "site" : "sites"} on this ` +
           `operation across ${data.repositories.length} ` +
           `${data.repositories.length === 1 ? "repository" : "repositories"}, so this is what the ` +
@@ -329,8 +317,170 @@ function CallSitesEmptyState({
     <EmptyState
       headline="No call site in the index is bound to this operation."
       detail={`The API answered with an empty list scoped to ${repoId}. Either nothing in this workspace calls the operation, or this workspace has not been indexed at all — the index cannot tell the two apart.`}
-          command="uv run sync index --repo <git-remote>"
+      command="uv run sync index --repo <git-remote>"
     />
+  )
+}
+
+/**
+ * The right pane's body: the selected call site, or which nothing stands in its place.
+ *
+ * **The reference's `Call site telemetry` foot is refused whole.** `P95 latency 124ms`,
+ * `Error rate (1h) 0.02%` and `Last observed …` are three figures this route never computes —
+ * call-level telemetry lives in `features/telemetry` over `ObservedCallRow`, which this feature does
+ * not own. The rate would also arrive with no denominator on screen, and a last-observed time reads
+ * staleness as liveness. The slot is kept and filled with the call site's own indexed fields, which
+ * is where the four columns that left the table land.
+ *
+ * The window itself is `CodeSnippet`, which renders only what the index captured — there is no
+ * "show more" that could read past it. When there is none, `absentSnippetReason` says **which**
+ * nothing: a deployment that withholds source, or a row written before capture existed.
+ */
+function SelectedCallSite({
+  selection,
+  data,
+}: {
+  selection: BindingSelection
+  data: BindingSurfaceResponse
+}) {
+  if (selection.kind === "none") {
+    return (
+      <p className="text-body text-ink-muted">
+        No call site is selected. Choosing one in the table shows the source window the index
+        captured for it, and the four fields the table does not carry: repository, SDK version,
+        argument keys and response fields read.
+      </p>
+    )
+  }
+
+  if (selection.kind === "unresolved") {
+    return (
+      <div className="flex flex-col gap-field">
+        <p className="font-mono text-meta break-words">{selection.key}</p>
+        <p className="text-body text-muted-foreground">
+          A binding address names a call site by repository, path, line and column. This page holds{" "}
+          {data.call_sites.items.length.toLocaleString()} call{" "}
+          {data.call_sites.items.length === 1 ? "site" : "sites"} and none of them is that one —
+          which could mean a filter excludes it, that it is on another page, or that the index holds
+          no such call site at all. Nothing here can tell those apart, so none is picked: clear the
+          filter and return to the first page, and if it is still not listed then this operation has
+          no such binding.
+        </p>
+      </div>
+    )
+  }
+
+  const site = selection.site
+
+  return (
+    <>
+      <p className="font-mono text-meta break-all text-ink select-all">
+        {site.path}:{site.line}:{site.col}
+      </p>
+      {typeof site.snippet === "string" && site.snippet_start_line != null ? (
+        <CodeSnippet
+          code={site.snippet}
+          startLine={site.snippet_start_line}
+          markLine={site.line}
+          label={`Call site, ${site.path}:${site.line}`}
+        />
+      ) : (
+        <p className="text-meta text-ink-muted">{absentSnippetReason(data.source_served)}</p>
+      )}
+      <FactList
+        facts={[
+          { label: "Repository", value: <span className="font-mono break-all">{site.repo_id}</span> },
+          {
+            label: "Symbol",
+            value: (
+              <span className="font-mono break-words">
+                <Formatted value={orAbsent(site.symbol)} />
+              </span>
+            ),
+          },
+          {
+            label: "SDK version",
+            value: (
+              <span className="font-mono">
+                <Formatted value={orAbsent(site.sdk_version)} />
+              </span>
+            ),
+          },
+          {
+            label: "Argument keys",
+            value: (
+              <span className="font-mono break-words">
+                <Formatted value={joinOrAbsent(site.args_keys)} />
+              </span>
+            ),
+          },
+          {
+            label: "Response fields read",
+            value: (
+              <span className="font-mono break-words">
+                <Formatted value={joinOrAbsent(site.response_fields_read)} />
+              </span>
+            ),
+          },
+          { label: "Loop depth", value: <span className="font-mono">{site.loop_depth}</span> },
+          {
+            label: "Indexed at",
+            value: (
+              <span className="font-mono">
+                <Formatted value={formatTimestamp(site.indexed_at)} />
+              </span>
+            ),
+          },
+        ]}
+      />
+    </>
+  )
+}
+
+/** A column heading that states its type and, where ordering it means something, sorts it. */
+function CallSiteHead({
+  column,
+  sort,
+  onSort,
+}: {
+  column: (typeof CALL_SITE_TABLE_COLUMNS)[number]
+  sort: SortState | null
+  onSort: (next: (current: SortState | null) => SortState | null) => void
+}) {
+  const type = (
+    <span className="text-muted-foreground text-meta font-normal">{column.type}</span>
+  )
+  if (!column.sortBy) {
+    return (
+      <TableHead>
+        <span className="flex items-baseline gap-field">
+          <span>{column.label}</span>
+          {type}
+        </span>
+      </TableHead>
+    )
+  }
+  const direction = sort?.key === column.key ? sort.direction : null
+  // The direction is drawn, not implied by the rows moving: a reader arriving at a sorted table
+  // has to see which column did it without pressing anything.
+  const Glyph = direction === "asc" ? ArrowUp : direction === "desc" ? ArrowDown : ChevronsUpDown
+  return (
+    <TableHead
+      aria-sort={
+        direction === null ? "none" : direction === "asc" ? "ascending" : "descending"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSort((current) => nextSortDirection(current, column.key))}
+        className="flex items-baseline gap-field text-left"
+        aria-label={`Sort by ${column.label}`}
+      >
+        <span>{column.label}</span>
+        {type}
+        <Glyph aria-hidden="true" className="size-3 shrink-0 text-ink-muted" />
+      </button>
+    </TableHead>
   )
 }
 
@@ -344,26 +494,24 @@ function BindingSurfaceDetail({
   repoId: string
 }) {
   const [callSitesOffset, setCallSitesOffset] = useOffsetParam(CALL_SITES_OFFSET_KEY)
-  const [changesOffset, setChangesOffset] = useOffsetParam("changes_offset")
+  const [changesOffset, setChangesOffset] = useOffsetParam(CHANGES_OFFSET_KEY)
   const [pathPrefix, setPathPrefix] = useFilterParam(PATH_PREFIX_KEY, CALL_SITE_RESETS)
-  const setRepoId = useFilterParam(REPO_KEY, CALL_SITE_RESETS)[1]
-  // No `resets`, unlike every other parameter on this screen. Opening a detail does not change
-  // which rows exist, so the page position measured against them is still the right one.
+  // No `resets`, unlike the filter beside it. Opening a detail does not change which rows exist,
+  // so the page position measured against them is still the right one.
   const [openBinding, setBinding] = useFilterParam(BINDING_KEY)
 
   /**
    * Which column orders this page of call sites, if any.
    *
-   * Component state rather than a search parameter, and that is a narrower claim than the
-   * filters beside it: those change *which* rows the server returns, so they belong in the
-   * address a reader can send to somebody. A sort reorders the page already on screen and does
-   * not reach the server at all, so putting it in the URL would promise that a shared link
-   * reproduces an ordering across a page boundary, which it would not.
+   * Component state rather than a search parameter, and that is a narrower claim than the filter
+   * beside it: a filter changes *which* rows the server returns, so it belongs in an address a
+   * reader can send to somebody. A sort reorders the page already on screen and does not reach the
+   * server, so putting it in the URL would promise that a shared link reproduces an ordering across
+   * a page boundary, which it would not.
    */
   const [sort, setSort] = useState<SortState | null>(null)
-  const clearCallSiteFilters = useClearFilters([REPO_KEY, PATH_PREFIX_KEY], CALL_SITE_RESETS)
   const query = useBindingSurface(vendorId, operationId, {
-    repoId: repoId ?? undefined,
+    repoId,
     pathPrefix: pathPrefix ?? undefined,
     callSitesLimit: DEFAULT_LIMIT,
     callSitesOffset,
@@ -371,49 +519,12 @@ function BindingSurfaceDetail({
     changesOffset,
   })
 
-  const activeFilters = [
-    { label: "workspace", value: repoId },
-    ...(pathPrefix === null ? [] : [{ label: "path", value: pathPrefix }]),
-  ]
-
   /**
-   * The two call-site narrowings, handed to the frame's controls band without a `ControlBar`
-   * around them.
-   *
-   * That component is the same flex row with the same `gap-section` the band already applies, so
-   * nesting one inside the other spaced these two controls twice. `undefined` until the query
-   * answers, because the repository chips are built from the payload's own facet: a band rendered
-   * before it arrives would offer a narrowing over options nothing has counted.
-   */
-  const controls = query.isSuccess ? (
-    <>
-      <FacetChips
-        legend="Repository"
-        options={query.data.repositories.map((repo) => ({
-          value: repo.repo_id,
-          count: repo.call_site_count,
-        }))}
-        selected={repoId}
-        onSelect={setRepoId}
-        allLabel="Every repository"
-        countScope="Counted over every call site the index holds on this operation, not over the table below — these are the choices available, so they stay the same whichever one is selected and whatever the path filter is set to."
-      />
-      <PrefixFilter
-        legend="Call site path"
-        value={pathPrefix}
-        onSubmit={setPathPrefix}
-        placeholder="src/billing/"
-        note="Matched as a prefix of the call site's path, never as a substring. It narrows the call sites only: a vendor change has no position in your codebase, so the table below it is untouched."
-      />
-    </>
-  ) : undefined
-
-  /**
-   * The band counts the call sites and nothing else, though two sets page on this screen.
+   * The chassis band counts the call sites and nothing else, though two sets page on this screen.
    *
    * `StatusBand` renders one pager, and the call-site table is the set this screen exists to
-   * window — 2,500 rows against a handful of vendor changes. The changes keep their own footer
-   * under their own table, where the pager sits beside the rows it moves.
+   * window — 2,500 rows against a handful of vendor changes. The changes keep their own pager
+   * pinned under their own table, where it sits beside the rows it moves.
    *
    * Every branch of the one query is answered: a records segment counts nothing until the payload
    * is here, so a pending or failed read says which silence it is rather than reporting zero.
@@ -427,8 +538,8 @@ function BindingSurfaceDetail({
             callSitesOffset,
             query.data.call_sites.items.length,
             { count: query.data.call_sites.total, boundReached: false },
-            "call site",
-            "call sites"
+            pathPrefix === null ? `call site in ${repoId}` : "call site under this path",
+            pathPrefix === null ? `call sites in ${repoId}` : "call sites under this path"
           ),
           paging: {
             offset: callSitesOffset,
@@ -440,12 +551,6 @@ function BindingSurfaceDetail({
             onOffsetChange: setCallSitesOffset,
           },
         },
-        {
-          kind: "note",
-          text:
-            "Either this operation has never had a call site here, or it had one that was " +
-            "later retracted — this table cannot tell the two apart.",
-        },
       ]
     : [
         {
@@ -456,233 +561,303 @@ function BindingSurfaceDetail({
         },
       ]
 
+  const selection = query.isSuccess
+    ? selectBinding(openBinding, query.data.call_sites.items)
+    : ({ kind: "none" } as BindingSelection)
+  const selectedLine = selection.kind === "resolved" ? selection.site.line : null
+
   return (
-    <ScreenFrame controls={controls} status={status}>
-      {/* The one place on this screen where a region sits beside another. `lg:` rather than `xl:`
-          so both measured viewports get it, and `minmax(0,...)` on the facts column so a long
-          repository id shrinks the column instead of widening the grid past the frame. */}
-      <DetailGrid
-        railSide="end"
-        rail={
+    // No `controls` band. Both narrowings live in the left pane, where they sit beside the counts
+    // they change; a full-width band above four panes would spend ~50px of a locked column saying
+    // what the pane already says.
+    <ScreenFrame layout="locked" status={status} subtitle={QUESTION}>
+      {/* Three tracks at `xl`, one column below it. The flanks are fixed and the centre takes the
+          slack, so the table never loses width to a pane that has nothing more to show. Below `xl`
+          the three stack into equal thirds and each still scrolls its own body — a locked screen
+          stamps `data-screen="locked"` at every width, so a page that expected to scroll would be
+          clipped instead. */}
+      <div className="grid min-h-0 min-w-0 flex-1 grid-rows-3 gap-section xl:grid-cols-[15rem_minmax(0,1fr)_20rem] xl:grid-rows-1 2xl:grid-cols-[15rem_minmax(0,1fr)_28rem]">
+        <PanelPane
+          label="This operation"
+          bodyClassName="flex min-w-0 flex-col gap-section p-section"
+        >
           <FactList
             facts={operationFacts(
               vendorId,
               operationId,
               query.isSuccess ? query.data : null,
-              query.isError
+              query.isError,
+              pathPrefix !== null
             )}
           />
-        }
-      >
-        <CallSitesHeading />
-      </DetailGrid>
+          {/* The scope claim, visible. The argument for why it disagrees with the figure on the
+              call-site pane is behind the facet's ⓘ. */}
+          <p className="text-meta text-ink-muted">
+            Counted across every repository, before the narrowings below.
+          </p>
 
-      {query.isPending && <LoadingState what={`bindings for ${vendorId}/${operationId}`} />}
-      {query.isError && (
-        <ErrorState error={query.error} what={`bindings for ${vendorId}/${operationId}`} onRetry={() => void query.refetch()} />
-      )}
+          {query.isSuccess && (
+            <RepositoryFacet
+              data={query.data}
+              repoId={repoId}
+              vendorId={vendorId}
+              operationId={operationId}
+            />
+          )}
 
-      {query.isSuccess && (
-        <>
-          {/* `aria-label` because this region's heading is in the grid above, beside the facts
-              it scopes, rather than inside the section. */}
-          <section aria-label="Call sites" className="flex flex-col gap-section">
-            <ActiveFilters filters={activeFilters} onClear={clearCallSiteFilters} />
-            <SharedDirectoryNote directory={query.data.call_sites_common_directory} />
-            {query.data.call_sites.items.length === 0 ? (
-              <CallSitesEmptyState
-                data={query.data}
-                repoId={repoId}
-                filters={activeFilters}
-                offset={callSitesOffset}
-              />
-            ) : (
-              /* The table scrolls inside itself rather than widening the page. Nine columns of
-                 real call-site data do not fit 1440px, and a page that scrolls horizontally takes
-                 the navigation and the header with it -- the reader loses the screen to read a
-                 cell. `min-w-max` lets the row keep its natural width inside that scroller.
+          <PrefixFilter
+            legend="Call site path"
+            value={pathPrefix}
+            onSubmit={setPathPrefix}
+            placeholder="src/billing/"
+            note="Matched as a prefix, never as a substring."
+            hint={
+              <InfoHint label="About the path filter">
+                It narrows the call sites only. A vendor change has no position in your codebase, so
+                the changes table is untouched by it — and the repository counts above are the option
+                list this filter is set from, so they are counted without it.
+              </InfoHint>
+            }
+          />
+        </PanelPane>
 
-                 `min-w-0` is what makes that true rather than merely intended, and it was
-                 missing: a scroll container inside a flex or grid parent keeps a min-content
-                 floor, so nine columns push the parent wider and the *page* scrolls while this
-                 div never does -- the exact failure the comment above says it prevents.
-                 `components/data-table.tsx`'s `TableFrame` carries the same reasoning and the
-                 same pair. */
-              <div className="min-w-0 w-full overflow-x-auto">
-              <Table className="min-w-max">
-                <TableHeader>
-                  <TableRow>
-                    {/* Rung first, on `vendor-findings-table.tsx`'s argument: the call site is the
-                        widest cell in this table and no fixture here is long enough to prove it, so
-                        a rung column further right is a column the layout does not protect.
-
-                        Each header states its column's type and, where ordering it means
-                        something, is the control that sorts it. `call-site-columns.ts` carries
-                        both and the argument for the type vocabulary being ours rather than a
-                        database's. */}
-                    {CALL_SITE_COLUMNS.map((column) => (
-                      <TableHead key={column.key}>
-                        {column.sortBy ? (
-                          <button
-                            type="button"
-                            onClick={() => setSort((current) => nextSortDirection(current, column.key))}
-                            className="flex items-baseline gap-field text-left"
-                            aria-label={`Sort by ${column.label}`}
-                            aria-sort={
-                              sort?.key === column.key
-                                ? sort.direction === "asc"
-                                  ? "ascending"
-                                  : "descending"
-                                : "none"
-                            }
-                          >
-                            <span>{column.label}</span>
-                            <span className="text-muted-foreground text-meta font-normal">
-                              {column.type}
-                            </span>
-                            {/* The direction is drawn, not implied by the header moving. A reader
-                                arriving at a sorted table has to be able to see which column did
-                                it without pressing anything. */}
-                            <span aria-hidden className="text-muted-foreground">
-                              {sort?.key === column.key ? (sort.direction === "asc" ? "↑" : "↓") : ""}
-                            </span>
-                          </button>
-                        ) : (
-                          <span className="flex items-baseline gap-field">
-                            <span>{column.label}</span>
-                            <span className="text-muted-foreground text-meta font-normal">
-                              {column.type}
-                            </span>
-                          </span>
-                        )}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortCallSites(query.data.call_sites.items, sort).map((site) => (
-                    <TableRow
-                      key={bindingKey(site)}
-                      data-state={openBinding === bindingKey(site) ? "selected" : undefined}
-                    >
-                      <TableCell>
-                        <RungBadge rung={site.binding_rung} />
-                      </TableCell>
-                      <TableCell className="font-mono">{site.repo_id}</TableCell>
-                      <TableCell className="font-mono">
-                        {/* A button rather than a `Link`: the drawer is a search parameter on this
-                            same address, so a right-click "open in new tab" would land on a screen
-                            with no page position and no filters — which is not where the reader is
-                            looking. `useFilterParam` still pushes the history entry, so Back
-                            closes it. */}
-                        <button
-                          type="button"
-                          onClick={() => setBinding(bindingKey(site))}
-                          className="text-left underline underline-offset-2 break-words"
-                          aria-label={`Binding at ${site.path} line ${site.line} in ${site.repo_id}`}
-                        >
-                          {pathAfter(query.data.call_sites_common_directory, site.path)}:
-                          {site.line}:{site.col}
-                        </button>
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        <Formatted value={orAbsent(site.symbol)} />
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        <Formatted value={orAbsent(site.sdk_version)} />
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        <Formatted value={joinOrAbsent(site.args_keys)} />
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        <Formatted value={joinOrAbsent(site.response_fields_read)} />
-                      </TableCell>
-                      <TableCell className="font-mono">{site.loop_depth}</TableCell>
-                      <TableCell className="font-mono text-meta">
-                        <Formatted value={formatTimestamp(site.indexed_at)} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        {/* The centre column is a vertical split: the call sites dominant, the vendor changes a
+            shorter sibling with its own scroll and its own pager. Typical cardinality is 2,500
+            against a handful, which is why the split is 2:1 rather than even. */}
+        <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,2fr)_minmax(0,1fr)] gap-section">
+          <PanelPane
+            scroll={false}
+            label="Call sites"
+            hint={
+              <InfoHint label="About the call-site window">
+                Every place this workspace&rsquo;s indexed source calls the operation. The figure
+                beside this label is the window on screen against the set the filters admit; the
+                figures in the pane on the left are counted across every repository and do not move
+                when a filter does. The chassis band under the page spells the same window in words.
+              </InfoHint>
+            }
+            actions={
+              query.isSuccess ? (
+                <Chip>
+                  {query.data.call_sites.items.length.toLocaleString()} of{" "}
+                  {query.data.call_sites.total.toLocaleString()}
+                </Chip>
+              ) : undefined
+            }
+            footer={
+              query.isSuccess && query.data.call_sites_common_directory ? (
+                <span className="min-w-0 truncate">
+                  Paths shown under{" "}
+                  <code className="font-mono text-ink">
+                    {query.data.call_sites_common_directory}
+                  </code>{" "}
+                  — the prefix and the cell together are the whole path, nothing is shortened away.
+                </span>
+              ) : undefined
+            }
+          >
+            {query.isPending && (
+              <div className="min-h-0 flex-1 overflow-auto p-section">
+                <LoadingState what={`bindings for ${vendorId}/${operationId}`} />
               </div>
             )}
-            <RungNote data={query.data} filtered={activeFilters.length > 0} />
-          </section>
-
-          <section className="flex flex-col gap-section">
-            <div className="flex flex-col gap-field">
-              <h2 className="text-section">Vendor changes</h2>
-              <p className="max-w-prose text-body text-ink-muted">
-                What the vendor changed about this operation, whether or not a call site above is
-                affected. A vendor change is not a binding and carries no rung — it is evidence
-                about the vendor, not about the codebase.
-              </p>
-            </div>
-            {query.data.changes.total === 0 ? (
-              <EmptyState
-                headline="The vendor has never changed this operation."
-                detail="The API answered with an empty list. No ingested feed names a change against this operation — that is an answer, not a failure."
-          command="uv run sync run --repo <git-remote> --vendor <vendor> --from-version <a> --to-version <b>"
-              />
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Detected</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Path</TableHead>
-                      <TableHead>Versions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.changes.items.map((change) => (
-                      <TableRow key={change.change_id}>
-                        <TableCell className="font-mono text-meta">
-                          <Formatted value={formatTimestamp(change.detected_at)} />
-                        </TableCell>
-                        <TableCell>
-                          <ChangeKindTag kind={change.kind} />
-                        </TableCell>
-                        <TableCell>
-                          <SeverityTag severity={change.severity} />
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          <Formatted value={orAbsent(change.path_ptr)} />
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          <Formatted value={orAbsent(change.from_version)} /> →{" "}
-                          <Formatted value={orAbsent(change.to_version)} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <FooterBar
-                  offset={changesOffset}
-                  limit={DEFAULT_LIMIT}
-                  shown={query.data.changes.items.length}
-                  total={query.data.changes.total}
-                  nextOffset={query.data.changes.next_offset}
-                  busy={query.isFetching}
-                  onOffsetChange={setChangesOffset}
+            {query.isError && (
+              <div className="min-h-0 flex-1 overflow-auto p-section">
+                <ErrorState
+                  error={query.error}
+                  what={`bindings for ${vendorId}/${operationId}`}
+                  onRetry={() => void query.refetch()}
                 />
-              </>
+              </div>
             )}
-          </section>
+            {query.isSuccess &&
+              (query.data.call_sites.items.length === 0 ? (
+                <div className="min-h-0 flex-1 overflow-auto p-section">
+                  <CallSitesEmptyState
+                    data={query.data}
+                    repoId={repoId}
+                    pathPrefix={pathPrefix}
+                    offset={callSitesOffset}
+                  />
+                </div>
+              ) : (
+                // The frame is what makes the head stick: it moves the scroll onto the vendored
+                // table container, which is the element a `sticky` thead has to sit inside.
+                // Borderless because the pane already draws the border.
+                <TableFrame fill className="rounded-none border-0">
+                  <Table>
+                    <TableHeader sticky>
+                      <TableRow>
+                        {CALL_SITE_TABLE_COLUMNS.map((column) => (
+                          <CallSiteHead
+                            key={column.key}
+                            column={column}
+                            sort={sort}
+                            onSort={setSort}
+                          />
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortCallSites(query.data.call_sites.items, sort).map((site) => {
+                        const selected = openBinding === bindingKey(site)
+                        return (
+                          <TableRow
+                            key={bindingKey(site)}
+                            data-state={selected ? "selected" : undefined}
+                          >
+                            <TableCell>
+                              <RungBadge rung={site.binding_rung} />
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              {/* A button rather than a `Link`: the selection is a search parameter
+                                  on this same address, so a right-click "open in new tab" would
+                                  land on a screen with no page position and no filter — which is
+                                  not where the reader is looking. `useFilterParam` still pushes the
+                                  history entry, so Back closes it.
 
-          {/* Mounted beside the list rather than inside the table, so the drawer's contents are
-              not remounted by a row re-render and so a URL that names a call site this page does
-              not hold still opens something that says so. */}
-          <BindingDrawer
-            selection={selectBinding(openBinding, query.data.call_sites.items)}
-            data={query.data}
-            onClose={() => setBinding(null)}
-          />
-        </>
-      )}
+                                  The marker is the second channel beside the row's surface step, so
+                                  the selection is legible without colour. */}
+                              <button
+                                type="button"
+                                onClick={() => setBinding(selected ? null : bindingKey(site))}
+                                aria-pressed={selected}
+                                className="text-left underline underline-offset-2 break-words"
+                                aria-label={`Binding at ${site.path} line ${site.line} in ${site.repo_id}`}
+                              >
+                                <span aria-hidden="true">{selected ? "▸ " : ""}</span>
+                                {pathAfter(query.data.call_sites_common_directory, site.path)}:
+                                {site.line}:{site.col}
+                              </button>
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              <Formatted value={orAbsent(site.symbol)} />
+                            </TableCell>
+                            <TableCell className="font-mono">{site.loop_depth}</TableCell>
+                            <TableCell className="font-mono text-meta">
+                              <Formatted value={formatTimestamp(site.indexed_at)} />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableFrame>
+              ))}
+          </PanelPane>
+
+          <PanelPane
+            scroll={false}
+            label="Vendor changes"
+            hint={
+              <InfoHint label="About vendor changes">
+                What the vendor changed about this operation, whether or not a call site above is
+                affected. It is evidence about the vendor rather than about your codebase, so nothing
+                in it was read out of your source and no rung applies. Whether a call site above is
+                affected by one is a detector&rsquo;s answer, and a detector&rsquo;s answer is a
+                finding rather than a row here.
+              </InfoHint>
+            }
+            actions={
+              <span className="text-meta text-ink-muted">Vendor evidence — carries no rung.</span>
+            }
+            footer={
+              query.isSuccess && query.data.changes.total > 0 ? (
+                <span className="ml-auto">
+                  <PageControls
+                    offset={changesOffset}
+                    limit={DEFAULT_LIMIT}
+                    shown={query.data.changes.items.length}
+                    total={query.data.changes.total}
+                    nextOffset={query.data.changes.next_offset}
+                    busy={query.isFetching}
+                    onOffsetChange={setChangesOffset}
+                  />
+                </span>
+              ) : undefined
+            }
+          >
+            {query.isSuccess ? (
+              query.data.changes.total === 0 ? (
+                <div className="min-h-0 flex-1 overflow-auto p-section">
+                  <EmptyState
+                    headline="The vendor has never changed this operation."
+                    detail="The API answered with an empty list. No ingested feed names a change against this operation — that is an answer, not a failure."
+                    command="uv run sync run --repo <git-remote> --vendor <vendor> --from-version <a> --to-version <b>"
+                  />
+                </div>
+              ) : (
+                <TableFrame fill className="rounded-none border-0">
+                  <Table>
+                    <TableHeader sticky>
+                      <TableRow>
+                        <TableHead>Detected</TableHead>
+                        <TableHead>Kind</TableHead>
+                        <TableHead>Severity</TableHead>
+                        <TableHead>Path</TableHead>
+                        <TableHead>Versions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {query.data.changes.items.map((change) => (
+                        <TableRow key={change.change_id}>
+                          <TableCell className="font-mono text-meta">
+                            <Formatted value={formatTimestamp(change.detected_at)} />
+                          </TableCell>
+                          <TableCell>
+                            <ChangeKindTag kind={change.kind} />
+                          </TableCell>
+                          <TableCell>
+                            <SeverityTag severity={change.severity} />
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            <Formatted value={orAbsent(change.path_ptr)} />
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            <Formatted value={orAbsent(change.from_version)} /> →{" "}
+                            <Formatted value={orAbsent(change.to_version)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableFrame>
+              )
+            ) : (
+              <div className="min-h-0 flex-1 overflow-auto p-section">
+                <p className="text-body text-ink-muted">
+                  {query.isError
+                    ? "The read that carries the vendor changes did not answer, so nothing here is a count of zero."
+                    : "Still asking for this operation's vendor changes."}
+                </p>
+              </div>
+            )}
+          </PanelPane>
+        </div>
+
+        {/* Mounted whether or not anything is selected: a pane that appears and disappears reflows
+            the table under the reader's cursor, and an address naming a call site this page does
+            not hold has to open something that says so. */}
+        <PanelPane
+          label={selectedLine === null ? "Selected call site" : `Selected call site — line ${selectedLine}`}
+          actions={
+            selection.kind === "none" ? undefined : (
+              <DetailClose onClose={() => setBinding(null)} />
+            )
+          }
+          bodyClassName="flex min-w-0 flex-col gap-section p-section"
+        >
+          {query.isSuccess ? (
+            <SelectedCallSite selection={selection} data={query.data} />
+          ) : (
+            <p className="text-body text-ink-muted">
+              {query.isError
+                ? "The call sites did not answer, so there is nothing here to select from."
+                : "Still asking for this operation's call sites."}
+            </p>
+          )}
+        </PanelPane>
+      </div>
     </ScreenFrame>
   )
 }
@@ -700,10 +875,6 @@ export function BindingSurfacePage() {
   // `searchParams.get("repo_id")` while the route carries `:repoId`, so an address naming a
   // workspace could still render a fleet-wide claim -- the screen contradicting its own URL.
   return (
-    <BindingSurfaceDetail
-      vendorId={vendorId}
-      operationId={operationId}
-      repoId={repoId}
-    />
+    <BindingSurfaceDetail vendorId={vendorId} operationId={operationId} repoId={repoId} />
   )
 }

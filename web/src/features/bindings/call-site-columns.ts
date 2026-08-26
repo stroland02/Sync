@@ -87,6 +87,39 @@ export const CALL_SITE_COLUMNS: readonly CallSiteColumn[] = [
   },
 ]
 
+/**
+ * The five the centre pane draws, and the four that are read one row at a time instead.
+ *
+ * Nine columns for a set that is usually a handful of rows is what the owner called *cluttered*,
+ * and four of the nine describe the row a reader has already picked rather than helping them pick
+ * one: a repository is fixed by the facet above the table, and an SDK version, an argument-key list
+ * and a response-field list are three wrapping cells that set the row's height for every row on
+ * screen. Measured 2026-08-26 at 1280x720 before this split: nine columns of `font-mono` and four
+ * total data rows in 1397px of page.
+ *
+ * **Nothing is dropped and nothing becomes hideable.** The four below are rendered in full for the
+ * selected call site, which is the state a reader is in when they want them. `CALL_SITE_COLUMNS`
+ * stays the whole vocabulary — it is what `sortCallSites` orders by and what the guard partitions,
+ * so a column added to it must land in one of the two halves rather than quietly in neither.
+ */
+const TABLE_KEYS: ReadonlySet<string> = new Set([
+  "binding_rung",
+  "path",
+  "symbol",
+  "loop_depth",
+  "indexed_at",
+])
+
+/** What the call-site table draws, in the order it draws them. The rung stays first. */
+export const CALL_SITE_TABLE_COLUMNS: readonly CallSiteColumn[] = CALL_SITE_COLUMNS.filter(
+  (column) => TABLE_KEYS.has(column.key)
+)
+
+/** What moved out of the table and into the selected call site's own pane. */
+export const CALL_SITE_PANE_COLUMNS: readonly CallSiteColumn[] = CALL_SITE_COLUMNS.filter(
+  (column) => !TABLE_KEYS.has(column.key)
+)
+
 const BY_KEY = new Map(CALL_SITE_COLUMNS.map((column) => [column.key, column]))
 
 /**

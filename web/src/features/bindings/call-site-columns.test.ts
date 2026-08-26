@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   CALL_SITE_COLUMNS,
+  CALL_SITE_PANE_COLUMNS,
+  CALL_SITE_TABLE_COLUMNS,
   nextSortDirection,
   sortCallSites,
   type SortState,
@@ -44,6 +46,41 @@ describe("the columns declare their own type", () => {
     // table needs is what the value *is* here.
     expect(types.has("uuid")).toBe(false)
     expect(types.has("jsonb")).toBe(false)
+  })
+})
+
+describe("the split between the table and the selected call site", () => {
+  it("draws the rung, the address and what the index read off the line", () => {
+    // Nine columns for four rows is the clutter the 2026-08-26 rebuild was reported for, and the
+    // fix is a partition rather than a deletion. Naming both halves is what makes moving a column
+    // between them a decision somebody takes rather than one that happens: the complement cannot
+    // catch a key misspelled into `TABLE_KEYS`, and this can.
+    //
+    // The rung is first and stays in the table. `console-surface.md`: it is never a hideable
+    // column, and a column a reader must select a row to see is hideable in every way that
+    // matters. The address is here because a row with no address is a thing nobody can go and
+    // look at.
+    expect(CALL_SITE_TABLE_COLUMNS.map((column) => column.key)).toEqual([
+      "binding_rung",
+      "path",
+      "symbol",
+      "loop_depth",
+      "indexed_at",
+    ])
+  })
+
+  it("relocates the four that describe a row already chosen, and no others", () => {
+    // A repository is fixed by the facet beside the table; the other three are wrapping cells that
+    // set the height of every row on screen to serve the one row a reader is reading.
+    expect(CALL_SITE_PANE_COLUMNS.map((column) => column.key)).toEqual([
+      "repo_id",
+      "sdk_version",
+      "argument_keys",
+      "response_fields_read",
+    ])
+    expect(CALL_SITE_TABLE_COLUMNS.length + CALL_SITE_PANE_COLUMNS.length).toBe(
+      CALL_SITE_COLUMNS.length,
+    )
   })
 })
 

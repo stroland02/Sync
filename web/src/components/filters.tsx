@@ -13,7 +13,7 @@
  * No icons either. An icon is a label, not a distinction the graph holds, and the words fit.
  */
 
-import { useState, type FormEvent } from "react"
+import { useState, type FormEvent, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import { chipSurface } from "@/lib/selectable-surface"
@@ -121,12 +121,15 @@ export function PrefixFilter({
   onSubmit,
   placeholder,
   note,
+  hint,
 }: {
   legend: string
   value: string | null
   onSubmit: (next: string | null) => void
   placeholder: string
   note: string
+  /** The argument for what the prefix matches, beside the label. Additive; see `FacetChips`. */
+  hint?: ReactNode
 }) {
   return (
     <PrefixFilterForm
@@ -136,6 +139,7 @@ export function PrefixFilter({
       onSubmit={onSubmit}
       placeholder={placeholder}
       note={note}
+      hint={hint}
     />
   )
 }
@@ -146,12 +150,14 @@ function PrefixFilterForm({
   onSubmit,
   placeholder,
   note,
+  hint,
 }: {
   legend: string
   value: string | null
   onSubmit: (next: string | null) => void
   placeholder: string
   note: string
+  hint?: ReactNode
 }) {
   const [draft, setDraft] = useState(value ?? "")
 
@@ -163,9 +169,12 @@ function PrefixFilterForm({
 
   return (
     <form className="flex min-w-0 flex-1 flex-col gap-row" onSubmit={submit}>
-      <label className="furniture text-meta text-ink-muted" htmlFor={`${legend}-prefix`}>
-        {legend}
-      </label>
+      <span className="flex items-center gap-field">
+        <label className="furniture text-meta text-ink-muted" htmlFor={`${legend}-prefix`}>
+          {legend}
+        </label>
+        {hint}
+      </span>
       <InputGroup className="max-w-prose">
         <InputGroupInput
           id={`${legend}-prefix`}

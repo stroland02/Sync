@@ -523,6 +523,54 @@
       min-height: 0;
     }
   }
+
+  /* Overview's own tracks, owner ruling 2026-08-26. This is the landing screen, so the FOLD is the
+     design decision rather than a consequence of one: Getting Started and the two maps are sized to
+     fill the first viewport, and the stage doors sit below it on purpose. Somebody who has not
+     finished setting up meets the stepper; somebody who has meets their codebase.
+
+     Row 1 is `auto` with a 13rem FLOOR. Two measurements set it, both in Chrome. A bare `auto`
+     gave 72px with the body crushed to 32px and the chip row on one line -- `min-height: 0` above
+     lets a pane shrink past its own content, so `auto` sizes to what a pane will ACCEPT, not to
+     what it needs. 9rem then fit the chips but not the row under them: the body needed 162px and
+     had 102px, so the pane grew its own scrollbar over a 60px shortfall (owner report, "still need
+     more space for the getting started info"). 13rem clears the measured 202px -- a 40px header
+     over a 162px body -- and the `auto` max lets it grow further when more prerequisites are unmet
+     than the six this corpus probes.
+
+     Row 2's floor is `calc(100% - 15rem)` rather than a fixed height, and the arithmetic is the
+     whole mechanism: 15rem is row 1's 13rem floor plus the 2rem row gap, so row 2 resolves to
+     exactly the rest of the FIRST screenful and the doors begin precisely at its bottom edge. A
+     fixed floor cannot do this -- 22rem was tried and measured 352px against a 465px grid, which
+     put the maps themselves below the fold on a short window. The percentage resolves against the
+     grid's own definite height, so the fold lands correctly at any window size, and on a tall one
+     the `1fr` grows and the doors come into view. That is the right degradation: more room means
+     more visible, never a stretched pane over empty card.
+
+     Row 3's floor is 31rem for the same reason rows 1 and 2 carry theirs, and the `auto` MAX cannot
+     substitute for it: `min-height: 0` collapses a pane's intrinsic contribution, so an `auto` track
+     measured 176px against a body needing 454px and the doors grew their own scrollbar. Six doors
+     at `minmax(240px, 1fr)` land as three columns over two rows here -- 454px of body under a 40px
+     header. Below the fold and inside a scrolling grid, a door that needs a scrollbar of its own is
+     the one thing this row must not do: it is the way IN to the screens, so all six are reachable
+     without a second scroll. */
+  .bento-lock-overview {
+    overflow-y: auto;
+  }
+
+  .bento-lock-overview > * {
+    min-height: 20rem;
+  }
+
+  @media (min-width: 1024px) and (min-height: 720px) {
+    .bento-lock-overview {
+      grid-template-rows: minmax(13rem, auto) minmax(calc(100% - 15rem), 1fr) minmax(31rem, auto);
+    }
+
+    .bento-lock-overview > * {
+      min-height: 0;
+    }
+  }
 }
 
 /* Viewport scaling — owner ruling 2026-08-25.

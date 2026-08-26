@@ -326,19 +326,24 @@ export function FilterRail({
 
   return (
     <aside
-      aria-labelledby={headingId}
+      // Filled, the landmark takes its name from an attribute rather than from a heading. The
+      // `sr-only` h2 that used to carry it was a *second* h2 with the pane header's own words --
+      // measured on Call sites 2026-08-26, two "Narrow the call sites" headings in one outline.
+      // A heading a reader cannot see is still a heading a screen reader announces.
+      {...(fill ? { "aria-label": label } : { "aria-labelledby": headingId })}
       className={
         fill
           ? "flex min-w-0 flex-col gap-section p-row"
           : "flex min-w-0 flex-col gap-section self-stretch overflow-y-auto rounded-surface border border-line bg-surface p-section lg:sticky lg:top-frame lg:max-h-[calc(100svh-8rem)]"
       }
     >
-      {/* Filled: the pane header above already carries this name, and two headings for one
-          region is the duplication the pane exists to remove. It stays in the DOM as the
-          `aria-labelledby` target so the landmark keeps its accessible name. */}
-      <h2 id={headingId} className={fill ? "sr-only" : "furniture text-meta text-ink"}>
-        {label}
-      </h2>
+      {/* Filled: the pane header above already carries this name, so the rail draws no heading
+          at all and the `aria-label` above names the landmark instead. */}
+      {!fill && (
+        <h2 id={headingId} className="furniture text-meta text-ink">
+          {label}
+        </h2>
+      )}
       {groups.map((group) => (
         <Group key={group.id} group={group} />
       ))}

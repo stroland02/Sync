@@ -1692,6 +1692,14 @@ def write(store: GraphStore, scale: int) -> str:
                 issue_count=issues,
             )
         )
+    # `record_observed_call` does not set this and the real path does not need it to: production
+    # telemetry arrives through `sync.telemetry.ingest`, which marks attachment itself
+    # (`ingest.py:117`). Seeding the store directly skips that, and the resulting state is one the
+    # product cannot otherwise reach -- sixty observed calls under a repository the graph says was
+    # never watched. The Telemetry screen reads the flag and correctly refused the whole page,
+    # printing "nothing has watched this repository's traffic" over calls it was holding.
+    store.mark_telemetry_attached(WIDE, ASKED_AT)
+
     observed_vendors = {row[0] for row in TELEMETRY}
     windows_without_calls = sum(1 for row in ERROR_WINDOWS if row[0] not in observed_vendors)
     lines.append(
