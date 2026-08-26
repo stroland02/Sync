@@ -7,9 +7,35 @@ paths:
 
 # The interface is ours
 
-Every screen, layout, component and word on it. Competitors are studied for **concepts, workflows
-and negative findings** — never for how a screen should look. Those are different activities and
-this file exists so nobody conflates them under deadline.
+**Amended 2026-08-26 by the owner, and this amendment is the first thing to read.** The rule that
+opened this file — *competitors are studied for concepts, workflows and negative findings, never
+for how a screen should look* — is **retired**. It was written to stop the console arriving as a
+clone. What it actually produced is the failure `reports/2026-08-06-why-the-console-came-out-flat.md`
+measures: a type range of 2.0 against a 3.4 bar, seven side-by-side placements in the whole
+application, one vertical stack on every screen. Two carve-outs had already eaten it from the edges
+— Supabase at code level, Mobbin as visual reference — and the owner's ruling completes that.
+
+**Visual reference is unrestricted.** Any source may inform how a screen looks: composition,
+density, motion, depth, elevation, the shape of a pane, how a mature product arranges a working
+surface. Build the most ambitious version, not the safest one.
+
+Four things still do not transfer, and none of them is about taste:
+
+- **Identity.** A wordmark, logo, or identifying iconography belongs to whoever owns it.
+- **Copy.** Their labels, their microcopy, their turns of phrase.
+- **A claim our data cannot support.** The one that matters, and the one a beautiful reference
+  makes tempting: the best incident view in the reference set carries `Root cause confidence: 9`.
+  Take its structure, refuse its scalar. **Composition and honesty are independent axes** —
+  building beautifully has never required claiming more than was measured.
+- **Anything unlicensed.** Code is adopted under its licence, with attribution.
+
+What follows is kept because the arguments are worth reading, but where any of it contradicts the
+four lines above, the four lines win.
+
+---
+
+Every screen, layout, component and word on it is ours to make. Competitors are studied for
+concepts, workflows, negative findings **and, since 2026-08-26, appearance.**
 
 **Scoped as of 2026-08-19.** This loaded on every turn because the 50 competitor screenshots under
 `references/screenshots/` can be opened from anywhere, and no path pattern could fence that.

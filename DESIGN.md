@@ -897,7 +897,29 @@ given. `--color-shadow` (`oklch(0 0 0 / 0.72)`) exists for exactly this reason a
 
 ## Motion
 
-Two mechanisms, because two different kinds of motion need two different gates.
+**Amended 2026-08-26 by the owner: the living tier is authorized.** The frequency gate below still
+governs *interaction* motion, and it is right about the thing it measures — a row hover is the most
+frequent interaction in this console and still takes no transition, because a transition there is
+latency a reader feels on every pass.
+
+What the gate never covered, and what is now explicitly permitted, is **ambient and structural
+motion**: WebGL and shader backgrounds on canvases, animated throughput along a graph edge, a
+staged entrance on a log stream, a node's own idle animation, depth and parallax in a
+visualisation. These are not interactions and the frequency gate does not decide them. The gate
+they take instead:
+
+- **It must not claim a time the data does not have.** A pulse that implies liveness on telemetry
+  measured four days ago is the composite-score failure wearing a different channel. Ambient motion
+  is decoration on a surface, never a signal about freshness.
+- **It must respect `prefers-reduced-motion`.** Ambient motion is exactly what that setting exists
+  for; the whole tier is switched off by it rather than slowed.
+- **It must not cost the interaction.** Sixty frames of shader are free; a reflow on every frame is
+  not. Composite-only properties, and it runs on the GPU or it does not run.
+
+Within that, build the most ambitious version. The reference set's `shader/` and `three.js/`
+samples are the starting code.
+
+Two mechanisms below, because two different kinds of *interaction* motion need two different gates.
 
 **The gate a new transition is checked against is frequency, not duration.** A surface the operator
 crosses repeatedly takes no transition at all; a surface they meet only occasionally may take one.
