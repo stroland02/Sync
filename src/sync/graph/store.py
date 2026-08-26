@@ -1159,8 +1159,12 @@ class GraphStore:
                 where.append("call_site.loop_depth = ANY(%s)")
                 params.append(list(loop_depths))
             if path_prefix and ignoring != "path":
-                where.append("call_site.path LIKE %s")
-                params.append(f"{path_prefix}%")
+                # `starts_with` for the reason `_open_findings_predicate` gives above, and this
+                # reader was the one that had not taken it: `LIKE 'tools/ops/airtable_sync.py%'`
+                # reads `_` as a wildcard, and that path is in the corpus. Nothing on screen sent
+                # a prefix until the project tree did, so the defect was unreachable until now.
+                where.append("starts_with(call_site.path, %s)")
+                params.append(path_prefix)
             if binding_statuses and ignoring != "binding_status":
                 where.append(f"({_BINDING_STATUS_EXPR}) = ANY(%s)")
                 params.append(list(binding_statuses))
@@ -1228,6 +1232,10 @@ class GraphStore:
             "next_offset": consumed if consumed < total else None,
             "by_vendor": {row["key"]: int(row["n"]) for row in vendor_rows},
             "by_operation": {row["key"]: int(row["n"]) for row in facet("operation_id")},
+            # One key per file that holds a live call site, so the explorer can draw the project
+            # tree the reader navigates by. A tree built from the page instead would redraw itself
+            # every time the pager moved, and a directory would appear to lose its files.
+            "by_path": {row["key"]: int(row["n"]) for row in facet("path")},
             "by_loop_depth": {int(row["key"]): int(row["n"]) for row in facet("loop_depth")},
             # Whether each call is known to be at risk, known to be clean, or unexamined. A status
             # absent here was not counted at nought: the grouping returns groups that exist, and

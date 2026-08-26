@@ -2012,3 +2012,40 @@ def test_changes_take_a_union_of_severities(store):
     assert {row["severity"] for row in page["items"]} == {"breaking", "deprecation"}
     # The severity facet still offers the member the reader did not press.
     assert page["by_severity"] == {"breaking": 1, "deprecation": 1, "info": 1}
+
+
+def test_the_path_facet_counts_files_and_ignores_the_prefix_it_sets(store):
+    """CI-W650. The call-sites explorer draws a project tree, and a tree needs whole-repository
+    counts rather than the page it happens to be showing.
+
+    It is a facet like every other one here, which means it ignores its own filter: a tree
+    narrowed by the directory a reader pressed collapses to that directory and offers no way
+    back up.
+    """
+    store.upsert_call_site(_site(path="src/billing.ts", content_hash="h-1"))
+    store.upsert_call_site(_site(path="src/billing.ts", line=88, content_hash="h-2"))
+    store.upsert_call_site(_site(path="src/notify.ts", content_hash="h-3"))
+    store.upsert_call_site(_site(path="tests/billing.spec.ts", content_hash="h-4"))
+
+    page = store.call_sites_page("r1", path_prefix="src/")
+
+    assert page["total"] == 3
+    # Every file the OTHER filters admit, so the tree still shows `tests/` while `src/` is pressed.
+    assert page["by_path"] == {"src/billing.ts": 2, "src/notify.ts": 1, "tests/billing.spec.ts": 1}
+
+
+def test_the_call_sites_path_prefix_treats_underscore_as_a_literal(store):
+    """`_` is a single-character wildcard under `LIKE`, and a path is a string with underscores
+    in it -- `tools/ops/airtable_sync.py` is one this corpus holds.
+
+    The sibling readers already use `starts_with` for exactly this reason; this one was still
+    building a `LIKE` pattern, which nothing on screen could reach until the tree started
+    sending prefixes.
+    """
+    store.upsert_call_site(_site(path="src/my_module/a.ts", content_hash="h-1"))
+    store.upsert_call_site(_site(path="src/myXmodule/b.ts", content_hash="h-2"))
+
+    page = store.call_sites_page("r1", path_prefix="src/my_module/")
+
+    assert page["total"] == 1
+    assert [row["path"] for row in page["items"]] == ["src/my_module/a.ts"]
