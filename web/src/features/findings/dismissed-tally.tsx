@@ -23,21 +23,25 @@
  * fleet scope in the caption, while `RunsCard` and `PrecedentSummaryCard` stay unmounted because
  * theirs is a *page of rows* that would each read as this repository's. A distribution that names
  * its own scope is the first case, not the second.
+ *
+ * **This lives on Trends as of 2026-08-26, not on Findings.** Findings became a viewport-locked
+ * table and a ~200px fleet-scoped chart above a workspace-scoped table was the wrong 200px twice
+ * over. The claim stays on Findings as a status-band note (`dismissed-note.ts`); the argument moved
+ * to the screen that is already the charts screen, which satisfies *one chart, one home* rather
+ * than bending it. Returning it to Findings is one line of JSX.
  */
 
-import { useQuery } from "@tanstack/react-query"
-
-import { fetchDismissalTally } from "@/api/client"
 import { InfoHint } from "@/components/info-hint"
 import { MetricPanel } from "@/components/metric-panel"
 import { RankedBars } from "@/components/ranked-bars"
 import { ErrorState, LoadingState } from "@/components/states"
+import { useDismissalTally } from "@/features/findings/dismissed-note"
 
 export function DismissedTally() {
-  const query = useQuery({
-    queryKey: ["findings", "dismissals"],
-    queryFn: ({ signal }) => fetchDismissalTally(signal),
-  })
+  // One key, two readers: this chart and the Findings status note. The `useQuery` was inlined
+  // here, so the note would have asked under a second key and the two figures could have been
+  // read from two different answers.
+  const query = useDismissalTally()
 
   if (query.isPending) return <LoadingState what="dismissed findings" />
   if (query.isError) {

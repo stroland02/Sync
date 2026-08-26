@@ -1,12 +1,17 @@
 /**
- * The overview: pick a repository, and see the four fleet counts while you do.
+ * The fleet Overview: five panes of a viewport-locked bento, and the sentences that qualify them.
  *
- * This screen carried a page-level "Review proposed patch" action, a fleet-wide change-unit table,
- * five repository cards and a three-panel contextual band. The owner's instruction was a simpler
- * landing page built around the list of repositories, so what is asserted here is the shape that
- * survived and — more importantly — the protected sentences that had to survive with it.
+ * **Retitled with the 2026-08-26 rebuild.** This screen was a scrolling column of eight regions,
+ * three of which could not draw under any address the console produces — the totals line and the
+ * vendor cards returned `null` on every load and the dependency-graph region rendered a paragraph
+ * explaining why it had nothing to draw, because `REPO_SCOPED_PATHS` is empty and the
+ * sole-codebase install redirects before this component renders. The guards those regions carried
+ * are kept where they still describe something: the protected sentences, the refusal, the absent
+ * codebase list, the absent page-level action. The two "beside" guards now hold adjacency in the
+ * bento grid rather than inside a two-child wrapper, which is the same claim about the same
+ * sentence against the composition that replaced it.
  *
- * Scope is `.claude/rules/console-dev-loop.md`'s: structure and classification, never class names
+ * Scope is `.claude/rules/test-discipline.md`'s: structure and classification, never class names
  * and never a snapshot.
  */
 
@@ -58,14 +63,46 @@ function renderOverview(entry = "/") {
   )
 }
 
-describe("the overview screen", () => {
+/**
+ * The pane element a heading names — its header's parent, which is the pane root.
+ *
+ * Structural rather than a class lookup: `PanelPane` is the chassis primitive and a test that
+ * knew its classes would go red on every correct restyle.
+ */
+function paneNamed(name: string): HTMLElement {
+  const heading = screen.getByRole("heading", { name })
+  const pane = heading.closest("header")?.parentElement ?? null
+  expect(pane).not.toBeNull()
+  return pane as HTMLElement
+}
+
+describe("the fleet overview's composition", () => {
+  it("tiles five panes into one grid, so a dropped pane cannot pass on a surviving one", () => {
+    renderOverview()
+
+    const grid = paneNamed("This codebase").parentElement
+    expect(grid).not.toBeNull()
+    expect(grid!.childElementCount).toBe(5)
+
+    for (const pane of [
+      "What Sync has found, over time",
+      "What this evidence rests on",
+      "This codebase",
+      "Health score policy",
+      "What this screen cannot tell you",
+    ]) {
+      expect(screen.getByRole("heading", { name: pane })).toBeTruthy()
+    }
+  })
+
   it("mounts dashboard 1, because a card nobody mounts is not shipped", () => {
     const { container } = renderOverview()
 
-    // Fleet-scoped and propless. The assertion is on the card being on the screen at all: a
-    // finished card left unmounted is the failure this guards, and it is invisible without one.
-    // Matches the card in either state -- mounted-and-loading is still mounted, and the
-    // assertion is about the mount rather than about what the API happened to answer.
+    // Fleet-scoped and propless, and now the bento's widest pane. The assertion is on the card
+    // being on the screen at all: a finished card left unmounted is the failure this guards, and
+    // it is invisible without one. Matches in either state -- mounted-and-loading is still
+    // mounted, and the assertion is about the mount rather than about what the API answered.
+    expect(screen.getByRole("heading", { name: "What Sync has found, over time" })).toBeTruthy()
     expect(container.textContent).toMatch(/findings over time/i)
   })
 
@@ -79,20 +116,15 @@ describe("the overview screen", () => {
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull()
   })
 
-  it("puts the fact tiles beside the dependency graph, per owner decision 2", () => {
+  it("draws no dependency graph, because a map is about one codebase and this screen is not", () => {
     const { container } = renderOverview("/?repo_id=org%2Fone")
 
-    // Answer 2 names the arrangement: last indexed, call sites, vendors, bindings by rung and
-    // open findings, with the graph to the right. Its consequence is that the graph sits above
-    // the fold on the first screen, so it is not optional -- which is why this is a structural
-    // assertion and not a note. jsdom has no layout, so "beside" is measured in Chrome; what is
-    // held here is the precondition without which it cannot be true at any viewport.
-    const band = container.querySelector("[aria-label='Codebase facts']")
-    expect(band).not.toBeNull()
-
-    const pair = band!.parentElement
-    expect(pair).not.toBeNull()
-    expect(pair!.childElementCount).toBe(2)
+    // The graph region on this screen could only ever render the paragraph explaining why it had
+    // nothing to draw: nothing in the console produces a `?repo_id=` address here, and the
+    // sole-codebase install redirects to the codebase's own Overview before this renders. The map
+    // is drawn full size there, in the bento's top row, against the codebase it describes.
+    expect(container.textContent).not.toContain("Your codebase, out to its vendors")
+    expect(container.textContent).not.toContain("there is no dependency graph to draw")
   })
 
   it("does not list the codebases, because the Overview is one workspace's findings", () => {
@@ -103,9 +135,7 @@ describe("the overview screen", () => {
     // The listing is not deleted -- it is the Codebases group in Settings, where choosing and
     // configuring a codebase is the question being asked.
     expect(screen.queryByRole("heading", { name: /monitored codebases/i })).toBeNull()
-    expect(
-      container.querySelector('a[href="/repositories/org%2Ftwo"]')
-    ).toBeNull()
+    expect(container.querySelector('a[href="/repositories/org%2Ftwo"]')).toBeNull()
   })
 
   it("carries no page-level review action, because that belongs to a change unit", () => {
@@ -115,7 +145,9 @@ describe("the overview screen", () => {
     // reads as "the" patch when there are nine change units. It belongs on the row it acts on.
     expect(screen.queryByRole("link", { name: /review proposed patch/i })).toBeNull()
   })
+})
 
+describe("what the fleet overview may not stop saying", () => {
   it("keeps every protected sentence that qualifies what is on screen", () => {
     const { container } = renderOverview()
     const text = container.textContent ?? ""
@@ -126,36 +158,30 @@ describe("the overview screen", () => {
     expect(text).toContain("There is no composite health figure here on purpose")
   })
 
-  it("puts the limits panel beside the health-refusal tile, because a protected sentence says it is there", () => {
-    const { container } = renderOverview()
+  it("puts the limits pane beside the refusal, because the refusal's last clause names it", () => {
+    renderOverview()
 
     // The health-refusal sentence ends "the panel beside them names what none of these figures can
-    // tell you at all". W362 collapsed a three-column band to one column and left both panels
-    // stacked inside a single wrapper, which made that clause false while the sentence still read
-    // as true. Asserting the text alone could not catch it — that is what this guard adds.
-    const section = container.querySelector("section")
-    expect(section).not.toBeNull()
+    // tell you at all". W362 once collapsed a three-column band to one column and left both panels
+    // stacked in a single wrapper, which made that clause false while the sentence still read as
+    // true. Asserting the text alone could not catch it -- that is what this guard adds, and in
+    // the bento it is adjacency in the grid rather than two children of a wrapper. jsdom has no
+    // layout, so "beside" is measured in Chrome; what is held here is the DOM ordering without
+    // which it cannot be true at any viewport.
+    const refusal = paneNamed("Health score policy")
+    expect(refusal.textContent).toContain("There is no composite health figure here on purpose")
 
-    const band = Array.from(section!.children).find(
-      (child) =>
-        child.textContent?.includes("There is no composite health figure here on purpose") &&
-        child.textContent?.includes("What this screen cannot tell you")
-    )
-    expect(band).toBeDefined()
-
-    // Two children of the band, not one wrapper holding a stack. jsdom has no layout, so the
-    // arrangement itself is measured in Chrome; what is held here is the structural precondition
-    // without which "beside" cannot be true at any viewport.
-    expect(band!.childElementCount).toBe(2)
+    const next = refusal.nextElementSibling
+    expect(next).not.toBeNull()
+    expect(next!.textContent).toContain("What this screen cannot tell you")
   })
 
-  it("leads with the codebase fact band, because the Overview is a dashboard for one codebase", () => {
-    const { container } = renderOverview("/?repo_id=org%2Fone")
+  it("gives the codebase fact band a pane of its own, because it answers which codebase this is", () => {
+    renderOverview("/?repo_id=org%2Fone")
 
-    const band = container.querySelector("[aria-label='Codebase facts']")
+    const band = paneNamed("This codebase").querySelector("[aria-label='Codebase facts']")
     expect(band).not.toBeNull()
     expect(band?.textContent).toContain("org/one")
-
   })
 
   it("names no codebase, and states no figure, when the address selects none", () => {

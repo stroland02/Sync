@@ -34,7 +34,21 @@ const EMPTY = {
   still_open: 0,
 }
 
+/**
+ * The panel form, for a screen that gives this card a row of its own.
+ *
+ * The bento pane on the Overview draws its own chrome, so it mounts `FindingsOverTimeBody`
+ * directly rather than putting a card inside a pane.
+ */
 export function FindingsOverTimeCard() {
+  return (
+    <MetricPanel label="What Sync has found, over time">
+      <FindingsOverTimeBody />
+    </MetricPanel>
+  )
+}
+
+export function FindingsOverTimeBody() {
   const query = useFindingsOverTime(null)
 
   const build = useCallback(
@@ -53,18 +67,14 @@ export function FindingsOverTimeCard() {
   const rungs = Object.entries(payload.by_rung).sort(([a], [b]) => a.localeCompare(b))
 
   return (
-    <MetricPanel
-      label="What Sync has found, over time"
-      caption={
-        <p className="max-w-prose">
-          Findings by severity, on the day Sync recorded them. This is Sync&apos;s own timeline
-          rather than the vendors&apos; — a bar sits on the day a detector raised the claim, not
-          the day the API changed, and the distance between those is however long a feed took to
-          arrive and a run took to happen. Nothing in the graph carries a publication date to draw
-          instead.
-        </p>
-      }
-    >
+    <div className="flex flex-col gap-section">
+      <p className="max-w-prose text-body text-ink-muted">
+        Findings by severity, on the day Sync recorded them. This is Sync&apos;s own timeline
+        rather than the vendors&apos; — a bar sits on the day a detector raised the claim, not
+        the day the API changed, and the distance between those is however long a feed took to
+        arrive and a run took to happen. Nothing in the graph carries a publication date to draw
+        instead.
+      </p>
       {payload.days.length === 0 ? (
         <EmptyState
           headline="No finding has been recorded."
@@ -107,6 +117,6 @@ export function FindingsOverTimeCard() {
           </p>
         </div>
       )}
-    </MetricPanel>
+    </div>
   )
 }

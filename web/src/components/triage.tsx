@@ -1,10 +1,14 @@
 /**
- * Triage over a set too large to read: tabs across the top, each carrying its own count, a slot
- * for the controls that narrow the set, and an empty state that says what was checked.
+ * Triage over a set too large to read: which of four answers a narrowed panel owes its reader, and
+ * the three panels that say so when there are no records.
  *
- * The arrangement is a convention of the form — `.claude/rules/interface-originality.md` permits
- * a tabbed count header the way it permits a table. What is ours is what goes in the counts and
- * what the panel says when there is nothing in it.
+ * **`TriageTabs` was deleted here on 2026-08-26 and this file renamed with it.** It owned a Radix
+ * `Tabs` root that mounted one panel per severity kind to render a single table, and its one caller
+ * — the Findings screen — no longer wraps its table in anything: the severity strip is now a
+ * `ChipTabs` in the frame's controls band, and the table fills a viewport-locked pane beneath it.
+ * A component with no caller is deleted rather than deprecated (`CLAUDE.md`). What is kept is the
+ * half with a wrong answer — `triagePanelState` and the three panels — because the derivation is
+ * what the tabs were carrying and the chips are not equipped to carry.
  *
  * **Two distinctions live in the types rather than in a caller's discipline, because both fail
  * silently when a caller gets them wrong.**
@@ -30,21 +34,19 @@
  * list after a real scan and an empty one before any scan are different facts, and keeping them
  * apart is why this console exists — `docs/superpowers/plans/2026-08-18-page-information-architecture.md:122-123`.
  *
- * **What this component refuses to render**, each because the data does not hold it:
+ * **What these refusals now govern is the chip strip**, since that is where the counts went:
  *
- * - **No total across the tabs.** Every count on screen is one the caller was given; nothing here
+ * - **No total across the chips.** Every count on screen is one the caller was given; nothing here
  *   sums them. A sum over a set where one member is unanswered is not a number anybody measured.
- * - **No colour on a tab or a count.** Selection is carried by the tab role and `aria-selected`.
- *   A hue applied to a count would be grading a kind, and a colour that grades is the traffic
- *   light this product refuses.
- * - **No dot, badge tone or pulse.** A tab label is a change kind, a source, or a reason code —
+ * - **No colour on a chip or a count.** A hue applied to a count would be grading a kind, and a
+ *   colour that grades is the traffic light this product refuses.
+ * - **No dot, badge tone or pulse.** A chip label is a change kind, a source, or a reason code —
  *   a recorded value from a closed vocabulary, legible as words.
  */
 
 import type { ReactNode } from "react"
 
 import { Absent } from "@/components/status"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/tabs"
 import { formatTimestamp } from "@/lib/format"
 
 /**
@@ -99,19 +101,6 @@ export function triagePanelState(count: TriageCount, checks: TriageChecks): Tria
   if (count.kind === "unanswered") return "count-unanswered"
   if (count.value > 0) return "records"
   return checks.kind === "checked" ? "empty-after-check" : "empty-before-any-check"
-}
-
-/** The count as it sits on its tab: a figure, or the one absence marker with its reason. */
-function TabCount({ count }: { count: TriageCount }) {
-  if (count.kind === "unanswered") {
-    return (
-      <span className="text-ink-muted">
-        <Absent />
-        <span className="sr-only"> count not answered: {count.why}</span>
-      </span>
-    )
-  }
-  return <span className="text-ink-muted tabular-nums">{count.value.toLocaleString()}</span>
 }
 
 function Panel({ headline, children }: { headline: string; children: ReactNode }) {
@@ -184,9 +173,9 @@ function EmptyBeforeAnyCheck({
 
 function CountUnanswered({ noun, count }: { noun: string; count: Extract<TriageCount, { kind: "unanswered" }> }) {
   return (
-    <Panel headline="This tab's count was not answered.">
+    <Panel headline="This narrowing's count was not answered.">
       <p>
-        The marker on the tab is the absence marker and not a zero: the query that would count{" "}
+        The marker on the chip is the absence marker and not a zero: the query that would count{" "}
         {noun} under this value did not return, so nothing here knows how many there are.
       </p>
       <p>{count.why}</p>
@@ -195,88 +184,41 @@ function CountUnanswered({ noun, count }: { noun: string; count: Extract<TriageC
 }
 
 /**
- * `children` is the active tab's records, rendered by the caller. Only the active tab's panel is
- * mounted, so a caller renders one table rather than one per tab.
+ * The panel a narrowed set owes its reader when it holds no records — or nothing at all.
+ *
+ * Returns `null` for `"records"`, which is the whole reason it is a component rather than a
+ * caller's ternary: a screen renders it unconditionally above its table and the four-way decision
+ * stays in `triagePanelState`, where the test can reach it. A caller writing its own branch is a
+ * caller that will eventually write three of them and have two disagree.
+ *
+ * `count` is the active narrowing's own count and `label` is what that narrowing is called, so the
+ * counted-zero panel says *No open findings under breaking* rather than *no records*.
  */
-export function TriageTabs({
-  legend,
+export function TriageEmpty({
   noun,
-  tabs,
-  activeId,
-  onSelect,
+  label,
+  count,
   checks,
-  filters,
-  children,
 }: {
-  /** What the tabs divide, named for a screen reader — "Findings by kind". */
-  legend: string
-  /** What is being counted, in the plural, for the empty state's own sentences. */
+  /** What is being counted, in the plural — "open findings". */
   noun: string
-  tabs: readonly TriageTab[]
-  activeId: string
-  onSelect: (id: string) => void
-  /** Required. An empty state that cannot say what was checked is the one this replaces. */
+  /** The active narrowing, as a reader sees it written on its chip. */
+  label: string
+  count: TriageCount
   checks: TriageChecks
-  /** The controls that narrow the active tab's set. Deliberately outside the tablist. */
-  filters?: ReactNode
-  children?: ReactNode
 }) {
-  return (
-    <Tabs value={activeId} onValueChange={onSelect} className="flex min-w-0 flex-col gap-section">
-      <div className="flex min-w-0 flex-wrap items-end justify-between gap-section">
-        <TabsList aria-label={legend} className="min-w-0 flex-wrap gap-section">
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id} className="gap-row px-row">
-              <span>{tab.label}</span>
-              <TabCount count={tab.count} />
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {filters !== undefined && (
-          <div className="flex min-w-0 flex-wrap items-end gap-row">{filters}</div>
-        )}
-      </div>
-      {tabs.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id} className="mt-0 min-w-0">
-          <TriagePanel noun={noun} tab={tab} checks={checks}>
-            {children}
-          </TriagePanel>
-        </TabsContent>
-      ))}
-    </Tabs>
-  )
-}
+  const state = triagePanelState(count, checks)
 
-function TriagePanel({
-  noun,
-  tab,
-  checks,
-  children,
-}: {
-  noun: string
-  tab: TriageTab
-  checks: TriageChecks
-  children?: ReactNode
-}) {
-  const state = triagePanelState(tab.count, checks)
-
-  if (state === "records") return <>{children}</>
-
+  if (state === "records") return null
   if (state === "empty-after-check" && checks.kind === "checked") {
-    return <EmptyAfterCheck noun={noun} label={tab.label} checks={checks} />
+    return <EmptyAfterCheck noun={noun} label={label} checks={checks} />
   }
-
   if (state === "empty-before-any-check" && checks.kind === "unchecked") {
     return <EmptyBeforeAnyCheck noun={noun} checks={checks} />
   }
-
-  // The count was not answered, so the panel cannot claim the set is empty. It says that, and
-  // still renders whatever the caller has — a notice above real rows is honest; a blank panel is
-  // the failure mode this whole component exists to remove.
-  return (
-    <div className="flex min-w-0 flex-col gap-section">
-      {tab.count.kind === "unanswered" && <CountUnanswered noun={noun} count={tab.count} />}
-      {children}
-    </div>
-  )
+  // The count was not answered, so nothing here may claim the set is empty. It says that, and the
+  // caller still renders whatever rows it has — a notice above real rows is honest; a blank panel
+  // is the failure mode this module exists to remove.
+  return count.kind === "unanswered" ? <CountUnanswered noun={noun} count={count} /> : null
 }
+

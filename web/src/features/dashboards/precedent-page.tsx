@@ -39,6 +39,8 @@ import {
 } from "@/api/errors"
 import { InfoHint } from "@/components/info-hint"
 import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
+import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
+import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { KpiStrip } from "@/components/kpi-strip"
 import { MetricPanel } from "@/components/metric-panel"
 import { Absent } from "@/components/status"
@@ -282,6 +284,32 @@ export function PrecedentPage() {
               ))}
             </div>
           </MetricPanel>
+
+          {/* The two corpus charts, arrived from Runs with the rebuild of 2026-08-26. Runs is
+              locked to the viewport now, and a reader who came to read a stream of attempts should
+              not scroll a locked screen past two chart panels to reach it. They belong here on
+              their own terms: both read `useAbandonment()`, which is corpus data at deployment
+              scope, and this screen already carries `CORPUS_SCOPE` — so the claim is made once
+              here instead of twice across two screens. This screen is not locked, which is what
+              lets them be as tall as they are. */}
+          <div className="flex items-center gap-row">
+            <h2 className="text-section">The repair corpus</h2>
+            <span className="text-meta text-ink-muted">
+              one row is one attempt, and counts once as a finding
+            </span>
+            <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
+            <InfoHint label="About the repair corpus">
+              One row is one <em>attempt</em>, not one finding: a finding retried three times writes
+              three attempts and counts once toward the corpus grain, so a total here is larger than
+              the finding count on every other screen and neither is wrong. An abandoned attempt is
+              data rather than a failure to hide — the reason code is queryable, and abandonment by
+              change kind is how routing learns which changes are not mechanically safe to attempt.
+            </InfoHint>
+          </div>
+          <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
+            <AbandonReasonsCard />
+            <TierOutcomesCard />
+          </div>
         </>
       )}
     </section>

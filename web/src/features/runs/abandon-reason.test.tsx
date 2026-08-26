@@ -1,11 +1,17 @@
 /**
- * An abandon reason is unbounded subprocess output, and a table cell may not size itself from it.
+ * An abandon reason is unbounded subprocess output, and nothing may size itself from it.
  *
  * A `tsc` run that fails its baseline check writes the compiler's whole `--help` text into
  * `abandon_reason`. Rendered straight, one run drew a row about a thousand pixels tall and pushed
  * every other run off the screen — so the guard here is that a long reason is clamped, and that
  * clamping it never becomes silent truncation: the count of what is behind the disclosure is on
  * screen, and the exact text is still in the DOM rather than cut away.
+ *
+ * **Moved from `features/fleet/abandon-reason.test.tsx` with its subject.** `runs-table.tsx` was
+ * deleted in the Runs rebuild and `AbandonReason` moved to `features/runs/abandon-reason.tsx` — it
+ * is the one export of that file with a life beyond the deleted card, and it now renders in the run
+ * record drawer rather than inside a table cell. The component is unchanged and so are these
+ * assertions; only the import moved.
  *
  * Every query is scoped to its own render's container. `document` accumulates the containers of
  * every earlier case in the file, so a document-wide `querySelector("details")` in the last test
@@ -16,7 +22,7 @@
 import { render, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
-import { AbandonReason } from "@/features/fleet/runs-table"
+import { AbandonReason } from "@/features/runs/abandon-reason"
 
 const LONG = `RuntimeError: could not establish a typecheck baseline for /tmp/repo: ${"tsc --help output ".repeat(200)}`
 const SHORT = "the remediator produced no change"

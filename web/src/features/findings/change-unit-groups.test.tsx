@@ -7,16 +7,28 @@
  * because a grouped view whose parts do not add to the whole is a worse answer than no grouping,
  * and it is the kind of wrong that reads as a rounding artefact.
  *
+ * **Rewritten 2026-08-26 with the expander.** *keeps a unit's findings closed until they are asked
+ * for* and *opens one unit's findings without opening the others* both described a disclosure this
+ * table no longer has: a unit opens in the drawer, so the table publishes an id and renders no
+ * nested rows at all. Those two are replaced by the pair that holds the new contract, and the two
+ * sample-caveat tests moved with the nested table into `findings-inspector.test.tsx` rather than
+ * being deleted. *renders a unit whose versions the graph does not hold without inventing them* is
+ * rewritten against the folded Change-kind cell, and it is the one that proves the fold did not
+ * silently drop the absence marker.
+ *
  * Scope is `console-dev-loop.md`'s: derivation and structure. Never class names.
  */
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { ChangeUnitRow, RiskRow } from "@/api/types"
-import { ChangeUnitGroups, findingsHeld } from "@/features/findings/change-unit-groups"
+import {
+  ChangeUnitGroups,
+  findingsHeld,
+  groupingSummary,
+} from "@/features/findings/change-unit-groups"
 
 afterEach(cleanup)
 
@@ -59,16 +71,18 @@ function unit(overrides: Partial<ChangeUnitRow> = {}): ChangeUnitRow {
   }
 }
 
-function renderGroups(units: ChangeUnitRow[], total = units.length) {
-  // The grouped view reads the workspace's tickets for its Solution cells; the read never
-  // resolves here, which is itself a state the cells must render honestly.
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderGroups(
+  units: ChangeUnitRow[],
+  props: { selectedId?: string | null; onSelect?: (id: string) => void } = {},
+) {
   return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <ChangeUnitGroups repoId="demo" units={units} unitTotal={total} />
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <ChangeUnitGroups
+        units={units}
+        selectedId={props.selectedId ?? null}
+        onSelect={props.onSelect ?? (() => {})}
+      />
+    </MemoryRouter>,
   )
 }
 
@@ -88,85 +102,127 @@ describe("counting what the grouping holds", () => {
   it("is zero for no units, which is a count and not an absence", () => {
     expect(findingsHeld([])).toBe(0)
   })
+
+  it("reconciles the two figures in one sentence: the units and the findings they hold", () => {
+    // Moved off the DOM and onto the derivation when the sentence moved into the pane footer the
+    // page pins. The claim is unchanged and it is still the one that matters here.
+    const summary = groupingSummary(
+      [unit({ finding_count: 9 }), unit({ change_unit_id: "b", finding_count: 4 })],
+      2,
+    )
+
+    expect(summary).toContain("2 changes")
+    expect(summary).toContain("13 open findings")
+  })
 })
 
 describe("the grouped view", () => {
   it("leads with the change rather than with the finding", () => {
     renderGroups([unit()])
 
-    // The unit is the row; the findings are underneath it. A reader scanning this is deciding
+    // The unit is the row; its findings are in the inspector. A reader scanning this is deciding
     // which vendor change to deal with, not which of its call sites to open first.
     expect(screen.getByText(/PostCharges/)).toBeTruthy()
     expect(screen.getByText(/request-parameter-removed/)).toBeTruthy()
   })
 
-  it("says how many findings sit under a unit before it is opened", () => {
-    renderGroups([unit({ finding_count: 3, findings: [finding(), finding({ finding_id: "f-2" }), finding({ finding_id: "f-3" })] })])
-
-    expect(screen.getByRole("button", { name: /3 findings/ })).toBeTruthy()
-  })
-
-  it("keeps a unit's findings closed until they are asked for", () => {
-    // Twenty-four rows expanded by default is the flat table with extra steps.
-    renderGroups([unit()])
-
-    expect(screen.queryByText("src/billing/charge.ts:42")).toBeNull()
-  })
-
-  it("opens one unit's findings without opening the others", () => {
+  it("says how many findings sit under a unit without opening it", () => {
     renderGroups([
-      unit({ findings: [finding({ file: "src/a.ts" })] }),
       unit({
-        change_unit_id: "b",
-        operation_id: "GetBalance",
-        findings: [finding({ file: "src/b.ts", finding_id: "f-2" })],
+        finding_count: 3,
+        findings: [finding(), finding({ finding_id: "f-2" }), finding({ finding_id: "f-3" })],
       }),
     ])
 
-    fireEvent.click(screen.getAllByRole("button", { name: /finding/ })[0])
-
-    expect(screen.getByText(/src\/a\.ts/)).toBeTruthy()
-    expect(screen.queryByText(/src\/b\.ts/)).toBeNull()
+    expect(screen.getByText(/3 findings/)).toBeTruthy()
   })
 
-  it("reconciles on screen: the units and the findings they hold", () => {
-    renderGroups([unit({ finding_count: 9 }), unit({ change_unit_id: "b", finding_count: 4 })], 2)
+  it("renders no constituent finding inside the row", () => {
+    // Replaces "keeps a unit's findings closed until they are asked for". There is no disclosure
+    // any more: the nested table lives in the drawer, so the row must hold no call site at all --
+    // a row whose height jumps under a reader's pointer is the control this replaced.
+    renderGroups([unit()])
 
-    const summary = screen.getByTestId("grouping-summary").textContent
-    expect(summary).toContain("2")
-    expect(summary).toContain("13")
+    expect(screen.queryByText("src/billing/charge.ts:42")).toBeNull()
+    expect(screen.queryByRole("button", { name: /3 findings/ })).toBeNull()
   })
 
-  it("says which nothing an empty grouping is", () => {
-    // Not a bare dash and not a zero with no scope: nothing open is a measured answer, and it
-    // is a different fact from a workspace that was never indexed.
-    renderGroups([], 0)
+  it("publishes the pressed unit's id to the caller rather than selecting it itself", () => {
+    // Replaces "opens one unit's findings without opening the others". Selection lives in the URL
+    // now, so a table that selected itself would disagree with the address the moment Back was
+    // pressed.
+    const onSelect = vi.fn()
+    renderGroups(
+      [
+        unit(),
+        unit({ change_unit_id: "b", operation_id: "GetBalance" }),
+      ],
+      { onSelect },
+    )
 
-    expect(screen.getByText(/No open finding/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole("button", { name: "Inspect" })[1])
+
+    expect(onSelect).toHaveBeenCalledWith("b")
+  })
+
+  it("marks the selected unit and only that one", () => {
+    renderGroups([unit(), unit({ change_unit_id: "b", operation_id: "GetBalance" })], {
+      selectedId: "b",
+    })
+
+    const pressed = screen
+      .getAllByRole("button", { name: "Inspect" })
+      .filter((control) => control.getAttribute("aria-pressed") === "true")
+    expect(pressed).toHaveLength(1)
+  })
+
+  it("draws no empty row, because the panel above owns the empty state", () => {
+    // Two empty states would render one nothing twice, and only one of them can say which nothing
+    // it is -- `TriageEmpty` knows what was checked and this table does not.
+    renderGroups([])
+
+    expect(screen.queryByText(/No open finding/)).toBeNull()
+    expect(screen.getAllByRole("columnheader").length).toBeGreaterThan(0)
   })
 
   it("renders a unit whose versions the graph does not hold without inventing them", () => {
+    // The Versions column folded under Change kind. This is the test that proves the fold did not
+    // quietly drop the absence marker with the column.
     renderGroups([unit({ from_version: null, to_version: null })])
 
     expect(screen.getByText(/not recorded/)).toBeTruthy()
   })
 
-  it("says the nested rows are a sample when the unit holds more than travelled", () => {
-    // The payload caps the array and states the count independently. Silence here would render
-    // a truncated list as the whole unit -- the count above disagreeing with the rows beneath
-    // it, which is the shape this console refuses.
-    renderGroups([unit({ finding_count: 137, findings: [finding(), finding({ finding_id: "f-2" })] })])
-    fireEvent.click(screen.getByRole("button", { name: /137 findings/ }))
+  it("keeps a recorded version span visible after the fold", () => {
+    // Non-vacuous partner to the one above: the pair still renders, so the previous test is about
+    // the absence rather than about the cell having disappeared.
+    renderGroups([unit()])
 
-    expect(screen.getByText(/Showing 2 of 137 findings/)).toBeTruthy()
+    expect(screen.getByText(/v2320/)).toBeTruthy()
+  })
+})
+
+describe("the Standing column", () => {
+  it("tells three answers apart: a disposition, a run in flight, and no run at all", () => {
+    // The reference's Agent Status, landed on data we hold. This is the column a fabrication would
+    // enter through, so the three have to render as three distinguishable things.
+    const { container: recorded } = renderGroups([unit({ standing: "opened" })])
+    expect(recorded.textContent).toMatch(/opened/)
+
+    cleanup()
+    const { container: flight } = renderGroups([unit({ standing: "in_progress" })])
+    expect(flight.textContent).toMatch(/in flight/)
+    expect(flight.textContent).not.toMatch(/opened/)
+
+    cleanup()
+    const { container: none } = renderGroups([unit({ standing: null })])
+    expect(none.textContent).toMatch(/no run recorded/)
+    expect(none.textContent).not.toMatch(/in flight/)
   })
 
-  it("says nothing about a sample when every finding travelled", () => {
-    renderGroups([unit({ finding_count: 2, findings: [finding(), finding({ finding_id: "f-2" })] })])
-    fireEvent.click(screen.getByRole("button", { name: /2 findings/ }))
+  it("renders a missing checkpoint time as its own absence rather than omitting the row", () => {
+    renderGroups([unit({ standing: "opened", last_checkpoint_at: null })])
 
-    // Non-vacuous: the disclosure opened and the rows are there.
-    expect(screen.getAllByRole("row").length).toBeGreaterThan(1)
-    expect(screen.queryByText(/Showing/)).toBeNull()
+    expect(screen.getByText(/no checkpoint time/)).toBeTruthy()
   })
 })

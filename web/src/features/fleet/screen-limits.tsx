@@ -5,8 +5,6 @@
  * figures themselves.
  */
 
-import { MetricPanel } from "@/components/metric-panel"
-
 const LIMITS: readonly { headline: string; detail: string }[] = [
   {
     headline: "A repository the index never indexed is invisible.",
@@ -40,16 +38,13 @@ const LIMITS: readonly { headline: string; detail: string }[] = [
   },
 ]
 
-export function ScreenLimitsCard() {
+/** The list itself. The Overview's bento pane supplies the name and the border. */
+export function ScreenLimitsList() {
   return (
-    <MetricPanel
-      label="What this screen cannot tell you"
-      caption={
-        <p className="max-w-prose">
-          Four standing limits of the data behind this page, not gaps in how it is drawn.
-        </p>
-      }
-    >
+    <div className="flex flex-col gap-section">
+      <p className="max-w-prose text-body text-ink-muted">
+        Four standing limits of the data behind this page, not gaps in how it is drawn.
+      </p>
       {/* Each headline sits at `text-emphasis`, one step under the `text-section` the panel name
           above it takes since M7-W188. It used to be the heavier of the two, when a panel name was
           furniture; the ordering is now the ordinary one and the reason for the step has not
@@ -70,6 +65,6 @@ export function ScreenLimitsCard() {
           </div>
         ))}
       </dl>
-    </MetricPanel>
+    </div>
   )
 }

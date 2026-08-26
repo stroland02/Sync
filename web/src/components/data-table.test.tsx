@@ -352,4 +352,28 @@ describe("TableFrame", () => {
     expect(frame).not.toBeNull()
     expect(frame?.querySelector("table")).not.toBeNull()
   })
+
+  it("still holds the table when it fills a locked pane", () => {
+    // `fill` is what lets a table take its share of a locked screen and scroll its rows inside
+    // itself instead of growing the page. **A green test here is not evidence that it does.**
+    // jsdom loads no stylesheet, so the scroll containment cannot be asserted at all — what is
+    // asserted is the containment the component promises, and the rendered behaviour is measured
+    // at 1440x900 in Chrome per `console-dev-loop.md`. Written down because the shape of this test
+    // invites the opposite conclusion.
+    const { container } = render(
+      <TableFrame fill>
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell>finding-1:prod-run-9:0</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableFrame>
+    )
+
+    const frame = container.querySelector('[data-slot="table-frame"]')
+    expect(frame?.querySelector("table")).not.toBeNull()
+    expect(frame?.querySelector('[data-slot="table-container"]')).not.toBeNull()
+  })
 })

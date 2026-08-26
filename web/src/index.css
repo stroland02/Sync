@@ -461,6 +461,40 @@
   }
 }
 
+/* The bento lock: two fixed rows of panes that each scroll their own body.
+   Below 1024 wide or 720 tall the grid itself becomes the one scroll container, so a short window
+   degrades to a stacked column instead of clipping panes the chassis will not scroll. Named here
+   rather than in `@theme` for the reason `--card-padding-x` gives: it declares no colour, type
+   step, spacing value or radius, so no DESIGN.md row is owed.
+
+   In `utilities` rather than `components`, and that is the whole reason it works: every pane
+   carries Tailwind's own `min-h-0` from `layouts/pane.tsx`, and a `components` rule loses to a
+   `utilities` one whatever its specificity. Measured at 900x700 with the rule one layer down --
+   four panes 54px tall, both maps drawn at zero height. */
+@layer utilities {
+  .bento-lock {
+    overflow-y: auto;
+  }
+
+  /* Stacked, a pane's height is its content's — and a pane holding a canvas that measures its
+     own container has no content height. The media query below zeroes this again, so the floor
+     never fights the locked tracks. */
+  .bento-lock > * {
+    min-height: 20rem;
+  }
+
+  @media (min-width: 1024px) and (min-height: 720px) {
+    .bento-lock {
+      overflow: hidden;
+      grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
+    }
+
+    .bento-lock > * {
+      min-height: 0;
+    }
+  }
+}
+
 /* Viewport scaling — owner ruling 2026-08-25.
    Under the lock, chrome is subtracted from the working area rather than scrolled past, so a
    short viewport pays for it directly. Measured at 1896x913: two 48px bars, an 80px frame gutter

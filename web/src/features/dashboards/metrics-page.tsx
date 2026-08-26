@@ -31,6 +31,7 @@ import {
   fetchRemediationActivity,
 } from "@/features/workflows/remediation-activity"
 import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
+import { DismissedTally } from "@/features/findings/dismissed-tally"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
@@ -153,6 +154,11 @@ export function MetricsPage() {
             summarising each other. */}
         <AttemptsOverTime />
         <ObservedVolumeCard />
+        {/* Moved here from Findings, 2026-08-26, when that screen became a viewport-locked table.
+            Trends is the Findings group's sibling tab and is already the charts screen, so *one
+            chart, one home* is satisfied rather than bent. It states its own fleet scope in its
+            caption, which is what lets it sit beside workspace-scoped panels at all. */}
+        <DismissedTally />
       </section>
     </ScreenFrame>
   )

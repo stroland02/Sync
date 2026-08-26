@@ -158,7 +158,9 @@ export function ScreenFrame({
 /** The page's own heading and its one-line answer. */
 function ScreenHeading({ heading, subtitle }: { heading: string; subtitle?: ReactNode }) {
   return (
-    <header className="flex flex-col gap-field">
+    // `shrink-0`: in a locked column the content band claims `flex-1` and a header without it
+    // is compressed into the grid rather than keeping its own height.
+    <header className="flex shrink-0 flex-col gap-field">
       <h1 className="text-page text-ink">{heading}</h1>
       {subtitle ? <p className="max-w-prose text-body text-ink-muted">{subtitle}</p> : null}
     </header>

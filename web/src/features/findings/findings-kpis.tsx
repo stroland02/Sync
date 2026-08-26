@@ -5,20 +5,21 @@
  * belong here rather than in a plan nobody opens while editing this file.**
  *
  * - **F2, a severity donut, is refused as a duplicate.** This page already renders the severity
- *   distribution — `TriageTabs` carries one tab per kind with an exact count, computed without
- *   the severity narrowing applied. A donut beside it would draw the same numbers a second way,
- *   and the owner's ruling is severity once per page, scoped differently. The tabs are also
- *   strictly better here: they are the control that narrows the table, so the distribution and
- *   the filter are one thing rather than a chart and a control that agree until one drifts.
+ *   distribution — the `ChipTabs` strip in the controls band carries one chip per kind with an
+ *   exact count, computed without the severity narrowing applied. A donut beside it would draw the
+ *   same numbers a second way, and the owner's ruling is severity once per page, scoped
+ *   differently. The chips are also strictly better here: they are the control that narrows the
+ *   table, so the distribution and the filter are one thing rather than a chart and a control that
+ *   agree until one drifts.
  * - **F3, findings per integration, is built on the Integrations page** (`findings-per-integration
  *   .tsx`). One chart, one home. The catalogue proposed it on both screens, and a fact written
  *   twice disagrees with itself eventually — which is `CLAUDE.md`'s most expensive form of debt
  *   because the disagreement is silent.
  *
- * **So this strip earns its slot by carrying what the tabs and the table do not**: how much is
- * dismissed rather than open, how many detectors stood behind the answer, and when the workspace
- * was last indexed. None of those is a row on this page, and the third is what tells a reader
- * whether an empty screen means clean or means nothing looked.
+ * **So this strip earns its slot by carrying what the chips and the table do not**: how many
+ * detectors stood behind the answer, and when the workspace was last indexed. Neither is a row on
+ * this page, and the second is what tells a reader whether an empty screen means clean or means
+ * nothing looked.
  */
 
 import type { VendorFindingsPage } from "@/api/types"
@@ -37,7 +38,8 @@ export function FindingsKpis({
   // No dismissal tile, and that is a scope decision rather than an omission: dismissals are
   // fleet-wide (a dismissal records no `repo_id`) and every tile below is this workspace's.
   // One row mixing the two scopes is the attribution error this console keeps removing --
-  // `DismissedTally` renders that figure beneath, where it can state its own scope in a caption.
+  // `dismissed-note.ts` puts that figure in the status band, where it states its own scope in the
+  // sentence rather than borrowing this row's.
   return (
     <KpiStrip
       items={[

@@ -796,6 +796,22 @@ while the rail that shipped was 40px. What is new is that they are **tokens rath
 constants in `sidebar-collapse.ts`**, because the Stitch specification gives the top bar the same
 48px and a third view choosing its own number is the drift a token exists to stop.
 
+**A locked table pane hands its scroll to the table container, not to `PaneScroll`** (recorded
+2026-08-26, Findings). No new token and nothing about colour changes; it is a containment fact worth
+writing down because the failure is silent. `data-slot=table-container` is `overflow-auto`, so it is
+the containing block for a `position: sticky` header inside it — wrap it in a second scroller and
+the head sticks to a box that never scrolls and rides away with the rows. `TableFrame fill` moves
+the scroll onto the container and `PanelPane scroll={false}` lets the pane hand it over, keeping
+exactly one scrolling region per pane. The sticky head backs onto `bg-secondary` (an existing
+opaque step) rather than `bg-surface-subtle`, which is an alpha overlay and would composite
+scrolling rows through the header.
+
+**`h-[var(--row-lg)]`, never `h-row-lg`** — corrected 2026-08-26 in `components/pane.tsx`. The three
+row heights above are bare custom properties rather than `--spacing-*` ones, so Tailwind generates
+no `h-row-*` utility and the class was inert: measured in Chrome at 1920×1080, `PanelPane`'s banded
+header rendered at 29px and its footer at 17px, both content height, on every screen using it.
+`data-table.tsx` already spelled the token correctly and is the precedent.
+
 **The top bar's 48px is the specification's**, and it matches what the console already rendered —
 `h-12` on the banner — so this token names a measured fact rather than changing one.
 

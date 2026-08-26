@@ -143,7 +143,9 @@ export function EmptyState({
   command,
 }: {
   headline: string
-  detail: string
+  /** A node rather than a string so a date can be a live `RelativeTime` — an empty state can sit
+      on screen for hours, and a timestamp formatted once would go stale under the reader. */
+  detail: ReactNode
   /** Where a reader goes to populate this. A link, usually into Settings or a sibling screen. */
   action?: ReactNode
   /**

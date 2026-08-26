@@ -37,6 +37,9 @@ export const SIBLING_GROUPS: readonly SiblingGroup[] = [
     label: "Solutions",
     members: [
       { label: "Solutions", path: "/repositories/:repoId/solutions" },
+      // Runs joined this group when its rebuild sent the two corpus charts to Corpus. Without a
+      // tab there is no path from the stream to the charts a reader used to see under it.
+      { label: "Runs", path: "/repositories/:repoId/runs" },
       { label: "Corpus", path: "/repositories/:repoId/precedent" },
     ],
   },

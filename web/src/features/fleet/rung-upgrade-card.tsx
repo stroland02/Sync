@@ -15,7 +15,6 @@
 import { useDetectors } from "@/api/queries"
 import { Absent } from "@/components/status"
 import { ErrorState, LoadingState } from "@/components/states"
-import { MetricPanel } from "@/components/metric-panel"
 import { nextStep, offPath, rungSteps, type RungStep } from "@/features/fleet/rung-upgrade"
 
 /** What each rung means, and — for a rung not yet reached — what reaching it actually takes. */
@@ -34,11 +33,12 @@ const RUNG_COPY: Record<RungStep["rung"], { means: string; takes: string }> = {
   },
 }
 
-export interface RungUpgradeCardProps {
+export interface RungUpgradeBodyProps {
   readonly repoId?: string
 }
 
-export function RungUpgradeCard({ repoId }: RungUpgradeCardProps) {
+/** The ladder itself. The Overview's bento pane supplies the chrome that used to be a card. */
+export function RungUpgradeBody({ repoId }: RungUpgradeBodyProps) {
   const detectors = useDetectors(repoId)
 
   if (detectors.isPending) return <LoadingState what="the evidence behind these findings" />
@@ -59,8 +59,7 @@ export function RungUpgradeCard({ repoId }: RungUpgradeCardProps) {
   const anyEvidence = steps.some((step) => step.reached)
 
   return (
-    <MetricPanel label="What this evidence rests on">
-      <div className="flex flex-col gap-row">
+    <div className="flex flex-col gap-row">
         <dl className="flex flex-col gap-field">
           {steps.map((step) => (
             <div key={step.rung} className="flex flex-col gap-field">
@@ -116,8 +115,7 @@ export function RungUpgradeCard({ repoId }: RungUpgradeCardProps) {
             than weak evidence for one, and <span className="font-mono">unattributed</span> is a row
             written before the rung was recorded. Neither is a step anybody can take.
           </p>
-        )}
-      </div>
-    </MetricPanel>
+      )}
+    </div>
   )
 }

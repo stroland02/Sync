@@ -1,49 +1,20 @@
 /**
  * A left rail that narrows a set too large to read, with a count beside every option.
  *
- * The arrangement is a convention of the form — `.claude/rules/interface-originality.md` permits
- * a filter rail the way it permits a table. **What is ours is the count.**
- * `docs/superpowers/plans/2026-08-18-page-information-architecture.md:150-152` puts the entire
- * value of this surface there: the counts *"tell you what you would get before you click"*. That
- * only holds if a count is honest about what class of answer it is, so the type carries the
- * distinction rather than the caller's discipline carrying it.
+ * A confirmed zero and an unanswered count are different facts, so there is no `number` to pass:
+ * a count is `{ kind: "counted", value }` or `{ kind: "unanswered", why }`, and the reason travels
+ * with the absence marker. An option counted at zero stays selectable -- the filter returning
+ * nothing is a real answer, and disabling it would claim the value is not in the vocabulary.
  *
- * **A confirmed zero and an unanswered count are different facts and there is no `number` to
- * pass.** A count is `{ kind: "counted", value }` or `{ kind: "unanswered", why }`. A view that
- * never asked the question cannot render `0` by accident; it renders the console's one absence
- * marker, and the reason travels with it — on the option for a screen reader, and in the rail's
- * own note for everyone else. An absence marker with no reason behind it is the defect this
- * console has closed repeatedly: "we did not ask", "the route failed" and "this view cannot see
- * it" all arrive as one glyph otherwise.
- *
- * **An option counted at zero stays selectable.** It is a real answer — the filter would return
- * nothing — and that is worth clicking to establish. Disabling it, or dropping it from the list,
- * makes the rail assert the value does not exist in the vocabulary, which is a different claim
- * and a false one.
- *
- * **What this component refuses to render**, each because the data does not hold it:
- *
- * - **No total, over a group or over the rail.** Every figure on screen is one the caller was
- *   given. A sum over a set where one member is unanswered is not a number anybody measured, and
- *   a sum over a set where none is would still be this component inventing a figure. The
- *   unfiltered option's count is supplied by the caller for exactly that reason.
- * - **No colour grading an option.** Selection is carried by `aria-pressed` and by a named
- *   surface step, both legible without hue. A count tinted by how large it is would be a severity
- *   this console did not measure.
- * - **No dot, badge tone, bar or histogram.** The timeline histogram the reference rail carries
- *   above its table is a separate surface with its own dependency question, and is not here.
- *
- * `FilterCount` is `TriageCount` under another name rather than a second declaration of the same
- * shape. Two spellings of "counted or unanswered" would drift, and the drift would be silent —
- * which is the expensive kind. The type wants a home neither component owns; see this file's
- * deferred-work note in the task report.
+ * Renders no total over a group or the rail: a sum over a set holding an unanswered member is not
+ * a figure anybody measured. `FilterCount` aliases `TriageCount` rather than redeclaring it.
  */
 
 import { useId, useState } from "react"
 
 import { Absent, Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
-import type { TriageCount } from "@/components/triage-tabs"
+import type { TriageCount } from "@/components/triage"
 import { chipSurface } from "@/lib/selectable-surface"
 
 /**

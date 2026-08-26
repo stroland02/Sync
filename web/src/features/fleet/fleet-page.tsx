@@ -1,142 +1,49 @@
 /**
- * The Overview: which repository to open, and the four fleet counts while you decide.
+ * The fleet Overview: a viewport-locked bento of five panes over the whole deployment.
  *
- * **One question per screen.** This level asks which repository, and everything that answered a
- * different question has moved to where that question is asked. The fleet-wide change-unit table
- * and the vendor distribution went to the Codebase screen, where they are scoped to one repository
- * and therefore actionable; a fleet-wide table on a screen whose job is choosing between
- * repositories made the choosing harder rather than easier.
+ * **One question per screen.** This level asks what is true across every codebase Sync holds,
+ * and everything that answered a different question has moved to where that question is asked.
  *
- * **The name.** This destination was titled "Repositories", labelled "Codebases" in the route
- * registry, and sits at the `Fleet` level — three names for one screen. It is "Overview" now in
- * everything a reader sees. The *level* keeps the specification's word, because
- * `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md` is what
- * `tests/test_console_hierarchy.py` checks `GRAPH_LEVELS` against, and a display rename is not a
- * hierarchy change.
+ * **What this rebuild deleted, and why each was dead rather than merely crowded.** Three regions
+ * on this screen could not draw under any address the console produces. `REPO_SCOPED_PATHS` is
+ * empty, so nothing here is ever reached with `?repo_id=` bound, and the sole-codebase install
+ * redirects to that codebase's own Overview before this component renders — which left the
+ * totals line and the vendor cards returning `null` on every load, and the dependency-graph
+ * region rendering a paragraph explaining why it had nothing to draw. The maps belong to a
+ * codebase and are drawn full size on the codebase Overview; the counts they carried are in the
+ * instrument bar. The four-tile fact grid went the same way for a different reason: the chrome
+ * publishes those four figures on every screen now, so a grid of them here was the same fact
+ * rendered twice at two weights.
  *
- * **No page-level action.** The retired `PageHeader` carried "Review proposed patch" in an `actions` slot, pointing
- * at whichever run happened to be the newest with an opened pull request. With nine change units
- * open that reads as *the* patch, which is a claim about priority the data does not make. The
- * action belongs on the change-unit row it acts on, beside that row's own standing and checkpoint
- * age, where it also reads as the log of what happened to that change.
+ * **The codebase list is not here.** Ruled twice by the owner: a directory of every codebase
+ * answers "which workspace am I in", which the trail's workspace switcher answers, and the panel
+ * it replaced printed one fleet-wide `total_findings` under every card — a false claim about
+ * every repository but the one that figure happened to match. The listing moved whole to
+ * Settings' Codebases group.
  *
- * **The codebase list is not here.** Ruled twice by the owner: this screen shows findings for the
- * one workspace already chosen, and a directory of every codebase answers a different question —
- * which workspace am I in — that the scope switcher already answers. The listing moved whole to
- * Settings' Codebases group rather than being deleted, because it fixed a real defect worth
- * keeping: the panel it replaced printed one fleet-wide `total_findings` under every card, a false
- * claim about every repository but the one that figure happened to match.
+ * **No page-level action.** The retired header carried "Review proposed patch", pointing at
+ * whichever run happened to be the newest with an opened pull request. With nine change units
+ * open that reads as *the* patch, which is a claim about priority the data does not make.
  *
- * **What stays, and why it is not clutter.** The four counts, the standing limits, the
- * composite-health refusal and the three footnotes are the qualifications that make every figure on
- * this screen readable. `CLAUDE.md` protects four distinctions and the console architecture plan's
- * *Establish 2* reproduces twenty-four sentences that may be restyled and re-placed but never
- * shortened. The absence footnote pointed at "the repository list below"; the list moved, so the
- * pointer moved with it and now names the codebase list in Settings. Re-placing a referent is
- * permitted where shortening the sentence is not — and leaving it pointing at a list this screen no
- * longer holds would be a true sentence with a dead pointer, which is the quiet half of the defect.
- * The same permission is what moves all three of them onto the status band as `note` segments,
- * verbatim: re-placed, not shortened.
+ * **What stays, and why it is not clutter.** The standing limits, the composite-health refusal
+ * and the three footnotes are the qualifications that make every figure on this screen readable.
+ * They may be restyled and re-placed but never shortened: the absence footnote's referent moved
+ * to Settings when the listing did, and pointing it at a list this screen no longer holds would
+ * be a true sentence with a dead pointer.
  */
 
-import { Navigate, useLocation } from "react-router"
+import { Navigate } from "react-router"
 
-import { DEFAULT_LIMIT } from "@/api/client"
-import {
-  usePrecedent,
-  useDetectors,
-  useOverview,
-  useRepositories,
-  useRepositoryCoverage,
-  useRuns,
-} from "@/api/queries"
-import { FactTile } from "@/components/fact-tile"
-import { describeBoundedTotal } from "@/features/fleet/cardinality"
-import { CodebaseFactsBand, resolveCodebaseScope } from "@/features/fleet/codebase-facts"
-import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
-import { TotalsBar } from "@/features/fleet/totals-bar"
-import { VendorCardsGrid } from "@/features/fleet/vendor-cards-grid"
-import { OverviewGraphPanel } from "@/features/index-graph/overview-graph-panel"
-import { FleetFacts } from "@/features/fleet/fleet-facts"
-import { RungUpgradeCard } from "@/features/fleet/rung-upgrade-card"
-import { ScreenLimitsCard } from "@/features/fleet/screen-limits"
-import { scopeFromLocation } from "@/layouts/scope-switchers"
+import { useDetectors, useRepositories } from "@/api/queries"
+import { PanelPane } from "@/components/pane"
+import { FindingsOverTimeBody } from "@/features/dashboards/findings-over-time-card"
+import { CodebaseFactsBand } from "@/features/fleet/codebase-facts"
+import { FleetKpis } from "@/features/fleet/fleet-facts"
+import { RungUpgradeBody } from "@/features/fleet/rung-upgrade-card"
+import { ScreenLimitsList } from "@/features/fleet/screen-limits"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { overviewHref } from "@/lib/hrefs"
-import { useOffsetParam } from "@/lib/use-offset-param"
-
-// The screen's stated question, which changed when the codebase listing left it. It described
-// "all code repositories monitored by Sync" while this screen answered that; it now answers what
-// is true about the one workspace already chosen, and says so.
-const DEFAULT_QUESTION =
-  "What the index, the vendors and the detectors currently say about this workspace."
-
-export interface FleetPageProps {
-  readonly question?: string
-}
-
-/**
- * The graph draws one codebase, so it draws nothing until the address names one.
- *
- * The band beside it resolves the same six scopes and says which it landed on. Picking a
- * repository here because exactly one exists would be fine; picking one because several do would
- * be the console deciding what the operator is looking at, which is the claim the band refuses in
- * words and this panel refuses by not drawing.
- */
-/**
- * The band below the fold: the totals line, then one card per vendor.
- *
- * Adopted from Lane F and scoped the way the graph is -- both describe one codebase, so neither
- * draws until the address names one. `total_findings_bound_reached` is passed through rather than
- * dropped, because past the route's bound the count is a floor, and printing a floor plain would
- * overstate what was counted.
- */
-function OverviewTotalsRegion() {
-  const { pathname, search } = useLocation()
-  const repositories = useRepositories()
-  const scope = resolveCodebaseScope(
-    scopeFromLocation(pathname, search).repoId,
-    repositories.data?.repo_ids
-  )
-  const repoId = scope.kind === "selected" || scope.kind === "only" ? scope.repoId : null
-
-  const coverage = useRepositoryCoverage(repoId ?? "")
-  const overview = useOverview(repoId ?? undefined)
-
-  if (repoId === null) return null
-
-  return (
-    <div className="flex flex-col gap-section">
-      <TotalsBar
-        totalCallSites={coverage.data?.total_call_sites ?? null}
-        totalFindings={overview.data?.total_findings ?? null}
-        findingsAreFloor={overview.data?.total_findings_bound_reached ?? false}
-      />
-      <VendorCardsGrid repoId={repoId} />
-    </div>
-  )
-}
-
-function OverviewGraphRegion() {
-  const { pathname, search } = useLocation()
-  const repositories = useRepositories()
-  const scope = resolveCodebaseScope(
-    scopeFromLocation(pathname, search).repoId,
-    repositories.data?.repo_ids
-  )
-
-  if (scope.kind === "selected" || scope.kind === "only") {
-    return <OverviewGraphPanel repoId={scope.repoId} />
-  }
-  return (
-    <p className="text-meta text-muted-foreground">
-      No codebase is selected, so there is no dependency graph to draw. The graph is one
-      codebase's call sites out to its vendors; drawn across several it would show a shape no
-      repository has.
-    </p>
-  )
-}
 
 /** Which absence a figure is in, beside the glyph — a read still in flight is not a failed one. */
 function absentScope(failed: boolean): string {
@@ -153,7 +60,19 @@ function absentScope(failed: boolean): string {
  */
 const NOTHING_INDEXED = "no codebase indexed, so nothing has been searched"
 
-export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
+/**
+ * The refusal, kept at the weight of the figures it refuses to average.
+ *
+ * It sits in a pane of its own rather than folded into the limits beside it, because its own last
+ * clause names that neighbour — "the panel beside them" has to be a panel beside it.
+ */
+const HEALTH_REFUSAL =
+  "There is no composite health figure here on purpose. A scalar that averaged three gates would " +
+  'collapse "we could not check" onto the same axis as "we checked and it passed", which is the ' +
+  "failure this console exists to replace. Every figure on this screen instead names its own " +
+  "scope, and the panel beside them names what none of these figures can tell you at all."
+
+export function FleetPage() {
   // One Overview, not two (owner, 2026-08-18): with exactly one codebase in the graph this
   // screen and the codebase screen were both answering as "Overview" from two addresses, and
   // clicking between them read as two different pages. The sole-codebase install lands on the
@@ -165,22 +84,18 @@ export function FleetPage({ question = DEFAULT_QUESTION }: FleetPageProps) {
     return <Navigate replace to={overviewHref(repoIds[0])} />
   }
 
-  return <FleetScreen question={question} />
+  return <FleetScreen />
 }
 
 /**
- * The screen itself, split from the redirect guard so the band's five reads are unconditional
- * hooks — the sole-codebase install must not issue them on its way to somewhere else.
+ * The screen itself, split from the redirect guard so the band's reads are unconditional hooks —
+ * the sole-codebase install must not issue them on its way to somewhere else.
  */
-function FleetScreen({ question }: { question: string }) {
-  // The five reads `FleetFacts` issues below, at the same keys and the same runs offset, so the
-  // band states the figures already on screen rather than opening five more requests for them.
-  const [offset] = useOffsetParam("runs_offset")
+function FleetScreen() {
+  // Two of the reads `FleetKpis` issues, at the same keys, so the band states a figure already
+  // being fetched rather than opening a request of its own.
   const repositories = useRepositories()
-  const overview = useOverview()
-  const runs = useRuns({ limit: DEFAULT_LIMIT, offset })
   const detectors = useDetectors()
-  const corpus = usePrecedent()
 
   const nothingIndexed = repositories.isSuccess && repositories.data.repo_ids.length === 0
 
@@ -190,9 +105,6 @@ function FleetScreen({ question }: { question: string }) {
    * Every figure here reads two answers: the count, and whether the index holds a codebase at
    * all — because that is what decides whether the count is a measurement or an absence. Gating
    * on the count alone would state a nought against an index nobody has confirmed exists.
-   *
-   * `text` is already `null` for an unanswered read and `"0"` for a counted one, and the two never
-   * merge: a repository that was searched and yielded nothing says so.
    */
   function figure(
     label: string,
@@ -200,10 +112,7 @@ function FleetScreen({ question }: { question: string }) {
     failed: boolean,
     scope: string,
   ): StatusSegment {
-    // `Repositories indexed` is exempt: its read succeeded and its answer *is* zero, so the
-    // absence marker here would render a measurement that happened as one that did not --
-    // the same collapse this band exists to refuse, run backwards.
-    if (nothingIndexed && label !== "Repositories indexed") {
+    if (nothingIndexed) {
       return { kind: "figure", label, value: null, scope: NOTHING_INDEXED }
     }
     if (!repositories.isSuccess || text === null) {
@@ -217,40 +126,10 @@ function FleetScreen({ question }: { question: string }) {
     return { kind: "figure", label, value: text, scope }
   }
 
+  // The band carries what the instrument bar cannot: the fifth figure, which has no cell up
+  // there, and the three qualifications. Nothing is stated in both places -- a fact written twice
+  // will disagree with itself the first time one of the two is edited.
   const status: StatusSegment[] = [
-    figure(
-      "Open findings",
-      overview.isSuccess
-        ? describeBoundedTotal(
-            overview.data.total_findings,
-            overview.data.total_findings_bound_reached,
-          )
-        : null,
-      overview.isError,
-      // The `+` glyph is never the only channel (`cardinality.tsx`), so past the bound the scope
-      // says in words that the system stopped counting and the figure is a floor.
-      overview.isSuccess && overview.data.total_findings_bound_reached
-        ? `at least this many — counting stopped at ${overview.data.total_findings_bound.toLocaleString()}`
-        : "across every vendor, every repository",
-    ),
-    figure(
-      "Runs",
-      runs.isSuccess ? runs.data.total.toLocaleString() : null,
-      runs.isError,
-      "one per checkpoint thread, not one per finding",
-    ),
-    figure(
-      "Repositories indexed",
-      repositories.isSuccess ? repositories.data.repo_ids.length.toLocaleString() : null,
-      repositories.isError,
-      "holding at least one call site",
-    ),
-    figure(
-      "Repair attempts",
-      corpus.isSuccess ? corpus.data.attempts.toLocaleString() : null,
-      corpus.isError,
-      "one row per attempt, not one per finding",
-    ),
     figure(
       "Detectors with open findings",
       detectors.isSuccess ? detectors.data.detectors.length.toLocaleString() : null,
@@ -272,77 +151,48 @@ function FleetScreen({ question }: { question: string }) {
   ]
 
   return (
-    <ScreenFrame status={status}>
-    <section className="flex flex-col gap-8">
-      {/* "Overview", once. This destination was titled "Repositories", labelled "Codebases" in the
-          route registry and sits at the "Fleet" level — three names for one screen, which is its own
-          kind of clutter. The *level* keeps the specification's word; only what a reader sees
-          changes, so `tests/test_console_hierarchy.py` is untouched.
+    <ScreenFrame status={status} layout="locked">
+      {/* Outside the grid, a sibling before it: inside the chassis this is a portal into the top
+          bar and no in-place DOM, and outside one its fallback grid must land above the bento
+          rather than being auto-placed into a cell. */}
+      <FleetKpis />
 
-          No page-level action. "Review proposed patch" pointed at whichever run happened to be the
-          newest with an opened pull request, which reads as *the* patch when there are nine change
-          units. It belongs on the change-unit row it acts on, beside that row's own standing. */}
-      {/* Answer 7 removes the page header; the question it carried is kept as one dense line,
-          because a screen that does not say what it is answering is the black box this console
-          exists to replace. Recorded conflict: the mock draws a header here and answer 20 rules
-          for the answer. */}
-      <div className="flex flex-col gap-field">
-        <p className="text-meta text-muted-foreground">{question}</p>
+      {/* Row A is what the deployment found and what that evidence rests on; row B is what this
+          screen refuses to compute and what it cannot answer at all. The refusal and the limits
+          are adjacent because the refusal's last clause names the panel beside it. */}
+      <div className="bento-lock grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-8 lg:grid-cols-12">
+        <PanelPane
+          className="lg:col-span-8"
+          label="What Sync has found, over time"
+          bodyClassName="p-section"
+        >
+          <FindingsOverTimeBody />
+        </PanelPane>
+
+        <PanelPane
+          className="lg:col-span-4"
+          label="What this evidence rests on"
+          bodyClassName="p-section"
+        >
+          <RungUpgradeBody />
+        </PanelPane>
+
+        <PanelPane className="lg:col-span-5" label="This codebase" bodyClassName="p-section">
+          <CodebaseFactsBand />
+        </PanelPane>
+
+        <PanelPane className="lg:col-span-3" label="Health score policy" bodyClassName="p-section">
+          <p className="text-body text-ink-muted">{HEALTH_REFUSAL}</p>
+        </PanelPane>
+
+        <PanelPane
+          className="lg:col-span-4"
+          label="What this screen cannot tell you"
+          bodyClassName="p-section"
+        >
+          <ScreenLimitsList />
+        </PanelPane>
       </div>
-
-      {/* The top band: what is true about the codebase this screen is about. The owner's ruling of
-          2026-08-18 is that the Overview *is* the selected codebase and selection is chrome — so
-          the facts about that one codebase lead, and the directory of codebases below is what a
-          reader chose from rather than what the screen is about. The route, the hierarchy and
-          `GRAPH_LEVELS` are untouched: that amendment is the specification's and has not landed,
-          and `.claude/rules/console-hierarchy.md` makes the ordering the whole rule. */}
-      <div className="grid auto-rows-fr gap-section xl:grid-cols-2">
-        <CodebaseFactsBand />
-        <OverviewGraphRegion />
-      </div>
-
-      {/* Decision 2's below-the-fold half: the totals, then the vendors they are made of. */}
-      <OverviewTotalsRegion />
-
-      {/* Dashboard 1, fleet-scoped and propless. It reads no scope of its own, which is why it
-          sits outside the regions above rather than inside one. */}
-      <FindingsOverTimeCard />
-
-      {/* 4-card metric strip */}
-      <FleetFacts />
-
-      {/* Value before configuration, and the order on this screen is the argument. The repository
-          list and its counts come first: real findings, read from source, before anything was
-          attached. Only then does this panel say what that evidence rests on and what the next rung
-          would take. Putting it above the list would make the first thing a reader meets a setup
-          instruction, which is the onboarding every telemetry product has and the one Sync does not
-          need — its screen is not empty before traces arrive. */}
-      <RungUpgradeCard />
-
-      {/* Two columns, and the second one is load-bearing rather than decorative. The health-refusal
-          sentence ends "the panel beside them names what none of these figures can tell you at
-          all"; W362 left both panels stacked inside one wrapper, so that clause described a layout
-          that did not exist. The band is what makes it true again. */}
-      <div className="grid auto-rows-fr gap-section xl:grid-cols-2">
-        <div className="min-w-0">
-          <FactTile
-            label="Health score policy"
-            value={
-              <>
-                There is no composite health figure here on purpose. A scalar that averaged three
-                gates would collapse "we could not check" onto the same axis as "we checked and it
-                passed", which is the failure this console exists to replace. Every figure on this
-                screen instead names its own scope, and the panel beside them names what none of
-                these figures can tell you at all.
-              </>
-            }
-          />
-        </div>
-        <div className="min-w-0">
-          <ScreenLimitsCard />
-        </div>
-      </div>
-    </section>
     </ScreenFrame>
   )
 }

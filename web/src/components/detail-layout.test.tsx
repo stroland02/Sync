@@ -53,6 +53,44 @@ describe("the detail layout", () => {
     expect(screen.getByText("the detail")).toBeTruthy()
     expect(screen.getByRole("complementary", { name: "src/a.ts:12" })).toBeTruthy()
   })
+
+  it("keeps the list at full width under `docked`, with the detail over it rather than beside it", () => {
+    // Owner ruling 2026-08-25, after the docked column squeezed the call-sites table until file
+    // paths wrapped one word per line. A locked screen has a fixed width to divide, so a detail
+    // that took a column from the table left the table unreadable exactly while a reader was
+    // working down it. `docked` renders the detail as a drawer over the page instead.
+    //
+    // Structural containment only, per the console test charter: the list is still rendered and
+    // still readable with the drawer open, and the drawer is not a sibling column taking width
+    // from it. The rendered widths are measured in Chrome.
+    render(
+      <DetailLayout
+        docked
+        title="Run record"
+        subtitle="finding-1:prod-run-9:0"
+        onClose={() => {}}
+        detail={<p>the record</p>}
+        list={<p>the stream</p>}
+      />,
+    )
+
+    expect(screen.getByText("the stream")).toBeTruthy()
+    expect(screen.getByText("the record")).toBeTruthy()
+    // No `<aside>` column: the drawer is a dialog over the page, so nothing is taken from the list.
+    expect(screen.queryByRole("complementary")).toBeNull()
+    expect(screen.getByRole("dialog", { name: /Run record/ })).toBeTruthy()
+  })
+
+  it("renders no drawer under `docked` when nothing is selected", () => {
+    // A pane asserting an absence nobody asked about is dead chrome — the same argument that gives
+    // the top bar's stats slot `empty:hidden`.
+    render(
+      <DetailLayout docked title="Run record" onClose={() => {}} detail={null} list={<p>the stream</p>} />,
+    )
+
+    expect(screen.getByText("the stream")).toBeTruthy()
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
 })
 
 describe("arrow keys with a panel open", () => {

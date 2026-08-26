@@ -4,8 +4,13 @@
  *
  * `components/fact-tile.tsx` states the rule and the reason: "A dash would collapse 'zero', 'not
  * measured' and 'this view cannot see it' onto one glyph, and distinguishing those is the product's
- * argument." The rail has four tiles and five queries behind them, so there are three states per
- * tile and no compiler anywhere checks that all three say something.
+ * argument." The strip has four cells and five queries behind them, so there are three states per
+ * cell and no compiler anywhere checks that all three say something.
+ *
+ * Retitled with the bento rebuild: the four figures moved from a grid on the fleet screen into
+ * the chrome's instrument bar, which is a change of address rather than of behaviour. Rendered
+ * outside a chassis — as here — `KpiStrip` falls back to the same tiles, so every classification
+ * below is asserted against the same three states it always was.
  *
  * Scope is `.claude/rules/console-dev-loop.md`'s: classification and derivation, never class names
  * and never a snapshot. What is asserted is which *kind* of thing is on screen — a skeleton, an
@@ -17,7 +22,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { FleetFacts } from "@/features/fleet/fleet-facts"
+import { FleetKpis } from "@/features/fleet/fleet-facts"
 
 afterEach(() => {
   cleanup()
@@ -63,7 +68,7 @@ function renderRail() {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/"]}>
-        <FleetFacts />
+        <FleetKpis />
       </MemoryRouter>
     </QueryClientProvider>
   )

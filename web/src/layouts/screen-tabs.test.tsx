@@ -26,7 +26,20 @@ describe("the sibling-screen groups", () => {
   })
 
   it("renders no strip on a screen with no siblings", () => {
-    expect(groupFor("/repositories/org%2Fone/runs", "org/one")).toBeNull()
+    // Subject changed 2026-08-26, coverage did not. Runs used to be the example of a screen in no
+    // group; the Runs rebuild sent its two corpus charts to Corpus and put Runs in the Solutions
+    // group so a reader still has a path to them. Call sites is now the screen that stands alone,
+    // and what is asserted is unchanged: a route in no group gets no strip rather than an empty one.
+    expect(groupFor("/repositories/org%2Fone/call-sites", "org/one")).toBeNull()
+  })
+
+  it("puts Runs beside Solutions and Corpus, so the corpus charts stay reachable from the stream", () => {
+    // The two charts Runs used to render below its table live on Corpus now — Runs is locked to
+    // the viewport and a reader should not scroll a locked screen to reach them. A tab is the whole
+    // path between the two, so its absence is a broken move rather than a missing decoration.
+    const group = groupFor("/repositories/org%2Fone/runs", "org/one")
+    expect(group?.label).toBe("Solutions")
+    expect(group?.members.map((member) => member.label)).toEqual(["Solutions", "Runs", "Corpus"])
   })
 
   it("renders no strip where no workspace is bound", () => {

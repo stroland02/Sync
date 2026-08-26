@@ -1,12 +1,10 @@
 /**
- * The four counts an operator acts on, placed beside one another at the top of the fleet screen.
+ * The four counts an operator acts on, published into the chrome's instrument bar.
  *
- * This is the region that replaces the prose intro's job as the first thing on the page. The
- * paragraph is still there and still says what it said — it qualifies these figures rather than
- * standing in for them, which is the arrangement `references/direction/NOTES.md` describes and
- * `reports/2026-08-06-why-the-console-came-out-flat.md` says the console never had: "the console had
- * `text-meta` but never used it as a distinct register, so a label and the thing it labelled arrived
- * at the same weight and the eye had nothing to sort by."
+ * Owner ruling 2026-08-25: every page's figures live in the top bar's second 48px row, so the
+ * canvas below is panes and nothing else. This used to be a grid of four tiles at the top of the
+ * fleet screen, which spent a band of the first screen on facts the chrome now carries on every
+ * screen — and left the bento's first row starting below the fold.
  *
  * **Four queries, not a new one.** Each tile reads the query its own panel below already issues, at
  * the same key, so the rail costs no request: `useRuns` is called with the same offset the runs panel
@@ -27,7 +25,7 @@
 
 import { DEFAULT_LIMIT } from "@/api/client"
 import { usePrecedent, useDetectors, useOverview, useRepositories, useRuns } from "@/api/queries"
-import { FactTile } from "@/components/fact-tile"
+import { KpiStrip, type Kpi } from "@/components/kpi-strip"
 import { Skeleton } from "@/components/skeleton"
 import { Absent } from "@/components/status"
 import { describeBoundedTotal } from "@/features/fleet/cardinality"
@@ -94,7 +92,7 @@ function openFindingsNote(
   return "Across every vendor, every repository."
 }
 
-export function FleetFacts() {
+export function FleetKpis() {
   // `Repositories indexed` is deliberately not one of these: its read succeeded and its answer is
   // zero, so it is the one figure here that a number describes correctly.
   const nothingSearched = (repositories: { isSuccess: boolean; data?: { repo_ids: string[] } }) =>
@@ -110,76 +108,70 @@ export function FleetFacts() {
   const detectors = useDetectors()
   const corpus = usePrecedent()
 
-  return (
-    <div className="grid gap-section grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      <FactTile
-        label="Open findings"
-        figure
-        value={
-          <CountValue
-            absent={nothingSearched(repositories)}
-            pending={overview.isPending}
-            failed={overview.isError}
-            width="w-20"
-            text={
-              overview.isSuccess
-                ? describeBoundedTotal(
-                    overview.data.total_findings,
-                    overview.data.total_findings_bound_reached
-                  )
-                : ""
-            }
-          />
-        }
-        note={openFindingsNote(overview, repositories)}
-      />
-      <FactTile
-        label="Runs"
-        figure
-        value={
-          <CountValue
-            absent={nothingSearched(repositories)}
-            pending={runs.isPending}
-            failed={runs.isError}
-            width="w-20"
-            text={runs.isSuccess ? runs.data.total.toLocaleString() : ""}
-          />
-        }
-        note="One per checkpoint thread, not one per finding."
-      />
-      <FactTile
-        label="Repositories indexed"
-        figure
-        value={
-          <CountValue
-            pending={repositories.isPending}
-            failed={repositories.isError}
-            width="w-12"
-            text={repositories.isSuccess ? repositories.data.repo_ids.length.toLocaleString() : ""}
-          />
-        }
-        note="Holding at least one call site. Never indexed has no row."
-      />
-      <FactTile
-        label="Repair attempts"
-        figure
-        value={
-          <CountValue
-            absent={nothingSearched(repositories)}
-            pending={corpus.isPending}
-            failed={corpus.isError}
-            width="w-16"
-            text={corpus.isSuccess ? corpus.data.attempts.toLocaleString() : ""}
-          />
-        }
-        note={
-          detectors.isSuccess
-            ? `One row per attempt. ${detectors.data.detectors.length.toLocaleString()} ${
-                detectors.data.detectors.length === 1 ? "detector has" : "detectors have"
-              } open findings.`
-            : "One row per attempt, not one per finding."
-        }
-      />
-    </div>
-  )
+  const items: readonly [Kpi, Kpi, Kpi, Kpi] = [
+    {
+      label: "Open findings",
+      value: (
+        <CountValue
+          absent={nothingSearched(repositories)}
+          pending={overview.isPending}
+          failed={overview.isError}
+          width="w-20"
+          text={
+            overview.isSuccess
+              ? describeBoundedTotal(
+                  overview.data.total_findings,
+                  overview.data.total_findings_bound_reached
+                )
+              : ""
+          }
+        />
+      ),
+      note: openFindingsNote(overview, repositories),
+    },
+    {
+      label: "Runs",
+      value: (
+        <CountValue
+          absent={nothingSearched(repositories)}
+          pending={runs.isPending}
+          failed={runs.isError}
+          width="w-20"
+          text={runs.isSuccess ? runs.data.total.toLocaleString() : ""}
+        />
+      ),
+      note: "One per checkpoint thread, not one per finding.",
+    },
+    {
+      label: "Repositories indexed",
+      value: (
+        <CountValue
+          pending={repositories.isPending}
+          failed={repositories.isError}
+          width="w-12"
+          text={repositories.isSuccess ? repositories.data.repo_ids.length.toLocaleString() : ""}
+        />
+      ),
+      note: "Holding at least one call site. Never indexed has no row.",
+    },
+    {
+      label: "Repair attempts",
+      value: (
+        <CountValue
+          absent={nothingSearched(repositories)}
+          pending={corpus.isPending}
+          failed={corpus.isError}
+          width="w-16"
+          text={corpus.isSuccess ? corpus.data.attempts.toLocaleString() : ""}
+        />
+      ),
+      note: detectors.isSuccess
+        ? `One row per attempt. ${detectors.data.detectors.length.toLocaleString()} ${
+            detectors.data.detectors.length === 1 ? "detector has" : "detectors have"
+          } open findings.`
+        : "One row per attempt, not one per finding.",
+    },
+  ]
+
+  return <KpiStrip items={items} />
 }

@@ -6,7 +6,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, render } from "@testing-library/react"
+import { cleanup, render, screen } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -72,15 +72,42 @@ describe("CodebasePage's scope", () => {
   it("renders no fleet-wide runs or repair record under one repository's name", () => {
     renderCodebase("/repositories/org%2Fpayments")
 
-    // Non-vacuous: the screen rendered with its own heading. The scope sentence that used to
-    // anchor this assertion was ruled out on 2026-08-25 (cognitive load): the trail and the
-    // workspace switcher scope the page, so the sentence said it a third time.
-    expect(document.body.textContent).toContain("Getting started")
+    // Non-vacuous, and against all four panes rather than one word. The anchor was the single
+    // string "Getting started" until the bento rebuild, which meant a rebuild that silently
+    // dropped three of the four panes still passed this guard on the surviving one. The scope
+    // sentence that anchored it before that was ruled out on 2026-08-25 (cognitive load): the
+    // trail and the workspace switcher scope the page, so the sentence said it a third time.
+    //
+    // By heading role, not by text: "File tree" and "Dependency graph" are also stage-door
+    // labels in the fourth pane, so a substring search over the body passes with the map panes
+    // deleted -- measured, by deleting one and watching it stay green.
+    for (const pane of [
+      "Integration map",
+      "File tree",
+      "Getting started",
+      "Where each stage is answered",
+    ]) {
+      expect(screen.getByRole("heading", { name: pane })).toBeTruthy()
+    }
     expect(document.body.textContent).not.toContain("This repository alone.")
 
     expect(document.body.textContent).not.toContain("the fleet's runs")
     expect(document.body.textContent).not.toContain("One row per checkpoint thread")
     expect(document.body.textContent).not.toContain("the repair record")
     expect(document.body.textContent).not.toContain("Every repair attempt the graph has recorded")
+  })
+
+  /**
+   * The page-level "Signals for this repository" button, deleted with the header band it sat in.
+   *
+   * It pointed at `/repositories/:repoId/observed` — Telemetry, which is a row in the persistent
+   * rail on this very screen and a door in the stage-door pane under Observe. A button here to a
+   * destination two rows away in the navigation is a second door, which is the same argument that
+   * already retired the vendors-list link from this screen.
+   */
+  it("offers no second door to Telemetry, because the rail and the stage doors both hold one", () => {
+    renderCodebase("/repositories/org%2Fpayments")
+
+    expect(screen.queryByRole("link", { name: /signals for this repository/i })).toBeNull()
   })
 })

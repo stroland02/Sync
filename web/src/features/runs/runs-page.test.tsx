@@ -3,15 +3,16 @@
  *
  * Decision 30 gives Runs its own destination. What is asserted here is the part that is easy to
  * get wrong and impossible to see afterwards: **every figure on this screen is fleet-wide, and the
- * screen says so.** `migration_outcome` stores no `repo_id` at all — a schema decision that makes
- * the table safe to aggregate across customers (`src/sync/api/app.py:20-22`) — so `/api/runs` and
- * `/api/precedent/abandonment` cannot be narrowed to a workspace even in principle.
+ * screen says so.** The route can be narrowed to a repository (`sync.dashboard.fleet.runs` accepts
+ * `repo_id`, B149) and this screen chooses not to be, because `repo_id` is null on any run whose
+ * finding the graph no longer holds — so a narrowed page would silently drop exactly the runs whose
+ * finding was patched or retracted.
  *
  * That collides with the workspace mandate, which scopes every page and forbids a show-all. The
- * owner ruled to mount the cards with an explicit not-narrowed statement rather than hold two
- * finished cards off the ship or print fleet figures under one workspace's name. The statement is
- * therefore load-bearing rather than decorative, and it is what these tests guard: a later tidy
- * that deletes it turns this screen into exactly the false claim `codebases-panel` used to make.
+ * owner ruled to state the scope on screen rather than print fleet figures under one workspace's
+ * name. The statement is therefore load-bearing rather than decorative, and it is what these tests
+ * guard: a later tidy that deletes it turns this screen into exactly the false claim
+ * `codebases-panel` used to make.
  *
  * Scope is `.claude/rules/console-dev-loop.md`'s: classification, derivation and structural
  * invariants, never class names and never a snapshot.
@@ -22,6 +23,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { RunRow, RunsPage as RunsPagePayload } from "@/api/types"
 import { RunsPage } from "@/features/runs/runs-page"
 
 afterEach(() => {
@@ -29,11 +31,44 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const settled = (data: unknown) => ({ isPending: false, isError: false, isSuccess: true, data })
+const OPEN_RUN: RunRow = {
+  thread_id: "finding-open-1:prod-run-9:0",
+  finding_id: "finding-open-1",
+  finding_name: "stripe-postcharges-4b1c9e",
+  liveness: null,
+  last_heartbeat_at: null,
+  repo_id: "org/one",
+  run_id: "prod-run-9",
+  current_node: null,
+  outcome: "opened",
+  abandon_reason: null,
+  last_checkpoint_at: "2026-08-05T12:00:00Z",
+}
+
+const state: { items: RunRow[] } = { items: [] }
+
+const settled = (data: unknown) => ({
+  isPending: false,
+  isError: false,
+  isSuccess: true,
+  isFetching: false,
+  dataUpdatedAt: 0,
+  data,
+})
+
+function payload(items: RunRow[]): RunsPagePayload {
+  return {
+    items,
+    total: items.length,
+    next_offset: null,
+    by_disposition: {},
+    unfiltered_total: items.length,
+  }
+}
 
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
-  useRuns: () => settled({ items: [], total: 0, next_offset: null, by_disposition: {}, unfiltered_total: 0 }),
+  useRuns: () => settled(payload(state.items)),
   useAbandonment: () => settled({ groups: [] }),
 }))
 
@@ -49,22 +84,28 @@ function renderRuns(entry = "/repositories/org%2Fone/runs") {
           <Route path="/repositories/:repoId/runs" element={<RunsPage />} />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   )
 }
 
 describe("the runs screen", () => {
-  it("mounts both of the cards that were built and mounted nowhere", () => {
-    const { container } = renderRuns()
+  /**
+   * The "mounts both of the cards that were built and mounted nowhere" guard moved rather than
+   * retired.
+   *
+   * `AbandonReasonsCard` and `TierOutcomesCard` no longer render here: the Runs rebuild locks this
+   * screen to the viewport and two chart cards under a stream are two things a reader would have to
+   * scroll a locked screen to reach. They moved to Corpus, which is not locked and already carries
+   * the corpus scope claim, so its `/abandon/i` and `/tier/i` assertions moved with them to
+   * `features/dashboards/precedent-page.test.tsx`.
+   *
+   * **The concern it recorded is unchanged and still met.** Lane I finished both cards, tested
+   * them, and had no screen to put them on; a finished card nobody mounts is not shipped, and
+   * nothing else in the console catches that, because both files typecheck, lint and pass their own
+   * tests unmounted. The guard now sits over the screen that mounts them.
+   */
 
-    // Lane I finished `AbandonReasonsCard` and `TierOutcomesCard`, tested them, and had no screen
-    // to put them on. A finished card nobody mounts is not shipped, and nothing else in the console
-    // would have caught that -- both files typecheck, lint and pass their own tests unmounted.
-    expect(container.textContent).toMatch(/abandon/i)
-    expect(container.textContent).toMatch(/tier/i)
-  })
-
-  it("states that its figures are not narrowed to the workspace, because they cannot be", () => {
+  it("states that its figures are not narrowed to the workspace, because they cannot be honestly", () => {
     const { container } = renderRuns()
     const text = container.textContent ?? ""
 
@@ -75,22 +116,10 @@ describe("the runs screen", () => {
     //
     // What must hold is that a reader who never hovers can tell the figures are not this
     // workspace's. Deleting that leaves a fleet-wide count under one workspace's breadcrumb,
-    // which is the `codebases-panel` defect exactly.
+    // which is the `codebases-panel` defect exactly. The chip survived the rebuild by moving into
+    // the controls band rather than leaving with the corpus cards.
     expect(text).toMatch(/all workspaces|not narrowed to this workspace/i)
   })
-
-  /**
-   * The "why it cannot be narrowed" guard retired with the owner's ⓘ ruling of 2026-08-19.
-   *
-   * It required `migration_outcome` and "stores no repository" in the rendered text. That is the
-   * *argument* for the scope rather than the scope itself, and the amendment moves exactly that
-   * behind the hover: the claim stays visible in the fewest honest words, the reasoning does not.
-   *
-   * **The concern it recorded is still met.** Its comment said a bare "this is fleet-wide"
-   * invites a bug report asking for a repository filter — the `ScopeChip`'s hover answers that,
-   * naming the table and the schema decision, one hover away rather than one paragraph down. The
-   * claim itself is asserted above.
-   */
 
   it("names itself once, at the page step", () => {
     renderRuns()
@@ -108,13 +137,53 @@ describe("the runs screen", () => {
     const { container } = renderRuns()
     const text = container.textContent ?? ""
 
-    // `CLAUDE.md`'s grain rule, on the screen that is most likely to break it: one
-    // `migration_outcome` row is one *attempt*, not one finding. A finding retried three times is
-    // three rows here and one finding everywhere else, and a reader comparing this screen against
-    // the Overview will otherwise conclude one of them is wrong.
+    // `CLAUDE.md`'s grain rule, on the screen that is most likely to break it: one checkpoint
+    // thread is one *attempt*, not one finding. A finding retried three times is three rows here
+    // and one finding everywhere else, and a reader comparing this screen against the Overview
+    // will otherwise conclude one of them is wrong.
+    //
     // Asserted as the property rather than the sentence: one row is one attempt, and it counts
-    // once as a finding. The wording moved in the sweep; the grain did not.
+    // once as a finding. The claim moved into the controls band with the rebuild; the grain did
+    // not move at all. If this goes red the placement is what is wrong, not the test.
     expect(text).toMatch(/attempt/i)
     expect(text).toMatch(/counts once/i)
+  })
+})
+
+describe("the run record drawer", () => {
+  it("opens the run the address names, and links it to a workspace-scoped workflow", () => {
+    state.items = [OPEN_RUN]
+    renderRuns("/repositories/org%2Fone/runs?runs_open=finding-open-1%3Aprod-run-9%3A0")
+
+    // Ported from the deleted `runs-table.test.tsx`: `/findings/:id/workflow` is not a route the
+    // router serves -- the workflow lives under `/repositories/:repoId/findings/:findingId/
+    // workflow`. The payload has carried `repo_id` all along; only the TypeScript type omitted it,
+    // so the link was built without it. The link moved from the table cell into this drawer when
+    // the stream took one line per row, and the guard moved with it.
+    const link = screen.getByRole("link", { name: /workflow/i })
+    const href = link.getAttribute("href") ?? ""
+    expect(href).toContain("/repositories/")
+    expect(href).toContain("/workflow")
+  })
+
+  it("states the finding without linking when the run names no repository", () => {
+    state.items = [{ ...OPEN_RUN, repo_id: null }]
+    renderRuns("/repositories/org%2Fone/runs?runs_open=finding-open-1%3Aprod-run-9%3A0")
+
+    // A run whose repository is unknown cannot be given a scoped address, and guessing one would
+    // send a reader to another workspace's finding. The id is still shown -- absence of a link is
+    // not absence of the fact.
+    expect(screen.queryByRole("link", { name: /workflow/i })).toBeNull()
+    expect(screen.getByText("finding-open-1")).toBeTruthy()
+  })
+
+  it("says the selected run is not on this page rather than closing itself", () => {
+    state.items = [OPEN_RUN]
+    renderRuns("/repositories/org%2Fone/runs?runs_open=finding-gone-7%3Aprod-run-2%3A0")
+
+    // A bookmarked address, or a reader who paged while a row was open. Dropping a selection the
+    // URL still carries makes the address and the screen disagree, and the reader is left believing
+    // they closed something they did not.
+    expect(screen.getByText(/not on this page/i)).toBeTruthy()
   })
 })
