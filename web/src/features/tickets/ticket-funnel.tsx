@@ -60,6 +60,7 @@ export function TicketFunnel({ tickets }: { tickets: readonly Ticket[] }) {
 
   return (
     <MetricPanel
+      frame="board"
       label="Solutions funnel"
       hint={
         <InfoHint label="About the solutions funnel">

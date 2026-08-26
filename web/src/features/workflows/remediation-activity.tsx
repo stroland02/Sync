@@ -85,7 +85,7 @@ function useActivity() {
 }
 
 /** L2 and T4: attempts per day, stacked by what each reached. */
-export function AttemptsOverTime() {
+export function AttemptsOverTime({ frame = "plain" }: { frame?: "plain" | "board" } = {}) {
   const query = useActivity()
   const days = query.data?.days ?? []
   // Every status that occurs anywhere, so one status is the same colour on every day.
@@ -133,6 +133,7 @@ export function AttemptsOverTime() {
   if (days.length === 0) {
     return (
       <MetricPanel
+        frame={frame}
         label="Repair attempts over time"
         hint={hint}
         caption="No repair attempt has been recorded on any day."
@@ -146,6 +147,7 @@ export function AttemptsOverTime() {
 
   return (
     <MetricPanel
+      frame={frame}
       label={<ScopeLabel>Repair attempts over time</ScopeLabel>}
       hint={hint}
       caption="Attempts by the day they were recorded, stacked by what each reached. One row is one attempt, not one finding."
@@ -160,7 +162,7 @@ export function AttemptsOverTime() {
 }
 
 /** L3: which tier produced the attempts, and what each reached. */
-export function AttemptsByTier() {
+export function AttemptsByTier({ frame = "plain" }: { frame?: "plain" | "board" } = {}) {
   const query = useActivity()
 
   if (query.isPending) return <LoadingState what="attempts by repair tier" />
@@ -194,6 +196,7 @@ export function AttemptsByTier() {
   if (rows.length === 0) {
     return (
       <MetricPanel
+        frame={frame}
         label="Attempts by repair tier"
         hint={hint}
         caption="No repair attempt has been recorded."
@@ -207,6 +210,7 @@ export function AttemptsByTier() {
 
   return (
     <MetricPanel
+      frame={frame}
       label={<ScopeLabel>Attempts by repair tier</ScopeLabel>}
       hint={hint}
       caption="Attempts grouped by the tier that produced them. A count of attempts, never a success rate — and a tier missing here never ran rather than running and reaching nothing."

@@ -1,10 +1,10 @@
 /**
  * Where remediation work stops: findings in, outcomes out, and the gap between.
  *
- * **The one question no other panel answers.** Every screen counts a stage — findings here, runs
- * there, pull requests on this page — and none of them shows the *attrition* between the stages,
- * which is the product's actual claim. A codebase with 24 findings and no attempts is a different
- * situation from one with 24 findings and 24 abandonments, and the tables show those identically.
+ * **Attrition, counted in findings.** Every screen counts a stage — findings here, runs there,
+ * pull requests on this page — and a table shows a codebase with 24 findings and no attempts
+ * identically to one with 24 findings and 24 abandonments. The solutions funnel beside this one
+ * draws attrition too, over tickets; this is the only one whose unit is findings.
  *
  * ## Counted in findings, and only findings
  *
@@ -42,7 +42,13 @@ const OUTCOME_LABEL: Record<string, string> = {
   in_flight: "no outcome recorded",
 }
 
-export function RemediationFlow({ repoId }: { repoId: string }) {
+export function RemediationFlow({
+  repoId,
+  frame = "plain",
+}: {
+  repoId: string
+  frame?: "plain" | "board"
+}) {
   const overview = useOverview(repoId)
   const activity = useQuery({
     queryKey: ["corpus-activity"],
@@ -118,9 +124,10 @@ export function RemediationFlow({ repoId }: { repoId: string }) {
 
   return (
     <MetricPanel
+      frame={frame}
       label="Where remediation work stops"
       hint={hint}
-      caption="Open findings and what became of them, counted in findings. Every other panel counts one stage; this is the only one showing the gap between them."
+      caption="Open findings and what became of them, counted in findings — not in tickets and not in runs. The funnel below counts tickets, which is a different unit over a different set."
     >
       {findings === 0 ? (
         <span className="text-body">

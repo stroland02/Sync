@@ -58,6 +58,7 @@ export function MetricPanel({
   caption,
   children,
   className,
+  frame = "plain",
 }: {
   /** The section's name, at `--text-section`. It heads everything below it in this panel. */
   label: ReactNode
@@ -78,10 +79,24 @@ export function MetricPanel({
   /** The evidence: a table, a chart, a set of tallies. */
   children: ReactNode
   className?: string
+  /**
+   * `"board"` for a panel sitting beside another panel at the same depth — the hairline ring plus
+   * a tinted header strip over a bottom rule, which is what tells two adjacent cards apart when
+   * the surface step alone cannot. `"plain"` is every panel that owns its own row.
+   */
+  frame?: "plain" | "board"
 }) {
+  const board = frame === "board"
   return (
-    <Card className={cn("flex h-full min-w-0 flex-col", className)}>
-      <CardHeader>
+    <Card
+      variant={board ? "grouping" : "plain"}
+      className={cn("flex h-full min-w-0 flex-col", board && "pt-0", className)}
+    >
+      <CardHeader
+        className={cn(
+          board && "rounded-t-surface border-b bg-surface-subtle pt-(--card-spacing)"
+        )}
+      >
         <div className="flex items-center gap-row">
           <h2 className="text-section">{label}</h2>
           {hint}
