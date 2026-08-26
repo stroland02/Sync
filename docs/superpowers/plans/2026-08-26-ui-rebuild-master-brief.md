@@ -128,8 +128,14 @@ the six rebuilds that head the build order.
 
 ## 7. Still to build
 
-- **The six remaining screen rebuilds** (Findings, Overview, Runs, Finding detail, Workflow,
-  Graph) — specs written, three builders lost to a session limit.
+- ~~**The six remaining screen rebuilds**~~ — **all six landed 2026-08-26**, in two waves of
+  three isolated worktrees: Findings, Overview and Runs (`CI-W645`, `950e0482`), then Finding
+  detail, Workflow and Graph (`CI-W646`, `32a7f6e1`). **Nine screens now render `locked` or
+  `fill`, against three before**, which is the measurable form of the owner's *"everything looks
+  exactly the same"* — a token swap cannot produce it.
+- **Vendors → fully cards, and Solutions → a board.** Both are owner rulings and both were
+  measured undone on 2026-08-26: Vendors is a hybrid carrying a `VendorCard` and eighteen table
+  references at once, and Solutions is still a table. Wave 3, in flight.
 - **Vendor logos** — bundled local SVGs committed to the repo, monogram as fallback. Ruled; not
   started. No CDN fetch: it leaked which integrations each customer watches.
 - **All chart surfaces removed and rebuilt** to their Stitch references.

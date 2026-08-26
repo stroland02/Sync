@@ -1,118 +1,171 @@
 /**
- * The vendors attached to one repository — integration grid and table view.
+ * The integrations one repository calls — a locked deck of cards, and nothing else.
  *
- * The owner's instruction was a vendors page listing *"all the vendors part of that codebase"*, at
- * an equal stage with API services, modeled after the Supabase integrations screen with cards,
- * badges, tier filters, and detailed metrics.
+ * ## What changed, and why "cards only" was structural rather than cosmetic
  *
- * **What this screen deliberately does not show.** The owner also asked for each vendor's *"api
- * formats rules calls limits structures and data traces"*. Rate limits, auth rules and call
- * structures are not captured by any stage — they are in no table and no payload — so this renders
- * what the graph holds and names the rest as absent work rather than drawing empty panels carrying
- * the never-measured marker. The owner ruled for that explicitly (`M14-W365`, ruling 2 of the first
- * round): build the page from what exists.
+ * **Owner ruling, 2026-08-26: *"Vendors should fully switch to cards."*** This screen was a hybrid.
+ * It carried a `VendorCard` grid *and* a four-column table of the same rows behind a `viewMode`
+ * constant that could only ever be `"cards"` — eighteen table references and a dead `TierFilter`,
+ * all of it reachable by one edit. Both are gone. The screen is now `ScreenFrame layout="locked"`:
+ * it owns every scrollbar on the page, the deck scrolls inside its pane, and the pane's header and
+ * footer stay put over it.
  *
- * **"Add a vendor" is a drawer of text and not a form**, because the API is read-only and because
- * a vendor does not become watched by being added to a list — it becomes watched when this
- * codebase calls it and an index pass finds the call site. `add-vendor-drawer.tsx` carries the
- * argument and both halves of the answer.
+ * The table's four columns did not evaporate — each became a fact on the card that replaced it, and
+ * two more joined them (operations reached, products named) that the table had no room for. A card
+ * is a bigger object than a row, so a screen that swaps one for the other and shows *less* has
+ * merely made the same table taller.
  *
- * **The scope check is the load-bearing part.** `/api/overview` echoes the `repo_id` it was computed
- * for. A caller that ignores it can render the fleet's vendors under one repository's name, and this
- * console has shipped that defect before — `codebases-panel.tsx` printed the fleet-wide
- * `total_findings` under every card until `M14-W265`. So the rows render only when the answer's own
- * scope matches the address, and say so plainly when it does not.
+ * ## Which nothing it is, four times, and none of them is a zero
+ *
+ * The catalogue not answering, the inventory naming no adapter, an adapter that has never
+ * delivered, and a coverage answer that grouped nothing into products are four different facts. The
+ * card carries a sentence for each. **A vendor with nothing measured never gets a card that looks
+ * like a measured zero** — that is the ruling this screen is easiest to break, because every one of
+ * those sentences is one `?? 0` away from becoming a nought.
+ *
+ * ## The scope check is still the load-bearing part
+ *
+ * `/api/repositories/{id}/coverage` echoes the `repo_id` it was computed for. A caller that ignores
+ * it renders the fleet's integrations under one repository's name, and this console has shipped
+ * that defect before — `codebases-panel.tsx` printed the fleet-wide `total_findings` under every
+ * card until `M14-W265`. So the deck draws only when the answer's own scope matches the address,
+ * and says plainly when it does not.
+ *
+ * ## What this screen deliberately does not show
+ *
+ * The owner also asked for each vendor's *"api formats rules calls limits structures and data
+ * traces"*. Rate limits, auth rules and call structures are captured by no stage — they are in no
+ * table and no payload — so the screen names that as absent work rather than drawing empty panels.
+ * Findings stay on Findings (owner ruling, 2026-08-19): a finding is an Errors & Incidents fact.
+ *
+ * **"Add a vendor" stays, by name, on every branch**, because *how do I add one?* is asked most
+ * often on a screen that came back empty or unanswered. It is a drawer of text rather than a form:
+ * the API is read-only, and a vendor becomes watched when this codebase calls it and an index pass
+ * finds the call site — not by being added to a list.
  */
 
-import { useParams, Link } from "react-router"
+import { Boxes, Search, X } from "lucide-react"
+import { useMemo, useState } from "react"
+import { useParams } from "react-router"
 
 import { useAdapters, useRepositoryCoverage } from "@/api/queries"
-import type { AdapterRow } from "@/api/types"
-import { Badge } from "@/vendor/supabase/ui/badge"
+import { DetailLayout, useSelectionKeys, useSelectionParam } from "@/components/detail-layout"
+import { InfoHint } from "@/components/info-hint"
+import { PanelPane } from "@/components/pane"
+import { RelativeTime } from "@/components/relative-time"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
-import { Skeleton } from "@/components/skeleton"
-import { Absent } from "@/components/status"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/data-table"
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { AddVendorDrawer } from "@/features/vendors/add-vendor-drawer"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard } from "@/features/vendors/vendor-card"
+import {
+  deckRows,
+  matchesSearch,
+  newestIndexed,
+  productsFor,
+  type DeckRow,
+} from "@/features/vendors/vendor-deck"
+import { VendorInspector } from "@/features/vendors/vendor-inspector"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
+import { UnknownRoute } from "@/layouts/unknown-route"
 
-
-import { vendorHref } from "@/lib/hrefs"
 export interface RepositoryVendorsPageProps {
   readonly question?: string
 }
 
-type ViewMode = "table" | "cards"
-type TierFilter = "all" | AdapterRow["kind"]
+/** The scope note that survives from the retired table's caption. Never shortened into a label. */
+const SURFACE_NOTE =
+  "This deck is what INDEX bound in this repository. A vendor's published rate limits, auth rules " +
+  "and call structures are not shown, because no stage captures them yet — that is work not done " +
+  "rather than a vendor with none."
+
+/** What a card that is not in the narrowed deck says, rather than an empty drawer. */
+export const SELECTION_OFF_DECK_NOTE =
+  "The selected integration is not in the narrowed deck. Clear the search to bring it back."
 
 /**
- * How many of one vendor's API products this codebase calls.
+ * The search box, filtering a list already in hand.
  *
- * Three answers, and they are three different facts: the coverage route did not answer, it
- * answered about another repository, or it answered and this vendor has *n* products grouped. A
- * vendor whose operations no adapter has mapped answers nought grouped, which is work not done
- * rather than a vendor selling one API -- so it takes the absence marker and not a zero.
+ * **Live rather than on submit, and local rather than in the URL**, which is the opposite of
+ * `PrefixFilter` on the tables — deliberately, and for the reason that rule was written. A table
+ * filter is a request, so a debounce is a guess and an explicit submit is one request for one
+ * intention. This narrows thirty objects already rendered: there is nothing to debounce and nothing
+ * to reset. And it stays out of the URL because a history entry per keystroke would make Back
+ * unusable on the one screen whose Back is already spent closing the drawer.
  */
-function ServicesCalled({
-  vendorId,
-  coverage,
-  repoId,
-}: {
-  vendorId: string
-  coverage: ReturnType<typeof useRepositoryCoverage>
-  repoId: string
-}) {
-  if (coverage.isPending) return <Skeleton width="2rem" />
-  if (coverage.isError) return <Absent>the index did not answer</Absent>
-  if (coverage.data.repo_id !== repoId) return <Absent>answered for another repository</Absent>
-  const named = new Set(
-    coverage.data.by_service
-      .filter((row) => row.vendor_id === vendorId && row.service_id !== null)
-      .map((row) => row.service_id),
+function DeckSearch({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  return (
+    <InputGroup className="max-w-[20rem]">
+      <InputGroupAddon align="inline-start">
+        <Search aria-hidden="true" className="size-4 text-ink-muted" />
+      </InputGroupAddon>
+      <InputGroupInput
+        aria-label="Search the integrations on this deck"
+        placeholder="Search integrations"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {value !== "" && (
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton type="button" aria-label="Clear the search" onClick={() => onChange("")}>
+            <X aria-hidden="true" className="size-3" />
+          </InputGroupButton>
+        </InputGroupAddon>
+      )}
+    </InputGroup>
   )
-  if (named.size === 0) return <Absent>not grouped into products yet</Absent>
-  return <>{named.size.toLocaleString()}</>
 }
-
 
 export function RepositoryVendorsPage() {
   const { repoId } = useParams<{ repoId: string }>()
+  const scope = repoId ?? ""
   const adaptersQuery = useAdapters()
-  // How many of its API products this codebase actually calls, from the route the Services screen
-  // reads. A vendor is a provider and a service is one of the APIs it sells; the count is the
-  // relation between the two screens, and it is a count rather than a list because naming the
-  // products here would be the Services screen rendered twice.
-  const coverage = useRepositoryCoverage(repoId ?? "")
+  const coverage = useRepositoryCoverage(scope)
+  const [search, setSearch] = useState("")
+  const [openVendor, setOpenVendor] = useSelectionParam("vendors_open")
 
-  // Cards only, owner ruling 2026-08-25 -- the table view is retired, not toggled off.
-  const viewMode: ViewMode = "cards"
-  const tierFilter: TierFilter = "all"
+  // The answer names the scope it was computed for, and a mismatch is refused rather than shown
+  // with a caveat: a fleet-wide list under one repository's heading is a claim about that
+  // repository which nothing computed.
+  const answer = coverage.data
+  const inScope = answer !== undefined && answer.repo_id === scope
 
-  // On every branch, including the two failures below, because "how do I add one?" is asked most
-  // often on a screen that came back empty or unanswered. The drawer reads the catalogue, which is
-  // a different question from the coverage read that failed here, so it still has an answer.
+  const adapters = adaptersQuery.isSuccess ? adaptersQuery.data.adapters : null
+  const rows = useMemo<DeckRow[]>(
+    () => (answer !== undefined && answer.repo_id === scope ? deckRows(answer, adapters) : []),
+    [answer, adapters, scope],
+  )
+  const shown = useMemo(() => rows.filter((row) => matchesSearch(row, search)), [rows, search])
+  const ids = useMemo(() => shown.map((row) => row.vendorId), [shown])
+  useSelectionKeys(ids, openVendor, setOpenVendor)
+
+  const selected = openVendor === null ? null : (shown.find((row) => row.vendorId === openVendor) ?? null)
+
+  // On every branch below, including the two failures: the drawer reads the catalogue, which is a
+  // different question from the coverage read that failed here, so it still has an answer.
   const controls =
-    repoId === undefined ? undefined : <AddVendorDrawer repoId={repoId} />
+    repoId === undefined ? undefined : (
+      <>
+        <DeckSearch value={search} onChange={setSearch} />
+        <AddVendorDrawer repoId={repoId} />
+      </>
+    )
+
+  if (repoId === undefined) return <UnknownRoute />
 
   if (coverage.isPending) {
     return (
       <ScreenFrame
         controls={controls}
-        status={[{ kind: "none", why: "asking which vendors this repository calls" }]}
+        status={[{ kind: "none", why: "asking which integrations this repository calls" }]}
       >
-        <section className="flex flex-col gap-8">
-          <LoadingState what="the vendors attached to this repository" />
-        </section>
+        <LoadingState what="the integrations this repository calls" />
       </ScreenFrame>
     )
   }
@@ -123,169 +176,156 @@ export function RepositoryVendorsPage() {
         controls={controls}
         status={[{ kind: "none", why: "the index coverage did not answer" }]}
       >
-        <section className="flex flex-col gap-8">
-          <ErrorState
-            error={coverage.error}
-            what="the vendors attached to this repository"
-            onRetry={() => void coverage.refetch()}
-          />
-        </section>
+        <ErrorState
+          error={coverage.error}
+          what="the integrations this repository calls"
+          onRetry={() => void coverage.refetch()}
+        />
       </ScreenFrame>
     )
   }
 
-  // The answer names the scope it was computed for. Rendering rows from a fleet-wide answer under
-  // this repository's heading would be a false claim about this repository, so it is refused rather
-  // than shown with a caveat.
-  //
-  // **The list is what the index bound, not what has an open finding**, from 2026-08-19. It was
-  // built on `overview.vendors` -- a `GROUP BY` over open findings -- so a vendor this codebase
-  // calls cleanly was absent from a page asking which vendors it uses, and the page could not
-  // answer its own question without the Errors & Incidents payload the owner has now ruled off it.
-  const scopeMatches = coverage.data?.repo_id === repoId
-  const vendors = scopeMatches
-    ? Object.entries(coverage.data?.by_vendor ?? {})
-        .map(([vendor_id, call_sites]) => ({ vendor_id, call_sites: Number(call_sites) }))
-        .sort((a, b) => b.call_sites - a.call_sites || a.vendor_id.localeCompare(b.vendor_id))
-    : []
-  const adaptersMap = new Map(
-    (adaptersQuery.data?.adapters ?? []).map((adapter) => [adapter.vendor_id, adapter])
-  )
-
-  const filteredVendors = vendors.filter((v) => {
-    if (tierFilter === "all") return true
-    const adapter = adaptersMap.get(v.vendor_id)
-    return adapter?.kind === tierFilter
-  })
-
-  // A listing only where the answer's scope matches the address: counting an out-of-scope answer's
-  // rows as "0 of 0 attached" would state an emptiness about this repository that nothing computed.
-  const status: StatusSegment[] = [
-    scopeMatches
-      ? {
-          kind: "listing",
-          label: "Vendors",
-          text: `${filteredVendors.length.toLocaleString()} of ${vendors.length.toLocaleString()} attached`,
-        }
-      : { kind: "none", why: "the index coverage answered for another repository" },
-    {
-      kind: "note",
-      text:
-        "This list is what INDEX bound in this repository. A vendor's published rate limits, auth " +
-        "rules and call structures are not shown, because no stage captures them yet — that is " +
-        "work not done rather than a vendor with none.",
-    },
-  ]
-
-  // The tier tabs went on the owner's ruling of 2026-08-25: every attached vendor is generated,
-  // so "All (3) / Generated (3)" was a control offering one answer twice. The tier still shows
-  // on each card, which is where a reader asks about one vendor rather than filtering by it.
-  return (
-    <ScreenFrame controls={controls} status={status}>
-    <section className="flex min-w-0 flex-col gap-8">
-
-      {/* Dashboard I1. Above the scope check on purpose: the catalogue is its own read with its
-          own scope, so it stays true when the overview beneath arrives computed for a different
-          one — and a page whose only content is a mismatch notice tells a reader nothing about
-          what this deployment can watch. */}
-      {repoId !== undefined && <IntegrationsKpis repoId={repoId} />}
-
-      {!scopeMatches ? (
+  if (!inScope) {
+    return (
+      <ScreenFrame
+        controls={controls}
+        status={[{ kind: "none", why: "the index coverage answered for another repository" }]}
+      >
+        <IntegrationsKpis repoId={repoId} />
         <EmptyState
           headline="This answer was computed for a different scope."
           detail={
             `The index coverage that arrived names its scope as ` +
-            `${coverage.data?.repo_id ?? "another repository"}, not ${repoId}. Its vendors are not ` +
+            `${answer?.repo_id ?? "another repository"}, not ${repoId}. Its integrations are not ` +
             `shown here, because a fleet-wide list under one repository's name is a claim about ` +
             `that repository which nothing computed.`
           }
         />
-      ) : vendors.length === 0 ? (
+      </ScreenFrame>
+    )
+  }
+
+  if (rows.length === 0) {
+    return (
+      <ScreenFrame
+        controls={controls}
+        status={[
+          { kind: "listing", label: "Integrations", text: "none bound here" },
+          { kind: "note", text: SURFACE_NOTE },
+        ]}
+      >
+        <IntegrationsKpis repoId={repoId} />
         <EmptyState
-          headline="No vendor is attached to this repository."
-          detail="A vendor appears here once INDEX finds a call site binding this repository to it."
+          headline="No integration is bound to this repository."
+          detail="One appears here once INDEX finds a call site binding this repository to it."
           command={`uv run sync index --repo ${repoId}`}
         />
-      ) : (
-        <div className="flex flex-col gap-section">
-          {filteredVendors.length === 0 ? (
-            <EmptyState
-              headline="No vendors match the selected filter."
-              detail={`No attached vendor has an adapter matching tier "${tierFilter}".`}
-            />
-          ) : viewMode === "cards" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-section">
-              {filteredVendors.map((vendor) => {
-                const adapter = adaptersMap.get(vendor.vendor_id) ?? null
-                return (
-                  <Link
-                    key={vendor.vendor_id}
-                    to={vendorHref(repoId ?? "", vendor.vendor_id)}
-                    className="block group focus:outline-none"
-                  >
-                    <VendorCard
-                      vendorId={vendor.vendor_id}
-                      adapter={adapter}
-                      catalogueAnswered={adaptersQuery.isSuccess}
-                      callSites={vendor.call_sites}
-                    />
-                  </Link>
-                )
-              })}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Adapter Tier</TableHead>
-                  <TableHead>Services called</TableHead>
-                  <TableHead>Call sites</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredVendors.map((vendor) => {
-                  const adapter = adaptersMap.get(vendor.vendor_id)
-                  return (
-                    <TableRow key={vendor.vendor_id}>
-                      <TableCell>
-                        <Link
-                          to={vendorHref(repoId ?? "", vendor.vendor_id)}
-                          className="font-mono underline underline-offset-2"
-                        >
-                          {vendor.vendor_id}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {/* `none` is a measurement -- this vendor has no adapter. A catalogue
-                            that errored has measured nothing, and printing `none` there claims an
-                            answer the query never gave, on every row at once. */}
-                        {adaptersQuery.isSuccess ? (
-                          <Badge>{adapter ? adapter.kind : "none"}</Badge>
-                        ) : (
-                          <Absent>the adapter catalogue did not answer</Absent>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        <ServicesCalled
-                          vendorId={vendor.vendor_id}
-                          coverage={coverage}
-                          repoId={repoId ?? ""}
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {vendor.call_sites.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      )}
+      </ScreenFrame>
+    )
+  }
 
-    </section>
+  const narrowed = search.trim() !== ""
+  const status: StatusSegment[] = [
+    {
+      kind: "listing",
+      label: "Integrations",
+      text: narrowed
+        ? `${shown.length.toLocaleString()} of ${rows.length.toLocaleString()} bound here`
+        : `${rows.length.toLocaleString()} bound here`,
+    },
+    {
+      kind: "figure",
+      label: "Call sites indexed",
+      value: answer.total_call_sites.toLocaleString(),
+      scope: "static evidence — what the last index pass found in this repository",
+    },
+    { kind: "note", text: SURFACE_NOTE },
+  ]
+
+  return (
+    <ScreenFrame
+      controls={controls}
+      status={status}
+      layout="locked"
+      subtitle="Every integration this codebase calls, as the last index pass found it."
+    >
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-8">
+        {/* Portals into the chrome's second row; it draws nothing here unless its own read is in
+            flight or failed, which is a fact about this screen and belongs on it. */}
+        <IntegrationsKpis repoId={repoId} />
+
+        <PanelPane
+          label="Integrations bound in this codebase"
+          icon={Boxes}
+          hint={
+            <InfoHint label="About this deck">
+              One card per integration the static index found a call site for, busiest first. The
+              figure on each card is statically indexed call sites — not calls and not traffic,
+              which is what the rung beside it says. An integration Sync knows about and this
+              codebase does not call is not here; &ldquo;Add a vendor&rdquo; lists those.
+            </InfoHint>
+          }
+          // The deck's scroll belongs to `DetailLayout`'s list column, which already applies it —
+          // a second scroller around it would be two scrollbars over one body.
+          scroll={false}
+          footer={
+            <>
+              <span className="furniture shrink-0">Newest call site indexed</span>
+              <span className="shrink-0 font-mono">
+                <RelativeTime iso={newestIndexed(rows)} />
+              </span>
+              <span className="min-w-0 truncate">
+                — staleness, not a promise the index is current
+              </span>
+            </>
+          }
+        >
+          <DetailLayout
+            docked
+            title={selected === null ? "Integration" : selected.name}
+            subtitle={selected === null ? undefined : selected.vendorId}
+            onClose={() => setOpenVendor(null)}
+            detail={
+              openVendor === null ? null : selected === null ? (
+                <p className="max-w-prose text-body text-ink-muted">{SELECTION_OFF_DECK_NOTE}</p>
+              ) : (
+                <VendorInspector
+                  row={selected}
+                  repoId={repoId}
+                  catalogueAnswered={adaptersQuery.isSuccess}
+                  products={productsFor(answer, selected.vendorId)}
+                />
+              )
+            }
+            list={
+              shown.length === 0 ? (
+                <div className="p-section">
+                  <EmptyState
+                    headline="No integration on this deck matches the search."
+                    detail={`Nothing bound in ${repoId} is named like “${search.trim()}”. The deck holds ${rows.length.toLocaleString()} integrations.`}
+                  />
+                </div>
+              ) : (
+                <ul className="grid min-w-0 grid-cols-1 gap-section p-section md:grid-cols-2 2xl:grid-cols-3">
+                  {shown.map((row) => (
+                    <li key={row.vendorId} className="flex min-w-0">
+                      <VendorCard
+                        row={row}
+                        catalogueAnswered={adaptersQuery.isSuccess}
+                        totalCallSites={answer.total_call_sites}
+                        selected={row.vendorId === openVendor}
+                        onSelect={() =>
+                          setOpenVendor(row.vendorId === openVendor ? null : row.vendorId)
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          />
+        </PanelPane>
+      </section>
     </ScreenFrame>
   )
 }

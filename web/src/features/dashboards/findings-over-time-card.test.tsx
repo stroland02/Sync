@@ -3,6 +3,11 @@
  *
  * A dated bar chart of API findings is read as the vendors' timeline, a missing day is read as a
  * zero, and a series is read as the current backlog. All three are wrong and each is asserted.
+ *
+ * **Repointed 2026-08-26 from `FindingsOverTimeCard` to `FindingsOverTimeBody`.** The card wrapper
+ * was deleted with the Trends rebuild — its only mount was that screen, which now draws its own
+ * pane chrome — and the Fleet screen was already mounting the body. Every assertion below is
+ * unchanged: the wrapper carried none of them.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -10,7 +15,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { FindingsOverTimeResponse } from "@/api/types"
-import { FindingsOverTimeCard } from "@/features/dashboards/findings-over-time-card"
+import { FindingsOverTimeBody } from "@/features/dashboards/findings-over-time-card"
 
 afterEach(() => {
   cleanup()
@@ -42,12 +47,12 @@ function renderCard(over: Partial<FindingsOverTimeResponse> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <FindingsOverTimeCard />
+      <FindingsOverTimeBody />
     </QueryClientProvider>
   )
 }
 
-describe("FindingsOverTimeCard", () => {
+describe("the findings-over-time body", () => {
   /** The misreading this card exists to pre-empt. */
   it("says the dates are Sync's own, not the vendors' publication timeline", () => {
     renderCard()

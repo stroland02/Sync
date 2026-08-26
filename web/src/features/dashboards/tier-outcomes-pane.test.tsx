@@ -1,5 +1,10 @@
 /**
  * Dashboard 5's frame — the claims the bars are not allowed to imply.
+ *
+ * **Moved here 2026-08-26 with the card it covers.** `TierOutcomesCard` lived in `features/runs/`
+ * and was mounted only by the Corpus screen, which is a locked bento now; the surface is
+ * `features/dashboards/tier-outcomes-pane.tsx`. Every assertion is unchanged, and the grain
+ * sentence stays visible in the pinned footer rather than moving behind the hint.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -7,7 +12,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AbandonmentResponse } from "@/api/types"
-import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
+import { TierOutcomesPane } from "@/features/dashboards/tier-outcomes-pane"
 
 afterEach(() => {
   cleanup()
@@ -41,12 +46,12 @@ function renderCard(groups: AbandonmentResponse["groups"]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TierOutcomesCard />
+      <TierOutcomesPane />
     </QueryClientProvider>
   )
 }
 
-describe("TierOutcomesCard", () => {
+describe("the tier-outcomes pane", () => {
   /** The plan's own warning: four rows must read as a young corpus, not a broken chart. */
   it("says a thin corpus is thin rather than drawing a confident cascade", () => {
     renderCard([group({ tier: 0, attempt_count: 4, abandoned_attempt_count: 1 })])

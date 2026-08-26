@@ -1,10 +1,15 @@
 /**
  * Where remediation work stops: findings in, outcomes out, and the gap between.
  *
- * **Attrition, counted in findings.** Every screen counts a stage — findings here, runs there,
- * pull requests on this page — and a table shows a codebase with 24 findings and no attempts
- * identically to one with 24 findings and 24 abandonments. The solutions funnel beside this one
- * draws attrition too, over tickets; this is the only one whose unit is findings.
+ * **Attrition, counted in findings.** Every screen counts a stage — findings here, runs there —
+ * and a table shows a codebase with 24 findings and no attempts identically to one with 24
+ * findings and 24 abandonments. The Solutions board draws the same attrition over **runs**; this
+ * is the only one whose unit is findings, which is what makes it the one that can show a finding
+ * no run has ever attempted. A finding with no run has no card on that board, so this panel is
+ * where the gap it leaves is counted.
+ *
+ * It renders on Trends since 2026-08-26 (`CI-W647`), when Solutions became a viewport-locked
+ * board with no room for a chart and no unit but runs.
  *
  * ## Counted in findings, and only findings
  *
@@ -127,7 +132,7 @@ export function RemediationFlow({
       frame={frame}
       label="Where remediation work stops"
       hint={hint}
-      caption="Open findings and what became of them, counted in findings — not in tickets and not in runs. The funnel below counts tickets, which is a different unit over a different set."
+      caption="Open findings and what became of them, counted in findings — not in tickets and not in runs. The Solutions board counts runs, which is a different unit over a different set: a finding nothing has attempted has no run and appears there in no column at all."
     >
       {findings === 0 ? (
         <span className="text-body">

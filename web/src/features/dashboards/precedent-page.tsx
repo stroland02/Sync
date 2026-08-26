@@ -1,36 +1,36 @@
 /**
- * Metrics → Corpus: how well the remediation loop actually works, and which parts of that
- * question have no answer yet.
+ * Corpus: how well the remediation loop actually works, and which parts of that question have no
+ * answer yet — as a viewport-locked bento of four panes.
  *
- * **Owner ruling, 2026-08-19:** `/api/precedent/health` becomes a fourth Metrics tab. The route and
- * its view model have existed since `M12-W323` with nothing rendering them, and the payload is
- * the most console-shaped one in the product — every axis arrives carrying `status`,
- * `has_samples`, `sample_count`, `provenance` and its own `denominator_description`, which is the
- * absence-versus-zero distinction computed server-side rather than asserted here.
+ * **Rebuilt 2026-08-26 from a scrolling column into a locked grid.** The old screen was a headed
+ * section, a five-card grid of axes, a second headed section, and two chart cards below the fold.
+ * Four of those five surfaces said the same six words — *not measured yet* — and each spent a
+ * border and a heading to say them. The axes are a ledger now, which puts every denominator in a
+ * column beside its axis, and the three charts sit where a reader can compare them.
+ *
+ * **Owner ruling, 2026-08-19:** `/api/precedent/health` becomes a Metrics destination. The route
+ * and its view model have existed since `M12-W323`, and the payload is the most console-shaped one
+ * in the product — every axis arrives carrying `status`, `has_samples`, `sample_count`,
+ * `provenance` and its own `denominator_description`, which is the absence-versus-zero distinction
+ * computed server-side rather than asserted here.
  *
  * **This screen is the product's argument in its most literal form.** Measured against this
  * deployment today: five axes, all `unmeasured`, zero samples. A competing tool with this data
  * would show a merge rate of 100% over one attempt, or a green tick, or nothing at all. What this
  * screen shows is five named measurements, each with the denominator it would need, and the
- * statement that none of them has a sample yet. **An unmeasured axis is not a failing axis and
- * this screen never renders it as one** — no red, no warning, no "incomplete" badge. It is a
- * measurement nobody has been able to take, which is a fact about how much Sync has run rather
- * than about how well it works.
+ * statement that none of them has a sample yet.
  *
- * **No aggregate over the axes, and this is where one would be most tempting.** Five ratios with
- * a shared subject is exactly the shape that invites a "corpus health score", and the payload
- * even offers `axes_measured_count` to build one from. A scalar averaging a merge rate, a routing
- * accuracy and a token cost would collapse three incommensurable things, and averaging *measured
- * and unmeasured* would put "we could not check" on the same axis as "we checked and it passed" —
- * the exact failure `CLAUDE.md` says this console exists to replace. The counts are reported as
- * counts.
+ * **No aggregate over the axes.** `axis-ledger.tsx` carries the argument at the surface that would
+ * have to draw one.
  *
- * **A ratio is rendered with its denominator, always.** `denominator_description` is on the
- * payload for that reason, and it is rendered beside every value rather than behind a tooltip: a
- * merge rate whose denominator a reader cannot see is a number they cannot check.
+ * **Every form here is a count.** Three panes of bars and a ledger; no ring, no rate, no score.
+ * `web/CLAUDE.md`'s chart law outranks the reference on this screen and nothing on it divides one
+ * measurement by another.
  */
 
 import { useQuery } from "@tanstack/react-query"
+import { Ruler } from "lucide-react"
+import { useParams } from "react-router"
 
 import {
   ApiStatusError,
@@ -38,30 +38,17 @@ import {
   UnreachableApiError,
 } from "@/api/errors"
 import { InfoHint } from "@/components/info-hint"
-import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
-import { AbandonReasonsCard } from "@/features/runs/abandon-reasons-card"
-import { TierOutcomesCard } from "@/features/runs/tier-outcomes-card"
 import { KpiStrip } from "@/components/kpi-strip"
-import { MetricPanel } from "@/components/metric-panel"
-import { Absent } from "@/components/status"
+import { PanelPane } from "@/components/pane"
+import { CORPUS_SCOPE, ScopeChip } from "@/components/scope-chip"
 import { ErrorState, LoadingState } from "@/components/states"
+import { AbandonReasonsPane } from "@/features/dashboards/abandon-reasons-pane"
+import { AxisLedger, type Axis } from "@/features/dashboards/axis-ledger"
+import { ChangeKindPane } from "@/features/dashboards/change-kind-pane"
+import { TierOutcomesPane } from "@/features/dashboards/tier-outcomes-pane"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { useParams } from "react-router"
-
-interface Axis {
-  name: string
-  display_name: string
-  status: "measured" | "unmeasured"
-  has_samples: boolean
-  sample_count: number
-  provenance: string
-  value: number | Record<string, number | null> | null
-  groups?: Record<string, { value: number | null; n: number; has_samples: boolean }>
-  unit: string
-  denominator_description: string
-}
 
 interface PrecedentHealth {
   summary: {
@@ -97,73 +84,26 @@ async function fetchPrecedentHealth(signal?: AbortSignal): Promise<PrecedentHeal
   }
 }
 
-/** A ratio as a percentage, a duration as seconds, a token count as itself. */
-function formatValue(value: number, unit: string): string {
-  if (unit === "ratio") return `${Math.round(value * 100)}%`
-  if (unit === "milliseconds") return `${(value / 1000).toFixed(1)}s`
-  return value.toLocaleString()
-}
-
-function AxisPanel({ axis }: { axis: Axis }) {
-  const grouped = axis.groups !== undefined && Object.keys(axis.groups).length > 0
-
-  return (
-    <div className="flex min-w-0 flex-col gap-row rounded-surface border border-line bg-surface p-section">
-      <div className="flex flex-col gap-field">
-        <h3 className="text-section">{axis.display_name}</h3>
-        {/* The denominator is on screen rather than in a tooltip: a ratio whose denominator a
-            reader cannot see is a number they cannot check. */}
-        <p className="max-w-prose text-meta text-ink-muted">
-          Measured over {axis.denominator_description}.
-        </p>
-      </div>
-
-      {axis.status === "unmeasured" ? (
-        // Never "failing", never "0%". An axis with no samples is a measurement nobody could
-        // take -- a fact about how much has run, not a result -- and the panel's hint carries why.
-        <span className="text-body">
-          <Absent>not measured yet</Absent>
-        </span>
-      ) : grouped ? (
-        <div className="flex flex-col gap-field">
-          {Object.entries(axis.groups!).map(([group, entry]) => (
-            <div key={group} className="flex items-baseline justify-between gap-section">
-              <span className="min-w-0 truncate font-mono text-meta text-ink">{group}</span>
-              <span className="shrink-0 text-meta tabular-nums text-ink-muted">
-                {entry.has_samples && entry.value !== null ? (
-                  <>
-                    {formatValue(entry.value, axis.unit)}{" "}
-                    <span className="text-ink-muted">over {entry.n.toLocaleString()}</span>
-                  </>
-                ) : (
-                  <Absent>no sample</Absent>
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex items-baseline gap-row">
-          <span className="text-figure tabular-nums text-foreground">
-            {typeof axis.value === "number" ? formatValue(axis.value, axis.unit) : "—"}
-          </span>
-          <span className="text-meta text-ink-muted">
-            over {axis.sample_count.toLocaleString()} sample
-            {axis.sample_count === 1 ? "" : "s"}
-          </span>
-        </div>
-      )}
-    </div>
-  )
-}
-
 /** What the axes that have samples drew them from, or `null` when no axis has one. */
-function describeProvenance(axes: Axis[]): string | null {
+function describeProvenance(axes: readonly Axis[]): string | null {
   const sourced = [...new Set(axes.filter((axis) => axis.has_samples).map((axis) => axis.provenance))]
   // Null rather than the payload's "unmeasured": with no sample behind any axis, nothing answered
   // what the samples came from, and a word here would name a category that was never found.
   return sourced.length === 0 ? null : sourced.sort().join(", ")
 }
+
+const AXES_HINT = (
+  <InfoHint label="About corpus evidence">
+    The quality axes Sync measures itself against, computed over{" "}
+    <code className="font-mono">migration_outcome</code> — one row per repair attempt, not per
+    finding. There is deliberately no combined score: a figure averaging a merge rate, a routing
+    accuracy and a token cost would collapse three incommensurable measurements, and averaging
+    measured with unmeasured axes would put &ldquo;we could not check&rdquo; on the same axis as
+    &ldquo;we checked and it passed&rdquo;. An axis with no samples is reported unmeasured rather
+    than as nought, and each names the denominator it would be computed over — so what is missing is
+    legible rather than merely absent.
+  </InfoHint>
+)
 
 export function PrecedentPage() {
   const { repoId } = useParams<{ repoId: string }>()
@@ -214,105 +154,85 @@ export function PrecedentPage() {
       ]
 
   return (
-    <ScreenFrame status={status}>
-    <section className="flex flex-col gap-8">
-
-      {query.isPending && <LoadingState what="the corpus evidence" />}
-      {query.isError && (
-        <ErrorState
-          error={query.error}
-          what="the corpus evidence"
-          onRetry={() => void query.refetch()}
+    <ScreenFrame
+      status={status}
+      layout="locked"
+      subtitle="One row is one attempt, and counts once as a finding — every figure here is every workspace's, not this one's."
+    >
+      {query.isSuccess && (
+        <KpiStrip
+          items={[
+            {
+              label: "Axes measured",
+              // Two counts side by side, never a ratio: "2 of 5 measured" as a percentage would
+              // read as a score of the product rather than a count of what has run.
+              value: `${query.data.summary.axes_measured_count} of ${query.data.summary.total_axes}`,
+              note: "quality axes with at least one sample behind them",
+              figure: false,
+            },
+            {
+              label: "Pull requests opened",
+              value: query.data.summary.pull_requests_opened.toLocaleString(),
+              note: `${query.data.summary.pull_requests_merged.toLocaleString()} of them merged`,
+            },
+            {
+              label: "Attempts recorded",
+              value: query.data.summary.production_attempts.toLocaleString(),
+              // One row is one attempt, not one finding -- the grain rule, on screen where a
+              // reader would otherwise compare this against the findings count and be wrong.
+              note: `over ${query.data.summary.distinct_findings.toLocaleString()} distinct findings — one row is one attempt`,
+            },
+            {
+              label: "Rehearsals",
+              value: query.data.summary.rehearsal_attempts.toLocaleString(),
+              note: "halted before the remote, and excluded from every axis above",
+            },
+          ]}
         />
       )}
 
-      {query.isSuccess && (
-        <>
-          <KpiStrip
-            items={[
-              {
-                label: "Axes measured",
-                // Two counts side by side, never a ratio: "2 of 5 measured" as a percentage
-                // would read as a score of the product rather than a count of what has run.
-                value: `${query.data.summary.axes_measured_count} of ${query.data.summary.total_axes}`,
-                note: "quality axes with at least one sample behind them",
-                figure: false,
-              },
-              {
-                label: "Pull requests opened",
-                value: query.data.summary.pull_requests_opened.toLocaleString(),
-                note: `${query.data.summary.pull_requests_merged.toLocaleString()} of them merged`,
-              },
-              {
-                label: "Attempts recorded",
-                value: query.data.summary.production_attempts.toLocaleString(),
-                // One row is one attempt, not one finding -- the grain rule, on screen where a
-                // reader would otherwise compare this against the findings count and be wrong.
-                note: `over ${query.data.summary.distinct_findings.toLocaleString()} distinct findings — one row is one attempt`,
-              },
-              {
-                label: "Rehearsals",
-                value: query.data.summary.rehearsal_attempts.toLocaleString(),
-                note: "halted before the remote, and excluded from every axis above",
-              },
-            ]}
-          />
-
-          <div className="flex items-center gap-row">
-            <h2 className="text-section">Quality axes</h2>
-            <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
-            <InfoHint label="About corpus evidence">
-              The quality axes Sync measures itself against, computed over{" "}
-              <code className="font-mono">migration_outcome</code> — one row per repair attempt,
-              not per finding. There is deliberately no combined score: a figure averaging a merge
-              rate, a routing accuracy and a token cost would collapse three incommensurable
-              measurements, and averaging measured with unmeasured axes would put &ldquo;we could
-              not check&rdquo; on the same axis as &ldquo;we checked and it passed&rdquo;. An axis
-              with no samples is reported unmeasured rather than as nought, and each names the
-              denominator it would be computed over — so what is missing is legible rather than
-              merely absent.
-            </InfoHint>
-          </div>
-
-          <MetricPanel
-            label="By axis"
-            caption="Each axis, its value, and the denominator it was computed over."
-          >
-            <div className="grid auto-rows-fr gap-section xl:grid-cols-2">
-              {query.data.axes.map((axis) => (
-                <AxisPanel key={axis.name} axis={axis} />
-              ))}
-            </div>
-          </MetricPanel>
-
-          {/* The two corpus charts, arrived from Runs with the rebuild of 2026-08-26. Runs is
-              locked to the viewport now, and a reader who came to read a stream of attempts should
-              not scroll a locked screen past two chart panels to reach it. They belong here on
-              their own terms: both read `useAbandonment()`, which is corpus data at deployment
-              scope, and this screen already carries `CORPUS_SCOPE` — so the claim is made once
-              here instead of twice across two screens. This screen is not locked, which is what
-              lets them be as tall as they are. */}
-          <div className="flex items-center gap-row">
-            <h2 className="text-section">The repair corpus</h2>
-            <span className="text-meta text-ink-muted">
-              one row is one attempt, and counts once as a finding
+      {/* Row A is the ledger and the reason codes; row B is the two rankings that read against
+          each other — which tier gave up and on what subject matter. `.bento-lock` supplies the
+          tracks above 1024x720 and hands the grid its own scrollbar below it. */}
+      <div className="bento-lock grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-8 lg:grid-cols-12">
+        <PanelPane
+          className="lg:col-span-7"
+          label="Quality axes"
+          icon={Ruler}
+          hint={AXES_HINT}
+          actions={
+            <span className="flex items-center gap-row text-meta text-ink-muted">
+              <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
             </span>
-            <ScopeChip scope="all workspaces">{CORPUS_SCOPE}</ScopeChip>
-            <InfoHint label="About the repair corpus">
-              One row is one <em>attempt</em>, not one finding: a finding retried three times writes
-              three attempts and counts once toward the corpus grain, so a total here is larger than
-              the finding count on every other screen and neither is wrong. An abandoned attempt is
-              data rather than a failure to hide — the reason code is queryable, and abandonment by
-              change kind is how routing learns which changes are not mechanically safe to attempt.
-            </InfoHint>
-          </div>
-          <div className="grid auto-rows-fr gap-8 xl:grid-cols-2">
-            <AbandonReasonsCard />
-            <TierOutcomesCard />
-          </div>
-        </>
-      )}
-    </section>
+          }
+          scroll={query.isSuccess ? false : true}
+          bodyClassName={query.isSuccess ? undefined : "p-section"}
+          footer={
+            query.isSuccess ? (
+              <span>
+                {query.data.summary.axes_measured_count} of {query.data.summary.total_axes}{" "}
+                measured, all {query.data.summary.total_axes} on screen — an axis with no sample is
+                a measurement nobody could take, never a failing result.
+              </span>
+            ) : undefined
+          }
+          footerClassName="h-auto min-h-[var(--row-lg)] items-start py-field leading-relaxed"
+        >
+          {query.isPending && <LoadingState what="the corpus evidence" />}
+          {query.isError && (
+            <ErrorState
+              error={query.error}
+              what="the corpus evidence"
+              onRetry={() => void query.refetch()}
+            />
+          )}
+          {query.isSuccess && <AxisLedger axes={query.data.axes} />}
+        </PanelPane>
+
+        <AbandonReasonsPane className="lg:col-span-5" />
+        <ChangeKindPane className="lg:col-span-7" />
+        <TierOutcomesPane className="lg:col-span-5" />
+      </div>
     </ScreenFrame>
   )
 }

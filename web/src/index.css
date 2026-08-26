@@ -493,6 +493,36 @@
       min-height: 0;
     }
   }
+
+  /* Three rows, and it scrolls rather than locking. Trends took `RemediationFlow` and
+     `AttemptsByTier` when Solutions became a board, and adding them to `.bento-lock` put them in
+     an IMPLICIT third row -- which is sized by its content before the `fr` rows divide what is
+     left. Measured 2026-08-26 at 1920x1080: the two chart rows collapsed to 131px and 87px while
+     the new row took 399px, and two panes clipped inside their own boxes. Declaring the track is
+     what keeps the proportion; the `minmax` floors sum past a 1080p content band on purpose, so
+     this grid owns a scrollbar instead of squeezing seven panes into one screen. The chassis is
+     still locked -- the page does not scroll, this one region does.
+
+     The third floor is 27rem because `AttemptsByTier` measured 383px at 1920 and 419px at 1366,
+     where the narrower column makes its rows taller. A floor under the taller number clips the
+     panel at the resolution the brief names as the one that must also hold. */
+  .bento-lock-3 {
+    overflow-y: auto;
+  }
+
+  .bento-lock-3 > * {
+    min-height: 20rem;
+  }
+
+  @media (min-width: 1024px) and (min-height: 720px) {
+    .bento-lock-3 {
+      grid-template-rows: minmax(20rem, 1.5fr) minmax(14rem, 1fr) minmax(27rem, 1.2fr);
+    }
+
+    .bento-lock-3 > * {
+      min-height: 0;
+    }
+  }
 }
 
 /* Viewport scaling — owner ruling 2026-08-25.

@@ -93,7 +93,7 @@ describe("the runs screen", () => {
    * The "mounts both of the cards that were built and mounted nowhere" guard moved rather than
    * retired.
    *
-   * `AbandonReasonsCard` and `TierOutcomesCard` no longer render here: the Runs rebuild locks this
+   * `AbandonReasonsPane` and `TierOutcomesPane` no longer render here: the Runs rebuild locks this
    * screen to the viewport and two chart cards under a stream are two things a reader would have to
    * scroll a locked screen to reach. They moved to Corpus, which is not locked and already carries
    * the corpus scope claim, so its `/abandon/i` and `/tier/i` assertions moved with them to

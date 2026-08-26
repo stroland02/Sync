@@ -1,68 +1,49 @@
 /**
- * One vendor's card: identity, adapter tier, what the graph holds, and what it refuses to claim.
+ * One integration's card: identity, the rung on its figure, what the graph holds, and what it
+ * refuses to claim.
  *
- * Four distinctions land on this component at once and each is one careless `??` away from being
- * erased, so each is asserted here rather than left to a reviewer:
+ * **Rewritten with the card, 2026-08-26.** The owner ruled the screen cards-only, so this component
+ * stopped being a tile beside a table and became the row itself: it took the table's four columns,
+ * gained two the table had no room for, and stopped being a link into the vendor's record because
+ * it is now the control that opens the drawer. Every distinction the old file asserted is still
+ * asserted here — two of them moved to the field they now live on, and two moved to
+ * `vendor-inspector.test.tsx` with the facts they describe. Nothing was dropped.
+ *
+ * The distinctions, each one careless `??` away from being erased:
  *
  * - **The tier vocabulary is the registry's, not a plan's.** `sync/signals/registry.py` emits
- *   `coded`, `generated` and `mcp`; `sync/dashboard/adapters.py` adds `unregistered` for history
- *   keyed by a vendor nothing serves any more. A card that renders a tier the payload cannot carry
- *   is a claim about the deployment which nothing computed.
- * - **Never-delivered apart from zero.** `adapter_inventory` answers `null` for an adapter the
- *   graph holds no `vendor_change` row for. `0` would mean Sync read the specification and had
- *   nothing to say. The Settings adapter table holds the same line, and this card reuses its
- *   sentence rather than spelling a second one.
- * - **Absence apart from zero, on the finding count.** `/api/adapters` is deployment-wide and
- *   `/api/overview` is repository-scoped, so an adapter registered but not bound in the selected
- *   codebase has no count at all — which is a different fact from a count of nought.
- * - **Nothing-here apart from never-measured, on the adapter itself.** A vendor the overview names
- *   and the adapter inventory does not is a third state again.
+ *   `coded`, `generated` and `mcp`; `sync/dashboard/adapters.py` adds `unregistered`. A card that
+ *   renders a tier the payload cannot carry is a claim about the deployment nothing computed.
+ * - **Never-delivered apart from zero.** `null` is an adapter the graph holds no `vendor_change`
+ *   row for; `0` would mean Sync read the specification and had nothing to say.
+ * - **Absence apart from zero, on the coverage facts.** Operations reached is `null` where the
+ *   answer named none — which the old file asserted on the finding count, a field the deck no
+ *   longer carries because every row now has a measured count by construction.
+ * - **Nothing-here apart from never-measured, on the adapter itself.** A catalogue that did not
+ *   answer, and an inventory that answered and named no adapter, are two more states again.
+ * - **The rung qualifies the figure.** The number is statically indexed call sites, and a reader
+ *   who takes it for observed traffic has been misled by the rung's absence.
  *
  * Scope is `.claude/rules/console-dev-loop.md`'s: what the card says and how it derives it. Never a
  * class name, never a snapshot.
  */
 
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AdapterRow } from "@/api/types"
 import { NEVER_DELIVERED_NOTE } from "@/features/settings/adapter-table"
 import {
   ADAPTER_TIERS,
-  CODED_SOURCE_NOTE,
-  FRESHNESS_QUALIFICATION,
+  CATALOGUE_UNANSWERED_NOTE,
   NO_ADAPTER_ROW_NOTE,
-  NO_CALL_SITE_COUNT_NOTE,
+  NO_OPERATIONS_NOTE,
   VendorCard,
   adapterTierLabel,
 } from "@/features/vendors/vendor-card"
+import type { DeckRow } from "@/features/vendors/vendor-deck"
 
 afterEach(cleanup)
-
-describe("the vendor's mark", () => {
-  it("shows a mark beside the id, drawn rather than fetched", () => {
-    // M15 Task 5, owner ruling: the neutral generated mark. This asserted an `<img>` from
-    // logo.clearbit.com -- a third-party trademark, fetched from the operator's browser, telling
-    // that endpoint which integrations a customer watches. The mark is now drawn here.
-    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={2} />)
-
-    expect(screen.getByTestId("vendor-mark-monogram")).toBeTruthy()
-  })
-
-  /**
-   * Decision 6 reversed the refusal to render a mark. It did not reverse what the refusal was
-   * protecting: the id is what Sync actually holds, and the mark is an aid to finding it.
-   */
-  it("keeps the id as the identity rather than letting the mark stand for it", () => {
-    const { container } = render(
-      <VendorCard vendorId="stripe" adapter={delivered} callSites={2} />,
-    )
-
-    expect(screen.getByRole("heading", { name: "stripe" })).toBeTruthy()
-    // Nothing is fetched for a vendor's logo, from anywhere.
-    expect(container.querySelector("img")).toBeNull()
-  })
-})
 
 const delivered: AdapterRow = {
   vendor_id: "stripe",
@@ -94,32 +75,84 @@ const neverDelivered: AdapterRow = {
   attempts: {},
 }
 
-describe("VendorCard", () => {
-  it("identifies the vendor by its id, and draws no mark of its own", () => {
-    const { container } = render(
-      <VendorCard vendorId="stripe" adapter={delivered} callSites={3} />
-    )
+function row(overrides: Partial<DeckRow> = {}): DeckRow {
+  return {
+    vendorId: "stripe",
+    name: "Stripe",
+    callSites: 3,
+    lastIndexed: null,
+    operations: 5,
+    adapter: delivered,
+    ...overrides,
+  }
+}
 
-    // Decision 6 reversed the refusal to show a mark, and kept the reason behind it: the id is the
-    // identity Sync actually holds, and it is what the graph, the payload and every other screen
-    // key on. What stays refused is a mark Sync renders itself — no inline svg, no drawn path.
-    expect(screen.getByRole("heading", { name: "stripe" })).toBeTruthy()
+function card(overrides: Partial<DeckRow> = {}, props: { catalogueAnswered?: boolean } = {}) {
+  return render(
+    <VendorCard
+      row={row(overrides)}
+      catalogueAnswered={props.catalogueAnswered ?? true}
+      totalCallSites={60}
+      selected={false}
+      onSelect={() => {}}
+    />,
+  )
+}
+
+describe("the integration's mark", () => {
+  it("shows a mark beside the name, drawn rather than fetched", () => {
+    // M15 Task 5, owner ruling: the neutral generated mark. This asserted an `<img>` from
+    // logo.clearbit.com -- a third-party trademark, fetched from the operator's browser, telling
+    // that endpoint which integrations a customer watches. The mark is now drawn here.
+    card()
+
+    expect(screen.getByTestId("vendor-mark-monogram")).toBeTruthy()
+  })
+
+  it("keeps the id on the card rather than letting the mark or the name stand for it", () => {
+    // Decision 6 reversed the refusal to render a mark. It did not reverse what the refusal was
+    // protecting: the id is what Sync actually holds, and it is what every payload, join and URL
+    // keys on. The written name is now the heading, so the id has to be visible in its own right.
+    const { container } = card()
+
+    expect(screen.getByRole("heading", { name: "Stripe" })).toBeTruthy()
+    expect(screen.getByText("stripe")).toBeTruthy()
+    // Nothing is fetched for an integration's logo, from anywhere, and the console draws no mark
+    // of its own -- no inline svg, no path.
+    expect(container.querySelector("img")).toBeNull()
     expect(container.querySelector("svg")).toBeNull()
     expect(container.querySelector("path")).toBeNull()
   })
+})
 
+describe("the figure and its rung", () => {
+  it("qualifies the call-site count with the rung that says what was counted", () => {
+    // `CLAUDE.md`: the rung travels with every binding and everything derived from one. The number
+    // is what the static index found -- not calls, not traffic -- and a reader who reads it as
+    // traffic has been misled by the rung's absence rather than by the number.
+    const { container } = card({ callSites: 3 })
+
+    expect(screen.getByText("3")).toBeTruthy()
+    expect(screen.getByText("static")).toBeTruthy()
+    expect(container.textContent).toContain("of 60 call sites indexed here")
+  })
+
+  it("puts the denominator on screen rather than drawing a rate", () => {
+    // `web/CLAUDE.md`: a count is not a rate, and no percentage renders without its denominator.
+    // The bar is decorative; both numbers are in the line above it.
+    const { container } = card({ callSites: 3 })
+
+    expect(container.textContent).not.toContain("%")
+  })
+})
+
+describe("the adapter, and the three ways it can be absent", () => {
   it("renders every tier in the registry's own vocabulary, legible as a word without colour", () => {
     expect(ADAPTER_TIERS.length).toBeGreaterThan(0)
 
     for (const kind of ADAPTER_TIERS) {
       cleanup()
-      render(
-        <VendorCard
-          vendorId="acme"
-          adapter={{ ...delivered, vendor_id: "acme", kind }}
-          callSites={0}
-        />
-      )
+      card({ adapter: { ...delivered, vendor_id: "acme", kind } })
       // The badge carries the word. Colour, if any ever arrives, is a second channel over this.
       expect(screen.getByText(adapterTierLabel(kind))).toBeTruthy()
       expect(adapterTierLabel(kind)).toContain(kind)
@@ -133,76 +166,125 @@ describe("VendorCard", () => {
   })
 
   it("says nothing was received rather than printing zero, when an adapter has never delivered", () => {
-    const { container } = render(
-      <VendorCard vendorId="acme" adapter={neverDelivered} callSites={null} />
-    )
+    const { container } = card({
+      vendorId: "acme",
+      name: "Acme",
+      adapter: neverDelivered,
+      callSites: 3,
+    })
 
     expect(screen.getByText(NEVER_DELIVERED_NOTE)).toBeTruthy()
     expect(container.textContent).not.toMatch(/\b0\b/)
   })
 
   it("prints a confirmed zero as a number, apart from an adapter that never delivered", () => {
+    card({ adapter: { ...delivered, changes: 0, operations: 0, last_change_at: null } })
+
+    expect(screen.queryByText(NEVER_DELIVERED_NOTE)).toBeNull()
+    expect(screen.getAllByText("0").length).toBeGreaterThan(0)
+  })
+
+  it("distinguishes an inventory with no row for this vendor from an adapter that delivered nothing", () => {
+    const { container } = card({ vendorId: "twilio", name: "Twilio", adapter: null, callSites: 2 })
+
+    // Said once, in the header. The changes row is not drawn at all without an adapter row to
+    // count -- printing the same sentence in both places reads as two facts about two things.
+    expect(screen.getAllByText(NO_ADAPTER_ROW_NOTE).length).toBe(1)
+    expect(screen.queryByText(NEVER_DELIVERED_NOTE)).toBeNull()
+    expect(screen.queryByText("Vendor changes recorded")).toBeNull()
+    // The coverage facts are a different query's answer and survive the adapter being unknown.
+    expect(container.textContent).toContain("2")
+  })
+
+  it("refuses to describe the adapter at all when the catalogue did not answer", () => {
+    // Shipped for weeks on the retired table: the map was built from `data?.adapters ?? []`, so an
+    // errored catalogue rendered `none` on every row -- a positive claim that these vendors have no
+    // adapter, from a query that answered nothing.
+    card({}, { catalogueAnswered: false })
+
+    expect(screen.getAllByText(CATALOGUE_UNANSWERED_NOTE).length).toBe(1)
+    expect(screen.queryByText(NO_ADAPTER_ROW_NOTE)).toBeNull()
+    expect(screen.queryByText(adapterTierLabel("coded"))).toBeNull()
+    expect(screen.queryByText("Vendor changes recorded")).toBeNull()
+  })
+})
+
+describe("the coverage facts say which nothing they are", () => {
+  // This is the coverage the retired `callSites: null` case carried -- absence apart from zero on
+  // a count. The deck derives a measured count for every row now, so the distinction lives on the
+  // field that can genuinely have none.
+  it("renders an answer that named no operation as absence rather than nought operations", () => {
+    const { container } = card({ operations: null })
+
+    expect(screen.getByText(NO_OPERATIONS_NOTE)).toBeTruthy()
+    expect(container.textContent).not.toMatch(/\b0\b/)
+  })
+
+  it("prints a counted operation as a number", () => {
+    card({ operations: 4 })
+
+    expect(screen.queryByText(NO_OPERATIONS_NOTE)).toBeNull()
+    expect(screen.getByText("4")).toBeTruthy()
+  })
+
+  it("carries no product count at all, because that count is a constant on this payload", () => {
+    // Only a vendor adapter can group operations onto a product and almost none does, so the count
+    // reads `1` on twenty-seven of the thirty integrations in the corpus. A constant in a data slot
+    // is furniture pretending to be data -- the same argument that kept the rung chip off the
+    // overview map. The drawer names the products instead, which cannot be a constant, and
+    // `vendor-inspector.test.tsx` now carries the absence distinction this file used to hold.
+    const { container } = card()
+
+    expect(container.textContent).not.toContain("Products named")
+  })
+})
+
+describe("the card is the control that opens the drawer", () => {
+  it("selects rather than navigating, and names itself for a reader who cannot see it", () => {
+    // The card used to be a `<Link>` wrapping the whole tile, which made the vendor's record one
+    // click away and the drawer impossible. Selection is the console's landed idiom for a list
+    // whose reader works down it; the record link moved into the drawer.
+    const onSelect = vi.fn()
     render(
       <VendorCard
-        vendorId="stripe"
-        adapter={{ ...delivered, changes: 0, operations: 0, last_change_at: null }}
-        callSites={0}
-      />
+        row={row()}
+        catalogueAnswered
+        totalCallSites={60}
+        selected={false}
+        onSelect={onSelect}
+      />,
     )
 
-    expect(screen.queryByText(NEVER_DELIVERED_NOTE)).toBeNull()
-    expect(screen.getAllByText("0").length).toBeGreaterThan(0)
+    const control = screen.getByRole("button", { name: /Stripe/ })
+    expect(control.getAttribute("aria-pressed")).toBe("false")
+    fireEvent.click(control)
+    expect(onSelect).toHaveBeenCalledTimes(1)
   })
 
-  it("says a coded adapter is written here rather than marking its source absent", () => {
-    // `adapter_inventory` answers `source: null` for a coded adapter because there is no external
-    // repository behind it. That is a fact about the adapter, not a gap in the record, and the
-    // absence marker would claim the second.
-    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={3} />)
-    expect(screen.getByText(CODED_SOURCE_NOTE)).toBeTruthy()
-
-    cleanup()
-    render(<VendorCard vendorId="acme" adapter={neverDelivered} callSites={null} />)
-    expect(screen.queryByText(CODED_SOURCE_NOTE)).toBeNull()
-    expect(screen.getByText("acme/acme-node")).toBeTruthy()
-  })
-
-  it("names the newest recorded change as evidence age, never as a freshness measurement", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={3} />)
-
-    // Nothing in Sync records an intake attempt, only its result. A card labelling this timestamp
-    // "last checked" would be asserting a poll nothing wrote down.
-    expect(screen.getByText(FRESHNESS_QUALIFICATION)).toBeTruthy()
-    expect(screen.queryByText(/last checked/i)).toBeNull()
-    expect(screen.queryByText(/up to date/i)).toBeNull()
-  })
-
-  it("renders an uncounted finding total as absence and a counted nought as a figure", () => {
-    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={null} />)
-    expect(screen.getByText(NO_CALL_SITE_COUNT_NOTE)).toBeTruthy()
-
-    cleanup()
-    render(<VendorCard vendorId="stripe" adapter={delivered} callSites={0} />)
-    expect(screen.queryByText(NO_CALL_SITE_COUNT_NOTE)).toBeNull()
-    expect(screen.getAllByText("0").length).toBeGreaterThan(0)
-  })
-
-  it("distinguishes a vendor with no adapter row from one whose adapter delivered nothing", () => {
-    render(<VendorCard vendorId="twilio" adapter={null} callSites={2} />)
-
-    expect(screen.getByText(NO_ADAPTER_ROW_NOTE)).toBeTruthy()
-    expect(screen.queryByText(NEVER_DELIVERED_NOTE)).toBeNull()
-    // The finding count is a different query's answer and survives the adapter being unknown.
-    expect(screen.getByText("2")).toBeTruthy()
-  })
-
-  it("asserts no confidence scalar, health figure, score or invented severity", () => {
-    const { container } = render(
-      <VendorCard vendorId="stripe" adapter={delivered} callSites={3} />
+  it("reports its own selected state rather than leaving it to colour alone", () => {
+    render(
+      <VendorCard row={row()} catalogueAnswered totalCallSites={60} selected onSelect={() => {}} />,
     )
+
+    expect(screen.getByRole("button", { name: /Stripe/ }).getAttribute("aria-pressed")).toBe("true")
+  })
+})
+
+describe("the card asserts nothing the payload does not hold", () => {
+  it("carries no confidence scalar, health figure, score or invented severity", () => {
+    const { container } = card()
 
     const text = container.textContent ?? ""
     expect(text.length).toBeGreaterThan(0)
     expect(text).not.toMatch(/confidence|health|score|sev-\d|\d\s*\/\s*10|%/i)
+  })
+
+  it("does not answer the Findings screen's question, which is what put it on two screens", () => {
+    // Owner ruling, 2026-08-19: Errors & Incidents belongs on Findings alone. A finding fact on
+    // this card would put it back, and every other test in this file would stay green.
+    const { container } = card()
+
+    expect(container.textContent).toContain("stripe")
+    expect(container.textContent?.toLowerCase()).not.toContain("finding")
   })
 })

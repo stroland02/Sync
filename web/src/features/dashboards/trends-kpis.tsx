@@ -19,7 +19,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useFindingsOverTime } from "@/api/queries"
-import { fetchChangesOverTime } from "@/features/dashboards/changes-over-time-card"
+import { fetchChangesOverTime } from "@/features/dashboards/daily-series"
 import { KpiStrip } from "@/components/kpi-strip"
 import { Absent } from "@/components/status"
 

@@ -18,8 +18,9 @@ import type { StatusSegment } from "@/layouts/status-band"
 /**
  * The fleet's standing dismissals, counted over the latest ruling per finding.
  *
- * One key, two readers: this note and the Trends chart. Split out of `dismissed-tally.tsx` so the
- * two cannot end up asking under different keys and rendering two different numbers.
+ * One key, two readers: this note and the Trends chart (`features/dashboards/dismissed-pane.tsx`).
+ * The query lives outside both so they cannot ask under different keys and render two different
+ * numbers.
  */
 export function useDismissalTally() {
   return useQuery({

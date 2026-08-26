@@ -1,5 +1,10 @@
 /**
- * Dashboard 1, as a propless card the Overview mounts.
+ * Dashboard 1, as a propless body the Fleet screen mounts.
+ *
+ * **The `MetricPanel` wrapper died with the Trends rebuild of 2026-08-26**, which was its only
+ * caller: that screen is a locked bento now and draws its own pane chrome, so a card inside a pane
+ * was a border inside a border. What is left is the body, which is what every remaining consumer
+ * already wanted.
  *
  * Propless and fleet-scoped on purpose: with no repository named the wider answer is the true
  * one, and the route echoes back which scope it gave.
@@ -21,7 +26,6 @@ import { useCallback } from "react"
 import { useFindingsOverTime } from "@/api/queries"
 import type { ChartTokens } from "@/components/charts/echart"
 import { EChart } from "@/components/charts/echart"
-import { MetricPanel } from "@/components/metric-panel"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states"
 import { buildFindingsOverTimeOption } from "@/features/dashboards/findings-over-time-option"
 
@@ -32,20 +36,6 @@ const EMPTY = {
   by_rung: {},
   total: 0,
   still_open: 0,
-}
-
-/**
- * The panel form, for a screen that gives this card a row of its own.
- *
- * The bento pane on the Overview draws its own chrome, so it mounts `FindingsOverTimeBody`
- * directly rather than putting a card inside a pane.
- */
-export function FindingsOverTimeCard() {
-  return (
-    <MetricPanel label="What Sync has found, over time">
-      <FindingsOverTimeBody />
-    </MetricPanel>
-  )
 }
 
 export function FindingsOverTimeBody() {

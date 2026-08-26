@@ -3,6 +3,12 @@
  *
  * The derivation is covered next door. What is asserted here is the never-measured state, the
  * page-not-total caveat, and the absence of any rate.
+ *
+ * **Retitled and repointed 2026-08-26 when the card became a pane.** `ObservedVolumeCard` was a
+ * `MetricPanel` on a scrolling column; `ObservedVolumePane` is a bounded pane on the locked Trends
+ * bento, and the scroll moved onto the table container so the header can pin to it. Not one
+ * assertion below changed, and that is the point of keeping the file rather than writing a new
+ * one: the frame is allowed to move, the four distinctions are not.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -11,7 +17,7 @@ import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { ObservedCallRow, ObservedTelemetryResponse } from "@/api/types"
-import { ObservedVolumeCard } from "@/features/dashboards/observed-volume-card"
+import { ObservedVolumePane } from "@/features/dashboards/observed-volume-pane"
 
 afterEach(() => {
   cleanup()
@@ -77,14 +83,14 @@ function renderCard(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/repositories/org%2Fpayments/signals"]}>
         <Routes>
-          <Route path="/repositories/:repoId/signals" element={<ObservedVolumeCard />} />
+          <Route path="/repositories/:repoId/signals" element={<ObservedVolumePane />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   )
 }
 
-describe("ObservedVolumeCard", () => {
+describe("the observed-volume pane", () => {
   /** The distinction this dashboard was specified for. */
   it("says never measured when no telemetry is attached, and does not say nought", () => {
     renderCard([], { attachedAt: null })
@@ -156,6 +162,20 @@ describe("ObservedVolumeCard", () => {
 
     expect(container.textContent).not.toMatch(/%/)
     expect(screen.getByText(/never divided into\s+them/)).toBeTruthy()
+  })
+
+  /**
+   * Measured on the running console 2026-08-26 and fixed with the pane rebuild: this deployment
+   * returns eight observed-call rows against a null `telemetry_attached_at`, and the card printed
+   * "Counted over all 8 observed-call rows" directly beneath "Never measured." A count over rows
+   * nothing is recorded as having watched is a figure with no watcher behind it.
+   */
+  it("does not count rows on a repository nothing is recorded as having watched", () => {
+    const { container } = renderCard([call()], { attachedAt: null })
+
+    expect(screen.getByText("Never measured.")).toBeTruthy()
+    expect(container.textContent).not.toMatch(/Counted over/)
+    expect(screen.getByText(/left uncounted rather than presented as a measurement/)).toBeTruthy()
   })
 
   /** A slope needs two points; a flat line drawn from one reads as stability. */
