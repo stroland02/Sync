@@ -29,72 +29,22 @@ import { Link } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { usePatch, useDismissal } from "@/api/queries"
-import type { DismissalState, WorkflowNode } from "@/api/types"
+import type { WorkflowNode } from "@/api/types"
 import { Absent } from "@/components/status"
 import { Tag } from "@/components/tag"
 import { Button } from "@/components/ui/button"
 import { DetailSection } from "@/features/findings/detail-section"
+import { HumanRuling, type RulingState } from "@/features/findings/human-ruling"
 import { Pending } from "@/features/findings/pending"
 import {
   reachedPullRequest,
   remediationBadge,
   type RemediationState,
 } from "@/features/findings/remediation"
+import { CheckTile } from "@/features/pullrequests/check-tile"
 import { Diff, PatchStat, PatchTargetList } from "@/features/pullrequests/patch-parts"
-import { checkTone, verificationChain } from "@/features/pullrequests/verification-chain"
+import { verificationChain } from "@/features/pullrequests/verification-chain"
 import { pullRequestHref, workflowHref } from "@/lib/hrefs"
-
-/**
- * Whether a human has ruled on this finding, as prose rather than a control.
- *
- * Read-only, on the owner's ruling of 2026-08-19: the route accepts a POST and this screen does
- * not send one. What it owes is the standing, because without it a finding somebody deliberately
- * set aside and a finding nobody has opened render as the same screen.
- *
- * **`history_count` is rendered whenever it is not one, in both branches.** The store's own
- * docstring is explicit that `dismissed: false` covers "never touched" and "dismissed, then
- * restored" alike, and those are different facts about how settled a judgement is. A count on the
- * dismissed branch and none on the restored branch would hide the flip in exactly the direction
- * that flatters the system.
- *
- * `<Absent>` on failure rather than silence: a row that disappears when a request fails reads as
- * "nobody has dismissed this", which is a claim this screen would not have earned.
- */
-function standingFact(dismissal: DismissalState | null | "pending" | "failed") {
-  if (dismissal === "pending") return <Pending />
-  if (dismissal === "failed") return <Absent>the API did not answer</Absent>
-  if (dismissal === null || !dismissal.dismissed) {
-    return (
-      <div className="flex flex-col gap-field text-body">
-        <span>Open — nobody has dismissed this</span>
-        {dismissal !== null && dismissal.history_count > 0 && (
-          <span className="text-meta text-ink-muted">
-            Dismissed and restored{" "}
-            {dismissal.history_count === 1 ? "once" : `${dismissal.history_count} times`} before now.
-            The current standing is open; the changes of mind are the history behind it.
-          </span>
-        )}
-      </div>
-    )
-  }
-  return (
-    <div className="flex flex-col gap-field text-body">
-      <span>
-        Dismissed as <span className="font-mono">{dismissal.reason}</span>
-      </span>
-      <span className="text-meta text-ink-muted">
-        Recorded by{" "}
-        <span className="font-mono">{dismissal.actor ?? "an actor the row did not name"}</span>
-        {dismissal.history_count > 1 && (
-          <> — one of {dismissal.history_count} rulings on this finding, and the one standing now.</>
-        )}
-        {dismissal.history_count <= 1 && (
-          <>. Dismissing is a command-line action; this console reads it.</>
-        )}
-      </span>
-    </div>
-  )
-}
 
 /**
  * Which nothing stands in for the chain when there is no run to read it from.
@@ -113,23 +63,6 @@ function noRunSentence(remediation: RemediationState): string {
   return "The API did not answer for this finding's run, so what checked the patch is unknown here rather than missing."
 }
 
-/** One recorded check, as a tile. The state is a word from a closed set and reads without colour. */
-function CheckTile({ check }: { check: ReturnType<typeof verificationChain>[number] }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-field rounded-control border border-line bg-background p-row">
-      <div className="flex min-w-0 flex-wrap items-center gap-field">
-        <span className="font-furniture min-w-0 truncate text-ink">{check.label}</span>
-        <span className="ml-auto">
-          <Tag tone={checkTone(check.state)}>{check.state.replace("_", " ")}</Tag>
-        </span>
-      </div>
-      {/* The sentence keeps its room rather than being cut to fit the tile: which nothing a state
-          is cannot survive being shortened to the word alone. */}
-      <p className="text-meta text-ink-muted">{check.detail}</p>
-    </div>
-  )
-}
-
 export function RemediationPane({
   repoId,
   findingId,
@@ -146,7 +79,7 @@ export function RemediationPane({
   // Not gated on the finding either: `finding_dismissal` is durable and `finding` is re-derived,
   // so a finding this page 404s on can still carry a standing somebody recorded.
   const dismissalQuery = useDismissal(findingId)
-  const dismissal: DismissalState | null | "pending" | "failed" = dismissalQuery.isPending
+  const dismissal: RulingState = dismissalQuery.isPending
     ? "pending"
     : dismissalQuery.isError
       ? "failed"
@@ -233,7 +166,7 @@ export function RemediationPane({
         hintLabel="About the standing"
         hint="Dismissing is a command-line action and this console reads the record. A finding somebody deliberately set aside and one nobody has opened are different facts, and without this row they would render as the same screen."
       >
-        {standingFact(dismissal)}
+        <HumanRuling state={dismissal} />
       </DetailSection>
 
       <DetailSection heading="Where to go next">

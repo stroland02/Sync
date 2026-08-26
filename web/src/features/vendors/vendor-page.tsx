@@ -1,136 +1,207 @@
 /**
- * One API service: the calls this codebase makes on it, then everything else in tabs.
+ * One integration in full, as a locked viewport of four panes.
  *
- * **The owner's second re-ruling of 2026-08-19, superseding both prior orders.** Decision 29 led
- * with exposure; the morning's re-ruling led with the changes feed. Looking at both, the owner's
- * settled shape is neither stack: the API-calls table is the page's fixed answer — the organized
- * call patterns and operations for this one vendor — and the other three tables (what the vendor
- * published, the findings open against it, where its spec is read from) spread into tabs beneath
- * it rather than stacking into a scroll.
+ * **Rebuilt 2026-08-26 against `docs/stitch_sync_developer_console/.../integration_performance_explorer/`.**
+ * The screen it replaces was a `DetailGrid` fact rail over one exposure table with three records
+ * stacked into tabs beneath it — a single scrolling column, which is the shape the owner's *"eight
+ * of twenty-one screens still render `flow`"* audit names. The reference's composition is a wide
+ * subject pane, a narrow rail of two smaller panes beside it, and a dense table filling the width
+ * below; that is what this is, with each pane scrolling its own body and the page scrolling not at
+ * all.
  *
- * The tab is a query parameter, not component state: a shared address opens on the tab the
- * sender was reading. Only the active table mounts — three data-fetching tables mounted to show
- * one is the cost `page-tabs.tsx` documents against the vendored `Tabs`.
+ * **What the reference asks for and this refuses.** Its header carries a `Healthy` pill, its strip
+ * carries throughput, average latency, a success rate and a dollar figure for cost saved, and its
+ * endpoint list carries a coloured latency dot per row. Every one of those is either the composite
+ * this console has rejected three times or a figure no stage measures, and `web/CLAUDE.md` outranks
+ * the reference. What survived is its *composition* — mark, subject line, record chips, an
+ * instrument strip, and the pane geometry — filled with what the graph actually holds. Its two
+ * write actions (`Pause Sync`, `Force Sync`) are refused for a second reason: the API is read-only.
+ *
+ * **This screen goes deeper than the deck's drawer rather than repeating it.**
+ * `vendor-inspector.tsx` names the products, the feeds and the last intake attempt from answers the
+ * deck already holds. This one fetches the vendor's own payloads: every operation with its rung and
+ * whether traffic confirmed it, the changes feed with the detail of any row, the findings open here
+ * with their three narrowings, the attempt tally by outcome, and what the vendor has published.
+ *
+ * **The scope split is the screen's load-bearing fact and it is on screen, not in a tooltip.** Call
+ * sites, operations and findings are counted in this repository; changes and everything about the
+ * adapter are counted over the vendor, in every repository. The subject line says so and the status
+ * band repeats it for whichever record is open.
  */
 
 import { useParams } from "react-router"
 
-import { FactList } from "@/components/fact-list"
-import { VendorChangesCard } from "@/features/vendors/vendor-changes-table"
-import { VendorExposureCard } from "@/features/vendors/vendor-exposure-card"
-import {
-  VendorFindingsCard,
-  VendorFindingsControls,
-} from "@/features/vendors/vendor-findings-table"
-import { VendorSourcesCard } from "@/features/vendors/vendor-sources-card"
-import { DetailGrid } from "@/layouts/detail-grid"
+import { useVendorChangeVolume, useVendorFindings, useVendorOperations } from "@/api/queries"
+import { InfoHint } from "@/components/info-hint"
+import { KpiStrip } from "@/components/kpi-strip"
+import { Absent } from "@/components/status"
+import { Pending } from "@/features/findings/pending"
+import { VendorIntakePane } from "@/features/vendors/vendor-intake-pane"
+import { VendorMark } from "@/features/vendors/vendor-mark"
+import { vendorName } from "@/features/vendors/vendor-name"
+import { VendorOperationsPane } from "@/features/vendors/vendor-operations-pane"
+import { VendorPublishingPane } from "@/features/vendors/vendor-publishing-pane"
+import { RECORDS, recordFrom, trafficSummary } from "@/features/vendors/vendor-record"
+import { VendorRecordPane } from "@/features/vendors/vendor-record-pane"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
-import { chipSurface } from "@/lib/selectable-surface"
 import { useFilterParam } from "@/lib/use-filter-param"
 
 export interface VendorPageProps {
   readonly question?: string
 }
 
-const PANELS = [
-  { id: "changes", label: "Changes" },
-  { id: "findings", label: "Findings" },
-  { id: "sources", label: "Sources" },
-] as const
-
-type PanelId = (typeof PANELS)[number]["id"]
+// One line at `max-w-prose`, and measured rather than guessed: at 1366×768 the locked column has
+// 577px for four panes, and a subtitle that wraps to two spends 20 of them on a second clause.
+const QUESTION = "One integration in full: what this codebase calls, and what came of it."
 
 export function VendorPage() {
   // **The route is the scope**, and it used to be a query string: this read
   // `searchParams.get("repo_id")` while the route carries `:repoId`, so an address naming a
   // workspace could still render a fleet-wide claim -- the screen contradicting its own URL.
   const { vendorId, repoId } = useParams<{ vendorId: string; repoId: string }>()
-  const [panelParam, setPanel] = useFilterParam("panel")
   if (vendorId === undefined || repoId === undefined) return <UnknownRoute />
+  return <VendorRecord vendorId={vendorId} repoId={repoId} />
+}
 
-  // An unknown value falls back rather than rendering nothing: a mistyped shared address should
-  // land on the default tab, not on a page with a strip and no table.
-  const panel: PanelId = PANELS.some((entry) => entry.id === panelParam)
-    ? (panelParam as PanelId)
-    : "changes"
+function VendorRecord({ vendorId, repoId }: { vendorId: string; repoId: string }) {
+  const [recordParam, setRecord] = useFilterParam("record")
+  const record = recordFrom(recordParam)
 
-  // The panel chips are what narrow this screen, so they are the controls band rather than a
-  // strip inside the content -- which is what `ScreenFrame` exists to keep in one place across
-  // every screen.
-  const controls = (
-    <nav aria-label="Vendor records" className="flex flex-wrap items-center gap-row">
-      {PANELS.map((entry) => (
-        <button
-          key={entry.id}
-          type="button"
-          aria-pressed={entry.id === panel}
-          onClick={() => setPanel(entry.id === "changes" ? null : entry.id)}
-          className={`rounded-control border px-row py-field text-body ${chipSurface(entry.id === panel)}`}
-        >
-          {entry.label}
-        </button>
-      ))}
-    </nav>
-  )
+  const operations = useVendorOperations(vendorId, repoId)
+  const volume = useVendorChangeVolume(vendorId)
+  // Asked without any of the record's narrowings and with the smallest page the transport will
+  // serve: this tile reports what the vendor has open in this scope *before* a filter, which is
+  // exactly `severity_total`, and a key that carried the filters would let the figure move when a
+  // chip was pressed.
+  const findings = useVendorFindings(vendorId, { limit: 1, offset: 0, repoId })
 
-  // Which record is mounted, not how many rows it holds: the counts belong to the cards, which
-  // each fetch their own and publish nothing here. A `listing` says what is on screen without
-  // claiming a number this component has not got.
+  const summary =
+    operations.data === undefined
+      ? null
+      : trafficSummary(operations.data.operations, operations.data.telemetry_attached_at)
+
+  const callSites =
+    operations.data === undefined
+      ? null
+      : operations.data.operations.reduce((total, operation) => total + operation.call_site_count, 0)
+
+  const active = RECORDS.find((entry) => entry.id === record)!
   const status: StatusSegment[] = [
-    { kind: "listing", label: "Showing", text: PANELS.find((e) => e.id === panel)!.label },
-    { kind: "note", text: `for ${vendorId} in ${repoId}` },
+    { kind: "listing", label: "Record", text: active.label },
+    { kind: "note", text: active.scope(vendorId, repoId) },
   ]
 
   return (
-    <ScreenFrame status={status} controls={controls}>
-      <section className="flex flex-col gap-8">
-      {/* Header and Fact List */}
-      <DetailGrid
-        railSide="end"
-        rail={
-          <FactList
-            facts={[
-              { label: "Vendor", value: <span className="font-mono">{vendorId}</span> },
-              {
-                // One scope fact, not two: "Repository scope" and "Findings counted over"
-                // carried the same value under different labels, which reads as two facts.
-                label: "Findings counted over",
-                value: <span className="font-mono">{repoId}</span>,
-              },
-              {
-                label: "Changes counted over",
-                value: "The vendor, never a repository",
-              },
-            ]}
-          />
-        }
-      >
-        <div className="flex min-w-0 flex-col gap-section">
-          <p className="max-w-prose text-body text-muted-foreground">
-            Every operation <span className="font-mono">{repoId}</span> calls on {vendorId}, then
-            the vendor&rsquo;s own record in the tabs beneath: what it published, what is open
-            against it here, and where its spec is read from.
-          </p>
+    <ScreenFrame layout="locked" status={status} title={vendorName(vendorId)} subtitle={QUESTION}>
+      {/* Portals into the chassis stats bar, so it costs the locked column no height. */}
+      <KpiStrip
+        items={[
+          {
+            label: "Call sites here",
+            value: figure(operations, callSites),
+            note: `Static evidence — call sites the last index pass found in ${repoId} binding this vendor. Not calls, and not traffic.`,
+          },
+          {
+            // A denominator on screen rather than a percentage, and no figure at all when any
+            // operation went unmeasured: "1 of 5" over a set where only four were looked at is a
+            // claim about five, and a reader cannot see which four.
+            label: "Traffic confirmed",
+            value:
+              summary === null ? (
+                queryMarker(operations)
+              ) : summary.kind === "counted" ? (
+                `${summary.confirmed.toLocaleString()} of ${summary.total.toLocaleString()} ops`
+              ) : summary.kind === "never-measured" ? (
+                <Absent>never measured</Absent>
+              ) : (
+                <Absent>no operations</Absent>
+              ),
+            note:
+              summary === null || summary.kind === "counted"
+                ? "Operations a span named, against every operation this codebase calls on the vendor. Observed evidence, reported beside the static count and never blended into it."
+                : summary.why,
+          },
+          {
+            label: "Open findings here",
+            value: figure(findings, findings.data?.severity_total ?? null),
+            note: `Open findings against this vendor in ${repoId}, counted before any narrowing on this screen.`,
+          },
+          {
+            label: "Vendor change rows",
+            value: figure(volume, volume.data?.total_changes ?? null),
+            note: "Every change row Sync holds for this vendor, in every repository. Recorded at least once rather than exactly once, so this is a count of rows the feed produced and not a measurement of how often the vendor changed something.",
+          },
+        ]}
+      />
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-section">
+        {/* The subject line: the key every URL and join uses, and the scope split the four panes
+            below disagree about on purpose. `shrink-0` because the grid under it claims `flex-1`
+            and a header without it is compressed rather than keeping its own height. */}
+        <div
+          data-testid="vendor-identity"
+          className="flex shrink-0 flex-wrap items-center gap-section rounded-surface border border-line bg-card px-section py-row text-meta"
+        >
+          <span className="flex min-w-0 items-center gap-row">
+            <VendorMark vendorId={vendorId} />
+            <code className="font-mono break-all text-ink select-all">{vendorId}</code>
+          </span>
+          <span className="flex min-w-0 items-center gap-field text-ink-muted">
+            Call sites, operations and findings counted in{" "}
+            <code className="font-mono break-all text-ink">{repoId}</code> · changes and the adapter
+            counted over the vendor, in every repository
+            <InfoHint label="About the two scopes on this screen">
+              A vendor publishes a change once, to everyone, so its changes feed and its adapter
+              record are the same whichever repository you reached them from. What this codebase
+              calls, and what is open against it, are facts about this repository alone. The two are
+              never added together, and every figure on this screen belongs to one of them.
+            </InfoHint>
+          </span>
         </div>
-      </DetailGrid>
 
-      <div data-testid="vendor-exposure">
-        <VendorExposureCard vendorId={vendorId} repoId={repoId} />
-      </div>
+        {/* Three tracks stacked below `xl`, two columns at it: the subject pane and the record take
+            the slack, the rail is fixed at the 22rem this console already uses for one. The rows are
+            declared rather than left implicit — an implicit row is sized by its content before the
+            `fr` rows divide what is left, which is what collapsed two panes to 131px and 87px on
+            another screen. */}
+        <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,3fr)] gap-section xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-[minmax(0,2fr)_minmax(0,3fr)]">
+          <VendorOperationsPane
+            vendorId={vendorId}
+            repoId={repoId}
+            data={operations.data}
+            isPending={operations.isPending}
+            error={operations.isError ? operations.error : null}
+            onRetry={() => void operations.refetch()}
+          />
 
-      <div className="flex flex-col gap-8" data-testid="vendor-panels">
-        {panel === "changes" && <VendorChangesCard vendorId={vendorId} repoId={repoId} />}
-        {panel === "findings" && (
-          <>
-            <VendorFindingsControls vendorId={vendorId} repoId={repoId} />
-            <VendorFindingsCard vendorId={vendorId} repoId={repoId} />
-          </>
-        )}
-        {panel === "sources" && <VendorSourcesCard vendorId={vendorId} repoId={repoId} />}
+          {/* The rail spans both rows at `xl` and stacks into its own two panes below it. One grid
+              item either way, which is what keeps the base layout at three rows rather than four. */}
+          <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-section xl:row-span-2">
+            <VendorIntakePane vendorId={vendorId} />
+            <VendorPublishingPane vendorId={vendorId} />
+          </div>
+
+          <VendorRecordPane
+            vendorId={vendorId}
+            repoId={repoId}
+            record={record}
+            onRecord={(next) => setRecord(next === "changes" ? null : next)}
+          />
+        </div>
       </div>
-      </section>
     </ScreenFrame>
   )
+}
+
+/** A read still in flight, or one that failed — never a nought standing in for either. */
+function queryMarker(query: { isPending: boolean }) {
+  return query.isPending ? <Pending /> : <Absent>not answered</Absent>
+}
+
+/** A counted figure, or which nothing stands in its place. */
+function figure(query: { isPending: boolean }, value: number | null) {
+  if (value === null) return queryMarker(query)
+  return value.toLocaleString()
 }

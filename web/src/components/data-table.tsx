@@ -50,9 +50,15 @@ export function TableHeader({
 }) {
   return (
     <VendoredHeader
+      // The sticky fill is spelled last because `cn` is tailwind-merge: two `[&_tr]:bg-*` classes
+      // are one property and the later wins. Written first, the opaque step was silently dropped
+      // and every pinned head in the console rendered at 3.29% alpha — measured in Chrome on the
+      // changes feed 2026-08-26, `background-color: oklch(0.95 0.00275 159 / 0.032895)` on the
+      // head row, which is the exact defect the prop was written to prevent.
       className={cn(
+        "[&_tr]:border-b [&_tr]:bg-surface-subtle",
         sticky && "sticky top-0 z-10 [&_tr]:bg-secondary",
-        "[&_tr]:border-b [&_tr]:bg-surface-subtle", className)}
+        className)}
       {...props}
     />
   )

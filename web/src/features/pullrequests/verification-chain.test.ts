@@ -60,6 +60,44 @@ describe("verificationChain", () => {
     expect(chain.map((c) => c.state)).toEqual(["failed", "failed"])
   })
 
+  it("does not read a run that never reached the customer's CI as one waiting on it", () => {
+    // Measured on the running console 2026-08-26: a `reported` run — routing decided no patch was
+    // warranted, so nothing was ever attempted — rendered "This run is waiting on the customer's
+    // CI." Its `await_ci` node stands at `never_reached`, and only `not_reached_yet` counted as
+    // unreached, so four of the five standings fell through to waiting. Waiting is a claim about a
+    // run that got there; this one never did.
+    const chain = verificationChain([node("await_ci", {}, "never_reached")])
+
+    expect(chain[1].state).toBe("not_reached")
+  })
+
+  it("treats a node the graph still owes a visit as unreached rather than waiting", () => {
+    // `due` is `node-standing.ts`'s word for a visit the graph owes, not a visit it made.
+    const chain = verificationChain([node("await_ci", {}, "due")])
+
+    expect(chain[1].state).toBe("not_reached")
+  })
+
+  it("still reads a node holding a ci_url as waiting, whatever its standing says", () => {
+    // The parked case this module exists for: the run reached the forge, recorded the CI run's
+    // address, and the verdict has not arrived.
+    const chain = verificationChain([
+      node("await_ci", { ci_url: "https://ci.example/run/1" }, "never_reached"),
+    ])
+
+    expect(chain[1].state).toBe("waiting")
+  })
+
+  it("refuses a CI result outside its vocabulary rather than guessing which verdict it is", () => {
+    // Measured on the running console 2026-08-26: the console fixture writes `success`, the
+    // pipeline writes `passed`, and `success` fell through to waiting — a run holding a recorded
+    // verdict rendered as one still waiting for it. An unknown value is unknown.
+    const chain = verificationChain([node("await_ci", { attempt_ci_result: "success" })])
+
+    expect(chain[1].state).toBe("unknown")
+    expect(chain[1].detail).toContain("success")
+  })
+
   it("gives every state a detail sentence that is not a restatement of the label", () => {
     // The state is legible without its colour only if the words carry it. A detail that repeats
     // the label leaves colour doing the work, which is the refusal in CLAUDE.md.

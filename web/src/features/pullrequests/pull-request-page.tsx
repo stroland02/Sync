@@ -1,83 +1,75 @@
 /**
- * The Pull Request level: the remediation run's evidence bundle, with its own address.
+ * The Pull Request level: one proposed change, and everything that checked it, in one locked view.
  *
- * Specified at `docs/superpowers/specs/2026-07-25-sync-self-maintaining-apis-design.md:442`
- * as "Pull Request — with its evidence bundle", beneath Solution Workflow. Until this file,
- * the whole of that bundle was `pr_url`, one row inside the workflow's node-by-node view
- * (`features/workflows/evidence.tsx:131`) — a link, not a destination a reviewer could send
- * a colleague. This page is that destination, reading the same run `useWorkflow` already
- * fetches and showing the five nodes that answer "does this deserve a merge", in the graph's
- * own order.
+ * **Rebuilt 2026-08-26 against `docs/stitch_sync_developer_console/.../ai_driven_incident_resolution_workflow/`.**
+ * The screen it replaces was a `DetailGrid` — a 360px fact rail beside one long scrolling column
+ * holding a patch panel, an outcome panel and a five-stage bundle, in that order, at flow layout.
+ * Three panes now: the change on the left, how the run ended and the stage-by-stage bundle stacked
+ * on the right, each scrolling its own body under a header that holds still. The page itself does
+ * not scroll.
  *
- * It needs no route the console does not already have: `GET /api/workflows/{finding_id}` is
- * the only transport this level reads, because the evidence bundle is a subset of the same
- * eight-node payload the Solution Workflow page renders in full.
+ * **The composition is the reference's lower half, inverted.** The reference stacks *Proposed Fix*,
+ * *Verification Results* and *Implementation Status* down one column beside an evidence timeline;
+ * here the patch is the subject rather than an output beside evidence, so it takes the wide half
+ * and the record of what happened to it stacks beside it. Two screens already took that reference's
+ * top-level evidence/remediation split (`finding-page.tsx`, `workflow-page.tsx`); taking it a third
+ * time would have made a third screen that looks like the other two.
  *
- * ## Ported onto the vendored substrate by M7-W180
+ * **Owner decision 47 is now structural rather than positional.** The verification chain was
+ * *beneath* the diff in one scrolling column, which is only "not behind anything" until the diff is
+ * sixty lines long. It is pinned in the change pane's foot: it cannot be scrolled away from the
+ * patch it judges, and it is still not a disclosure, not a tooltip and not a tab.
  *
- * `docs/superpowers/briefs/2026-08-07-substrate-pull-request.md` is the mapping table this port was
- * gated on. Read that before porting a level, not this docstring.
+ * **What the reference asks for here and this refuses.** `Overall Agent Confidence 98%` and its
+ * progress bar — a composite scalar averaging distinct checks, rejected three times on the record.
+ * The two checks are reported separately, `tsc` compiled is not the customer's CI, and the absence
+ * of a combined figure is stated on screen rather than merely arranged for. Also refused: the
+ * `Agent Active` pulse in the reference's pane header (a liveness claim no checkpoint supports —
+ * a run parked on the customer's CI writes no checkpoint for as long as that takes, and a run whose
+ * process died writes the same nothing), and the `Apply Fix & Deploy` / `Escalate to On-Call` /
+ * `Dismiss` action bar, because nothing reaches a deploy, a page or a dismissal from a click here.
+ * What survives of that bar is the one destination this screen genuinely offers, in the header.
  *
- * **The fact rail is a left column, taken from the standing ruling rather than argued again.** The
- * Finding level placed one there and the controller settled it for every detail level: 360px, the
- * page header inside it, the content column beside it from the top of the page, one column below
- * `lg`.
- *
- * **The rail's number and branch are lifted out of node evidence, so the lift has a test.**
- * `WorkflowState` carries neither; both are keys inside `nodes[].evidence`, which is
- * `Record<string, unknown>` and promises nothing. `bundle-facts.ts` owns that read, the boundary
- * check on the pull request's address, and the short absence phrase each row wears when the run has
- * no number or no branch to show.
- *
- * **Three of the six facts the direction's rail asks for are not on this payload and none is
- * invented.** The run's state is the outcome panel standing level with the rail, so a row for it
- * would be one fact twice. There is no timestamp anywhere on this route, which is B123. And the
- * repository is B125: the checkpoint carries `repo` on every run and `workflow_state` forwards
- * eleven other channel values and not that one — cutting a repository name out of the pull request's
- * URL would be pattern-matching a forge address the payload never labelled.
- *
- * ## The header spans both columns, and the title is the bundle's own name, by M7-W193
- *
- * It was inside the 360px rail with the finding's 32-character identifier at the display step. The
- * title is now `#number · branch`, from the two facts `bundle-facts.ts` already lifts, and it states
- * the absence — in that module's own outcome-keyed words — when a run pushed nothing or opened
- * nothing. The rail keeps both rows: the title names the subject, and the rows say which nothing
- * each part is, which is a longer answer than a title can carry.
- *
- * ## On `ScreenFrame`
- *
- * "Open the pull request" left the rail for the controls band: it is the one destination this
- * screen offers and the band is where a screen's destinations live, so a reader no longer has to
- * reach the bottom of a fact list to find the forge. Its qualifying sentence travels with it.
+ * **Three facts the reference's header carries are not on this payload and none is invented.**
+ * There is no timestamp anywhere on this route (B123); the repository is B125 — the checkpoint
+ * carries `repo` on every run and `workflow_state` forwards eleven other channel values and not
+ * that one; and this route reads the LangGraph checkpointer rather than the graph, so there is no
+ * `indexed_at` and no binding rung, which the status band says rather than leaving to be inferred.
  */
 
 import type { ReactNode } from "react"
-import { Link, useParams } from "react-router"
+import { FileDiff, Flag, ListChecks } from "lucide-react"
+import { useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
-import { workspacePath } from "@/features/findings/workspace-path"
-import { WORKFLOW_POLL_MS, usePatch, useWorkflow } from "@/api/queries"
-import type { WorkflowNode, WorkflowState } from "@/api/types"
-import { type Fact, FactList } from "@/components/fact-list"
-import { Pending } from "@/features/findings/pending"
+import { WORKFLOW_POLL_MS, useDismissal, usePatch, useWorkflow } from "@/api/queries"
+import type { PatchResponse, WorkflowNode } from "@/api/types"
+import { KpiStrip } from "@/components/kpi-strip"
+import { PanelPane } from "@/components/pane"
+import { InfoHint } from "@/components/info-hint"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
 import { Absent } from "@/components/status"
+import { Tag } from "@/components/tag"
 import { Button } from "@/components/ui/button"
-import {
-  type BundleFacts,
-  bundleFacts,
-  noBranchPhrase,
-  noPullRequestPhrase,
-} from "@/features/pullrequests/bundle-facts"
+import { DetailSection } from "@/features/findings/detail-section"
+import { HumanRuling, rulingWord, type RulingState } from "@/features/findings/human-ruling"
+import { Pending } from "@/features/findings/pending"
+import { bundleFacts } from "@/features/pullrequests/bundle-facts"
+import { BundleHeader } from "@/features/pullrequests/bundle-header"
+import { CheckTile } from "@/features/pullrequests/check-tile"
 import { BUNDLE_STAGES, EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
-import { PatchPanel } from "@/features/pullrequests/patch-panel"
-import { VISIBLE_DIFF_LINES } from "@/features/pullrequests/patch-parts"
+import {
+  Diff,
+  PatchStat,
+  PatchTargetList,
+  VISIBLE_DIFF_LINES,
+} from "@/features/pullrequests/patch-parts"
+import { verificationChain } from "@/features/pullrequests/verification-chain"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
-import { DetailGrid } from "@/layouts/detail-grid"
+import { Pane, PaneScroll } from "@/layouts/pane"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
-
 
 export interface PullRequestPageProps {
   readonly question?: string
@@ -86,9 +78,7 @@ export interface PullRequestPageProps {
 export function PullRequestPage() {
   // Both identifiers come out of the URL, so both are checked before a request is made for them.
   // `repoId` was carried through unchecked and `workspacePath(undefined)` is `/repositories/`, so
-  // this screen's three workspace links resolved to an address that renders "No screen at this
-  // address" — the exact failure `workspace-path.ts` was written for, on a route whose registry
-  // entry declares `params: ["repoId", "findingId"]`.
+  // this screen's workspace links resolved to an address that renders "No screen at this address".
   const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (repoId === undefined || findingId === undefined) return <UnknownRoute />
   return <PullRequest repoId={repoId} findingId={findingId} />
@@ -97,121 +87,21 @@ export function PullRequestPage() {
 /**
  * What `RunOutcome` may say about this screen, which renders five of the run's eight nodes.
  *
- * `locate`, `prepare` and `patch` are deliberately not here, so nothing below this panel may
- * be described as the attempt in full — and the node the workflow screen calls `open_pr` is
- * labelled "The pull request" here, so naming the channel would send a reader looking for a
- * heading that is not on this page.
+ * `locate`, `prepare` and `patch` are deliberately not here, so nothing beside this panel may be
+ * described as the attempt in full — and the node the workflow screen calls `open_pr` is labelled
+ * "The pull request" in the bundle, so naming the channel would send a reader looking for a heading
+ * that is not on this page.
  *
- * All four survived the port untouched. The Solution Workflow had to repoint three of its own
- * because its outcome moved into the sequence; nothing moved here, so "below" and "above" are still
- * true of this screen's geometry.
+ * The words moved from "below" to "beside" with the panel: the outcome no longer sits above the
+ * bundle in one column, it sits in a pane next to it, and a sentence claiming a direction the
+ * layout does not have is the same defect at a smaller scale.
  */
-const BELOW: BelowThisPanel = {
-  inFlight: `The five nodes below are the last state the checkpointer recorded for them, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
+const BESIDE: BelowThisPanel = {
+  inFlight: `The five stages beside this are the last state the checkpointer recorded for them, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
   abandoned:
-    "The five nodes below carry however far the evidence got; locate, prepare and patch are not among them, and the solution workflow shows all eight.",
-  opened: "The pull request itself is the last of the five panels below.",
-  unrecognised: "The five nodes below are still what the run produced.",
-}
-
-/**
- * The bundle's own facts, in the rail beside the evidence.
- *
- * Three states per fact and they are three different claims, the same three every ported detail
- * level spells: `<Pending>` writes the word where the value goes while the query is in flight,
- * `<Absent>` says it failed, and a value is
- * a value. The finding is answered by the URL rather than by the query, so it never wears either.
- *
- * There is no State row on purpose. `RunOutcome` renders the run's disposition as the first thing
- * in the content column, at `h2`, level with this rail — a word for it here as well would be the
- * same fact twice a few inches apart, which is the defect the Fleet port's ruling 2 named.
- */
-function railFacts(
-  data: WorkflowState | undefined,
-  facts: BundleFacts,
-  failure: ReactNode | null,
-  repoId: string,
-  findingId: string,
-): Fact[] {
-  function fact(render: (state: WorkflowState) => ReactNode): ReactNode {
-    if (data !== undefined) return render(data)
-    if (failure !== null) return failure
-    return <Pending />
-  }
-
-  return [
-    {
-      label: "Finding",
-      value: (
-        <Link
-          to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}`}
-          className="underline underline-offset-2"
-        >
-          <code className="font-mono text-meta break-all select-all">{findingId}</code>
-        </Link>
-      ),
-    },
-    {
-      label: "Repository",
-      value: fact((state) =>
-        state.repo_id === null ? (
-          <Absent>unknown</Absent>
-        ) : (
-          <Link
-            to={`/repositories/${encodeURIComponent(state.repo_id)}`}
-            className="underline underline-offset-2"
-          >
-            <code className="font-mono text-meta break-all">{state.repo_id}</code>
-          </Link>
-        ),
-      ),
-    },
-    {
-      label: "Pull request",
-      value: fact((state) =>
-        facts.prNumber === null ? (
-          <Absent>{noPullRequestPhrase(state.outcome)}</Absent>
-        ) : (
-          <span className="font-mono">#{facts.prNumber}</span>
-        ),
-      ),
-    },
-    {
-      label: "Branch",
-      value: fact((state) =>
-        facts.branch === null ? (
-          <Absent>{noBranchPhrase(state.outcome)}</Absent>
-        ) : (
-          <span className="font-mono break-words">{facts.branch}</span>
-        ),
-      ),
-    },
-    {
-      label: "Run",
-      value: fact((state) => (
-        <code className="font-mono text-meta break-all select-all">{state.thread_id}</code>
-      )),
-    },
-    {
-      label: "Generations",
-      value: fact((state) => (
-        <div className="flex flex-col gap-field">
-          <span className="font-mono">{state.generation_count}</span>
-          {state.generation_count > 1 && (
-            <span className="text-meta text-ink-muted">
-              This is the most recent of {state.generation_count} runs the checkpointer holds for
-              this finding. An earlier generation may have reached a pull request even where this one
-              has not;{" "}
-              <Link to={workspacePath(repoId)} className="underline underline-offset-2">
-                the codebase overview
-              </Link>{" "}
-              lists every one.
-            </span>
-          )}
-        </div>
-      )),
-    },
-  ]
+    "The five stages beside this carry however far the evidence got; locate, prepare and patch are not among them, and the solution workflow shows all eight.",
+  opened: "The pull request itself is the last of the five stages beside this.",
+  unrecognised: "The five stages beside this are still what the run produced.",
 }
 
 /**
@@ -229,26 +119,50 @@ function nodesReached(nodes: WorkflowNode[]): number {
   }).length
 }
 
-/** The window `PatchPanel` draws, counted for the band rather than restated by it. */
+/** The window `Diff` draws, counted for the band rather than restated by it. */
 function diffWindow(diff: string): string {
   const total = diff.split("\n").length
   return `${Math.min(total, VISIBLE_DIFF_LINES).toLocaleString()} of ${total.toLocaleString()}`
 }
 
-function PullRequest({
-  repoId,
-  findingId,
-}: {
-  repoId: string
-  findingId: string
-}) {
+/**
+ * A top-bar cell truncates, so every absence published there is short.
+ *
+ * The long form of each — which nothing it is, in a sentence — stays visible on the screen: the
+ * header states the pull request's own absence in the outcome's words, and the change pane states
+ * the patch's.
+ */
+function shortPatchFact(
+  patch: ReturnType<typeof usePatch>,
+  read: (data: PatchResponse) => ReactNode,
+): ReactNode {
+  if (patch.data !== undefined) return read(patch.data)
+  if (patch.isError) {
+    return patch.error instanceof NotFoundError ? (
+      <Absent>no run recorded</Absent>
+    ) : (
+      <Absent>not answered</Absent>
+    )
+  }
+  return <Pending />
+}
+
+function PullRequest({ repoId, findingId }: { repoId: string; findingId: string }) {
   const query = useWorkflow(findingId)
   const data = query.data
   const facts = bundleFacts(data?.nodes ?? [])
-  // The patch panel's own key, so the diff figure reads the answer already on screen rather than
-  // opening a second request for it — and so the figure is gated on the query it counts rather
-  // than on the run's.
+  // One read for the whole screen: the change pane draws it, the status band counts its window and
+  // the top bar states its file count, and three components each opening their own request is three
+  // chances for the figure and the diff beneath it to describe different payloads.
   const patch = usePatch(findingId)
+  // Not gated on the run either. `finding_dismissal` is durable and the checkpointer is a different
+  // database again, so a finding whose run 404s can still carry a standing somebody recorded.
+  const dismissalQuery = useDismissal(findingId)
+  const dismissal: RulingState = dismissalQuery.isPending
+    ? "pending"
+    : dismissalQuery.isError
+      ? "failed"
+      : dismissalQuery.data
 
   const failure = query.isError ? (
     query.error instanceof NotFoundError ? (
@@ -267,7 +181,7 @@ function PullRequest({
         ? "did not answer"
         : "still asking"
       : patch.data.diff === null
-        ? "no diff on this run — the patch panel says which nothing that is"
+        ? "no diff on this run — the change pane says which nothing that is"
         : "of the patch this run produced; the rest are on the branch named above"
 
   const status: StatusSegment[] =
@@ -301,110 +215,276 @@ function PullRequest({
             scope: diffScope,
           },
           {
-            kind: "figure",
-            label: "Generation",
-            value: `${data.generation_count.toLocaleString()} of ${data.generation_count.toLocaleString()}`,
-            // The pointer is gated the way the rail's own caveat is: at one generation there is
-            // no earlier one, and naming a list of them sends a reader after something absent.
-            scope:
-              data.generation_count > 1
-                ? "this page is the newest generation the checkpointer holds for this finding; " +
-                  "any earlier one is listed on the codebase overview"
-                : "the only generation the checkpointer holds for this finding",
-          },
-          {
             kind: "note",
             text:
-              "Read from the LangGraph checkpointer rather than the graph — two databases — so " +
-              "this route carries no indexed_at and no binding rung: nothing on this screen is " +
-              "dated by an index run or attributed to an evidence rung.",
+              "Read from the LangGraph checkpointer, a different database from the graph: nothing " +
+              "here is dated by an index run or attributed to a binding rung.",
           },
         ]
 
-  // Omitted rather than emptied when the run opened nothing: the frame reserves no height for a
-  // band it is not given.
-  const controls =
-    facts.prUrl !== null ? (
-      <p className="text-body">
-        <a
-          href={facts.prUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="underline underline-offset-2"
-        >
-          Open the pull request
-        </a>{" "}
-        <span className="text-muted-foreground">
-          — leaves the console for the forge it was opened on.
-        </span>
-      </p>
-    ) : undefined
-
   return (
-    <ScreenFrame controls={controls} status={status}>
-    <DetailGrid
-      rail={
-        <div className="flex min-w-0 flex-col gap-section">
-          <FactList facts={railFacts(data, facts, failure, repoId, findingId)} />
-
-          <p className="text-body text-muted-foreground">
-            Read from the checkpointer, the same source as{" "}
-            <Link
-              to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow`}
-              className="underline underline-offset-2"
-            >
-              the solution workflow
-            </Link>
-            , which shows all eight nodes; this page shows the five that carry the evidence a pull
-            request rests on.
-          </p>
-        </div>
-      }
+    <ScreenFrame
+      layout="locked"
+      status={status}
+      subtitle="One proposed change, what checked it, where it went, and where a human ruling stands."
     >
-      <div className="flex min-w-0 flex-col gap-8">
-        {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+      {/* Portals into the chassis stats bar, so it draws nothing in place and costs the locked
+          column no height. None of the three restates a status-band figure: the band counts the
+          bundle's stages and the diff's window, and these three are facts the band does not carry. */}
+      <KpiStrip
+        items={[
+          {
+            label: "Files changed",
+            value: shortPatchFact(patch, (found) =>
+              found.stat === null ? (
+                <Absent>no diff on this run</Absent>
+              ) : (
+                found.stat.files_changed.toLocaleString()
+              ),
+            ),
+            note: "files the patch this run produced touches, counted from the diff itself",
+          },
+          {
+            label: "Human ruling",
+            value:
+              rulingWord(dismissal) ??
+              (dismissal === "failed" ? (
+                <Absent>not answered</Absent>
+              ) : (
+                <Pending />
+              )),
+            note: "whether anybody has dismissed this finding; dismissing is a command-line action",
+            figure: false,
+          },
+          {
+            label: "Generations",
+            // Three absences, not one: nothing has answered, the checkpointer holds no run for
+            // this finding, and the request failed. A cell that truncates gets the short form of
+            // each; the header and the pane beneath carry them in full.
+            value:
+              data !== undefined ? (
+                data.generation_count.toLocaleString()
+              ) : query.isError ? (
+                query.error instanceof NotFoundError ? (
+                  <Absent>no run recorded</Absent>
+                ) : (
+                  <Absent>not answered</Absent>
+                )
+              ) : (
+                <Pending />
+              ),
+            note: "runs the checkpointer holds for this finding; this page reads the newest",
+          },
+        ]}
+      />
 
-        {data === undefined &&
-          query.isError &&
-          (query.error instanceof NotFoundError ? (
-            <div className="flex flex-col items-start gap-section">
-              <NotFoundState
-                headline="No remediation run for this finding, so there is no pull request."
-                detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-                identifier={query.error.identifier}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={query.isFetching}
-                onClick={() => void query.refetch()}
+      {/* One column rather than three children of the content band: the header states what this
+          bundle is and the panes hang beneath it, so the gap between them is `section` rather than
+          the band's 32px — which at 1366×768 is a fifth of what the panes have to divide. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-section">
+        <BundleHeader
+          repoId={repoId}
+          findingId={findingId}
+          data={data}
+          facts={facts}
+          failure={failure}
+        />
+
+        {data === undefined ? (
+          <Pane className="rounded-surface border border-line bg-card">
+            <PaneScroll className="flex flex-col items-start gap-section p-section">
+              {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+
+              {query.isError &&
+                (query.error instanceof NotFoundError ? (
+                  <>
+                    <NotFoundState
+                      headline="No remediation run for this finding, so there is no pull request."
+                      detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+                      identifier={query.error.identifier}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={query.isFetching}
+                      onClick={() => void query.refetch()}
+                    >
+                      {query.isFetching ? "Asking…" : "Check again"}
+                    </Button>
+                  </>
+                ) : (
+                  <ErrorState
+                    error={query.error}
+                    what={`the run for finding ${findingId}`}
+                    onRetry={() => void query.refetch()}
+                  />
+                ))}
+            </PaneScroll>
+          </Pane>
+        ) : (
+          /* `min-h-0` on the row and on every pane is what makes the panes scroll instead of the
+             column growing. Below `xl` it stacks and each pane still owns its own scroll: a locked
+             screen stamps `data-screen="locked"` at every width, so a stack that expected the page
+             to scroll would be clipped instead, and clipping is the one outcome that lies. */
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-section xl:flex-row">
+            <ChangePane patch={patch} nodes={data.nodes} />
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-section xl:flex-[5]">
+              <PanelPane
+                label="How this run ended"
+                icon={Flag}
+                bodyClassName="flex min-w-0 flex-col gap-section p-section"
               >
-                {query.isFetching ? "Asking…" : "Check again"}
-              </Button>
+                <RunOutcome
+                  outcome={data.outcome}
+                  abandonReason={data.abandon_reason}
+                  reportReason={data.report_reason}
+                  below={BESIDE}
+                  frame="entry"
+                />
+
+                <DetailSection
+                  heading="Where the human ruling stands"
+                  hintLabel="About the standing"
+                  hint="Dismissing is a command-line action and this console reads the record. A finding somebody deliberately set aside and one nobody has opened are different facts, and without this a pull request open against each would render as the same screen."
+                >
+                  <HumanRuling state={dismissal} />
+                </DetailSection>
+              </PanelPane>
+
+              <PanelPane
+                label="The evidence bundle"
+                // The bundle holds five stages of evidence against the outcome pane's two blocks,
+                // so it takes twice the column. Equal shares gave it an 88px body over 843px of
+                // content at 1366×768 — measured, not guessed.
+                icon={ListChecks}
+                className="flex-[2]"
+                hint={
+                  <InfoHint label="About the five stages">
+                    The five nodes of the remediation graph that answer whether a patch earned a
+                    merge, in the graph&#39;s own order. What each node is is described on the
+                    solution workflow, which shows all eight; what is here is each one&#39;s verdict.
+                  </InfoHint>
+                }
+                bodyClassName="flex min-w-0 flex-col gap-section p-section"
+              >
+                <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
+              </PanelPane>
             </div>
-          ) : (
-            <ErrorState error={query.error} what={`the run for finding ${findingId}`} onRetry={() => void query.refetch()} />
-          ))}
-
-        {data !== undefined && (
-          <>
-            {/* Decision 47: the diff leads. Before this a reviewer could read every verdict
-                about a patch on this screen without ever seeing the patch, and the
-                verification chain that follows it is what makes the verdicts worth reading. */}
-            <PatchPanel findingId={findingId} nodes={data.nodes} />
-
-            <RunOutcome
-              outcome={data.outcome}
-              abandonReason={data.abandon_reason}
-              reportReason={data.report_reason}
-              below={BELOW}
-            />
-
-            <EvidenceBundle nodes={data.nodes} outcome={data.outcome} />
-          </>
+          </div>
         )}
       </div>
-    </DetailGrid>
     </ScreenFrame>
   )
 }
+
+/**
+ * The change itself, with what checked it pinned beneath.
+ *
+ * The chain is the pane's foot rather than the last thing in its body, and that is owner decision
+ * 47 read structurally: a reader who has to scroll past sixty lines of diff to discover whether
+ * anything verified the change is being asked for exactly the faith this console exists to refuse.
+ * A foot cannot scroll away from the body above it.
+ *
+ * **The target travels with the diff** because a diff shown alone is the shape a reader mistakes
+ * for a change that has already landed in their repository. It renders outside the diff branch: a
+ * branch or a pull request can exist on a checkpoint that no longer carries the patch, and the
+ * target is the half that says where the change went.
+ */
+function ChangePane({
+  patch,
+  nodes,
+}: {
+  patch: ReturnType<typeof usePatch>
+  nodes: WorkflowNode[]
+}) {
+  const chain = verificationChain(nodes)
+
+  return (
+    <PanelPane
+      className="xl:flex-[7]"
+      label="The change"
+      icon={FileDiff}
+      hint={
+        <InfoHint label="About the proposed patch">
+          The patch the newest run produced, as the checkpointer holds it. Nothing on this screen
+          applies it: the console reads the record, and the runner is what writes to a repository.
+        </InfoHint>
+      }
+      actions={
+        patch.data === undefined ? undefined : (
+          <>
+            {patch.data.strategy !== null && <Tag>{patch.data.strategy}</Tag>}
+            <PatchStat stat={patch.data.stat} />
+          </>
+        )
+      }
+      bodyClassName="flex min-w-0 flex-col gap-section p-section"
+      footerClassName="h-auto flex-col items-stretch gap-row px-section py-row text-body text-ink"
+      footer={
+        <>
+          {/* Heading and disclaimer share one line: this foot is pinned, so every row it takes
+              is a row the diff above it does not get, and at 1366×768 the pane has 287px total. */}
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-row gap-y-field">
+            <h3 className="text-section">What checked it</h3>
+            <InfoHint label="About the two checks">
+              Two gates the pipeline records: whether the patched tree compiled, and what the
+              customer&#39;s own CI said. They are reported separately because averaging them would
+              put &ldquo;we could not check&rdquo; on the same axis as &ldquo;we checked and it
+              passed&rdquo;, which is the collapse this console exists to replace.
+            </InfoHint>
+            {/* Stated rather than merely arranged for. A reader cannot see a figure that is not
+                there, and the absence of one is the claim this screen most needs to make. */}
+            <p className="min-w-0 text-meta text-ink-muted">
+              Two checks, reported separately — no combined figure. <code>tsc</code> compiling is
+              not the customer&#39;s CI.
+            </p>
+          </div>
+          <div data-testid="verification-chain" className="grid gap-row sm:grid-cols-2">
+            {chain.map((check) => (
+              <CheckTile key={check.label} check={check} />
+            ))}
+          </div>
+        </>
+      }
+    >
+      {patch.isPending && <Pending />}
+
+      {patch.isError &&
+        (patch.error instanceof NotFoundError ? (
+          /* One `instanceof` apart from the line below, and collapsing them reports a breakage
+             over a true answer about the finding. */
+          <p className="text-body">
+            <Absent>the checkpointer holds no run for this finding</Absent>
+          </p>
+        ) : (
+          <p className="text-body">
+            <Absent>the API did not answer for this patch</Absent>
+          </p>
+        ))}
+
+      {/* Outside the diff branch: a branch or a pull request can exist on a checkpoint that no
+          longer carries the patch, and the target is the half that says where the change went. It
+          is inside the answered branch because its own two rows read "this patch was never pushed",
+          which is a claim about a payload, not about a request still in flight. */}
+      {patch.data !== undefined && <PatchTargetList target={patch.data.target} />}
+
+      {patch.data !== undefined &&
+        (patch.data.diff !== null ? (
+          <>
+            {patch.data.rationale !== null && (
+              <p className="max-w-prose text-body text-ink-muted">{patch.data.rationale}</p>
+            )}
+            <Diff diff={patch.data.diff} />
+          </>
+        ) : (
+          /* Not an empty panel. Which kind of nothing this is comes from the payload, because a
+             run that decided against a patch, one that gave up, one whose checkpoint no longer
+             carries it and one still working are four facts and one sentence for all four is the
+             defect. */
+          <p className="max-w-prose text-body text-ink-muted">{patch.data.absent_because}</p>
+        ))}
+    </PanelPane>
+  )
+}
+

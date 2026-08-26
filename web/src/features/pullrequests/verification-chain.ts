@@ -98,9 +98,29 @@ function customerCi(node: WorkflowNode | undefined): Check {
       detail: "Sync stopped waiting for the customer's CI, so it never gave a verdict.",
     }
   }
-  // Null with a run that has reached the node is the parked case, and it is the one this module
-  // exists for: a run waiting on somebody else's CI must never read as a run that passed it.
-  if (node.standing !== "not_reached_yet" || node.evidence.ci_url !== undefined) {
+  // A recorded verdict this console does not know is not a verdict this console may guess at.
+  // Measured 2026-08-26 on the running console: `seed_console.py` writes `success` where the
+  // pipeline writes `passed`, and it fell through to `waiting` — a run holding a result rendered
+  // as one still waiting for it. `run-outcome.tsx` names the same rule at its own final branch.
+  if (result !== null && result !== undefined) {
+    return {
+      label,
+      state: "unknown",
+      detail: `The CI step recorded ${String(result)}, which is not a verdict this console recognises, so it cannot say whether the customer's suite accepted the patch.`,
+    }
+  }
+  // No result, and the question is whether the run ever got here. `ran` and `due_again` are the
+  // two standings that mean the graph executed the node; a recorded `ci_url` says the same thing
+  // whatever the standing claims. Everything else never arrived.
+  //
+  // Measured 2026-08-26: only `not_reached_yet` was excluded here, so `due`, `never_reached` and
+  // a payload's own unknown standing all read as *waiting on the customer's CI* — and a `reported`
+  // run, which never attempts a patch at all, said it was waiting on a suite it never called.
+  const reached =
+    node.standing === "ran" || node.standing === "due_again" || node.evidence.ci_url !== undefined
+  if (reached) {
+    // The parked case, and the one this module exists for: a run waiting on somebody else's CI
+    // must never read as a run that passed it.
     return {
       label,
       state: "waiting",

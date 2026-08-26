@@ -53,8 +53,12 @@ beforeEach(() => {
     // The page draws the change-unit roll-up beneath the feed, and that reads two more routes.
     // One stub answering every route with the changes page was what made this file go red when
     // the panel landed -- a fixture claiming a shape the endpoint it answers for does not have.
-    const body = url.pathname.startsWith("/api/change-units")
-      ? { items: [], total: 0, next_offset: null }
+    // The feed joins each change to the repository's call-site census, so that route needs its own
+    // shape here. One stub answering every route with the changes page is what made this file go
+    // red when the change-unit panel landed -- a fixture claiming a shape the endpoint does not
+    // have -- and the census is the same trap one route further on.
+    const body = url.pathname.endsWith("/call-sites")
+      ? { repo_id: "demo", items: [], total: 0, next_offset: null }
       : url.pathname.startsWith("/api/overview")
         ? {
             repo_id: "demo",
