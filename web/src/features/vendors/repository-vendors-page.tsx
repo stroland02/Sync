@@ -12,6 +12,11 @@
  * the never-measured marker. The owner ruled for that explicitly (`M14-W365`, ruling 2 of the first
  * round): build the page from what exists.
  *
+ * **"Add a vendor" is a drawer of text and not a form**, because the API is read-only and because
+ * a vendor does not become watched by being added to a list — it becomes watched when this
+ * codebase calls it and an index pass finds the call site. `add-vendor-drawer.tsx` carries the
+ * argument and both halves of the answer.
+ *
  * **The scope check is the load-bearing part.** `/api/overview` echoes the `repo_id` it was computed
  * for. A caller that ignores it can render the fleet's vendors under one repository's name, and this
  * console has shipped that defect before — `codebases-panel.tsx` printed the fleet-wide
@@ -35,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table"
+import { AddVendorDrawer } from "@/features/vendors/add-vendor-drawer"
 import { IntegrationsKpis } from "@/features/vendors/integrations-kpis"
 import { VendorCard } from "@/features/vendors/vendor-card"
 import { ScreenFrame } from "@/layouts/screen-frame"
@@ -92,11 +98,18 @@ export function RepositoryVendorsPage() {
   const viewMode: ViewMode = "cards"
   const tierFilter: TierFilter = "all"
 
-
+  // On every branch, including the two failures below, because "how do I add one?" is asked most
+  // often on a screen that came back empty or unanswered. The drawer reads the catalogue, which is
+  // a different question from the coverage read that failed here, so it still has an answer.
+  const controls =
+    repoId === undefined ? undefined : <AddVendorDrawer repoId={repoId} />
 
   if (coverage.isPending) {
     return (
-      <ScreenFrame status={[{ kind: "none", why: "asking which vendors this repository calls" }]}>
+      <ScreenFrame
+        controls={controls}
+        status={[{ kind: "none", why: "asking which vendors this repository calls" }]}
+      >
         <section className="flex flex-col gap-8">
           <LoadingState what="the vendors attached to this repository" />
         </section>
@@ -106,7 +119,10 @@ export function RepositoryVendorsPage() {
 
   if (coverage.isError) {
     return (
-      <ScreenFrame status={[{ kind: "none", why: "the index coverage did not answer" }]}>
+      <ScreenFrame
+        controls={controls}
+        status={[{ kind: "none", why: "the index coverage did not answer" }]}
+      >
         <section className="flex flex-col gap-8">
           <ErrorState
             error={coverage.error}
@@ -165,7 +181,7 @@ export function RepositoryVendorsPage() {
   // so "All (3) / Generated (3)" was a control offering one answer twice. The tier still shows
   // on each card, which is where a reader asks about one vendor rather than filtering by it.
   return (
-    <ScreenFrame status={status}>
+    <ScreenFrame controls={controls} status={status}>
     <section className="flex min-w-0 flex-col gap-8">
 
       {/* Dashboard I1. Above the scope check on purpose: the catalogue is its own read with its
