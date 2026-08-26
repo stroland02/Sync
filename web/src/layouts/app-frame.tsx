@@ -543,7 +543,7 @@ export function AppFrame() {
           either way, so nothing in CI would have told us which one shipped. */}
       <SidebarProvider
         defaultOpen={false}
-        className="flex h-svh overflow-hidden bg-background text-foreground"
+        className="flex h-full overflow-hidden bg-background text-foreground"
       >
         <AppSidebar pathname={pathname} />
 

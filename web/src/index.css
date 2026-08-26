@@ -494,3 +494,71 @@
     }
   }
 }
+
+/* Scrollbars — owner report 2026-08-25: "still white bars".
+   Nothing ever styled them, so every scroll region drew the platform's own light scrollbar over
+   a dark console. It is the one piece of chrome the browser owns and a dark-only application has
+   to claim: `color-scheme: dark` alone gets the form fields and the scrollbar's own arrows, and
+   the track and thumb still need naming.
+
+   Both syntaxes, deliberately. Firefox reads `scrollbar-color`; Chromium reads the pseudo
+   elements and ignores the first. No token is new -- the thumb is the same `input` step a
+   control's border takes, and it lifts to `ink-secondary` under a pointer. */
+@layer base {
+  :root {
+    color-scheme: dark;
+    scrollbar-color: var(--color-input) transparent;
+    scrollbar-width: thin;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-input);
+    border: 2px solid transparent;
+    border-radius: var(--radius-control);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-ink-secondary);
+  }
+
+  /* The square where two scrollbars meet, which otherwise draws in the platform's own light. */
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* The height chain — owner report 2026-08-25: the shell was shorter than the window on a
+   different monitor, leaving a black band beneath it.
+   
+   `html`, `body` and `#root` carried no height at all. The locked chassis asked for `100svh`,
+   which is viewport-relative and so appeared to work: measured at 1080, 1131, 864, 1440 and 768
+   it filled exactly, gap 0 every time. What that measurement could not see is display scaling.
+   Under Windows scaling or browser zoom the visual viewport and the layout viewport separate,
+   `svh` follows one of them, and the shell settles at a height nothing underneath it corrects.
+
+   A real chain has no such failure mode: each element is 100% of a parent that is 100% of the
+   window, so there is one source of truth rather than a unit that resolves differently per
+   device. `overflow: hidden` on the root is what stops a rounding remainder becoming a
+   document-level scrollbar over an app that already owns its own. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    overflow: hidden;
+  }
+}
+
