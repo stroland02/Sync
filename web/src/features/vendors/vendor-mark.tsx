@@ -78,7 +78,50 @@ export interface VendorMarkProps {
   readonly vendorId: string
 }
 
+/**
+ * Marks committed under `assets/vendors/`, by vendor id.
+ *
+ * **Owner ruling 2026-08-25**, amending the monogram-only rule above. Two of that ruling's three
+ * objections were about the *fetch*, not the logo: Clearbit learned which integrations each
+ * customer watched, and it made the console's appearance depend on a network nobody controls. A
+ * committed file does neither — this glob resolves at build time and reaches nothing at render.
+ *
+ * The third objection stands, which is why the directory ships empty: a vendor's logo is their
+ * trademark, and which marks Sync has the right to ship is the owner's call per vendor. A file
+ * that is present is used; a vendor with no file keeps the generated monogram, so the console
+ * never has a hole where a mark should be.
+ */
+const BUNDLED_MARKS = import.meta.glob("@/assets/vendors/*.svg", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>
+
+function markFor(vendorId: string): string | null {
+  const entry = Object.entries(BUNDLED_MARKS).find(([path]) =>
+    path.endsWith(`/${vendorId}.svg`)
+  )
+  return entry?.[1] ?? null
+}
+
 export function VendorMark({ vendorId }: VendorMarkProps) {
+  const mark = markFor(vendorId)
+
+  if (mark !== null) {
+    return (
+      <span
+        className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-line bg-surface-subtle"
+        data-testid="vendor-mark-logo"
+        // Hidden for the same reason the monogram is: the name is beside the mark everywhere it
+        // is used, and announcing the vendor twice reads worse than not announcing it here.
+        aria-hidden="true"
+        title={vendorName(vendorId)}
+      >
+        <img src={mark} alt="" className="size-4 object-contain" />
+      </span>
+    )
+  }
+
   return (
     <span
       className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-line"

@@ -48,12 +48,19 @@ describe("the palette slot", () => {
 })
 
 describe("what the mark renders", () => {
-  it("draws letters, never an image fetched from a third party", () => {
+  it("reaches no third party, whichever mark it draws", () => {
     const { container } = render(<VendorMark vendorId="stripe" />)
 
-    // The negative claim: that endpoint learned which integrations a customer watches, and the
-    // console's appearance depended on a network it does not control.
-    expect(container.querySelector("img")).toBeNull()
+    // The durable claim, and it is about the ORIGIN rather than the element. This asserted "no
+    // `img` at all" while the monogram was the only mark; bundling logos (owner ruling
+    // 2026-08-25) makes an `img` legitimate, so asserting its absence would now fail for a
+    // reason that has nothing to do with what the rule protects. What must never come back is a
+    // remote source: that endpoint learned which integrations a customer watches, and it made
+    // the console's appearance depend on a network nobody here controls.
+    for (const img of container.querySelectorAll("img")) {
+      const src = img.getAttribute("src") ?? ""
+      expect(src).not.toMatch(/^https?:|^\/\//)
+    }
     expect(screen.getByTestId("vendor-mark-monogram").textContent).toBe("S")
   })
 
