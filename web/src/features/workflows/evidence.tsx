@@ -314,6 +314,40 @@ function FieldValue({ field, value }: { field: Field; value: unknown }) {
 }
 
 /**
+ * Only the block-shaped evidence a node produced — compiler output, replay JSON — and none of its
+ * scalars.
+ *
+ * The remediation pane needs `static_verify`'s diagnostics without its `verify_ok` flag, because
+ * the verification chain directly above it has already put that verdict into a sentence. Rendering
+ * the full `NodeEvidence` there would state one fact twice at two weights, which is the objection
+ * `run-fact-rail.tsx` recorded before it was deleted.
+ *
+ * The two nothings `NodeEvidence` distinguishes are distinguished here too, and by the same
+ * mechanism: a key absent from the payload draws nothing at all, and a key present holding null
+ * draws the absence marker inside the block.
+ */
+export function NodeEvidenceBlocks({
+  name,
+  evidence,
+}: {
+  name: string
+  evidence: Record<string, unknown>
+}) {
+  const blocks = (FIELDS[name] ?? []).filter(
+    (field) => field.kind === "block" && field.key in evidence,
+  )
+  if (blocks.length === 0) return null
+
+  return (
+    <div className="flex min-w-0 flex-col gap-section">
+      {blocks.map((field) => (
+        <BlockField key={field.key} field={field} value={evidence[field.key]} />
+      ))}
+    </div>
+  )
+}
+
+/**
  * Everything one node produced.
  *
  * Keys the payload carries that this file does not name are still rendered, at the end and

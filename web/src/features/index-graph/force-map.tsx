@@ -36,7 +36,7 @@
  * every level and a map is not the exception; a file belongs to no vendor and stays ink.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import {
   forceCenter,
   forceCollide,
@@ -74,6 +74,14 @@ export interface ForceNode extends SimulationNodeDatum {
   weight: number
   /** Only on operation and vendor nodes. */
   vendorId?: string
+  /**
+   * The recorded path, on file nodes only. `label` is the basename and addresses nothing: our own
+   * screenshot of this map holds two nodes labelled `route.ts`, so an inspector keyed on the label
+   * would open one of them and claim it was the other.
+   */
+  path?: string
+  /** The recorded `operation_id`, on operation nodes only. */
+  operationId?: string
   /** The rungs the edges into this node carry, as words. */
   rungs?: string[]
 }
@@ -114,6 +122,7 @@ export function buildForceGraph(rows: RepositoryGraphBinding[]): {
       kind: "file",
       // The basename reads at map scale; the full path is the node's title.
       label: row.path.split("/").pop() ?? row.path,
+      path: row.path,
       weight: 0,
     }))
     file.weight += 1
@@ -123,6 +132,7 @@ export function buildForceGraph(rows: RepositoryGraphBinding[]): {
       kind: "operation",
       label: row.operation_id,
       vendorId: row.vendor_id,
+      operationId: row.operation_id,
       weight: 0,
       rungs: [],
     }))
@@ -169,6 +179,8 @@ export function ForceMap({
   className,
   fill = false,
   controls = true,
+  selectedId,
+  onSelect,
 }: {
   rows: RepositoryGraphBinding[]
   className?: string
@@ -178,8 +190,17 @@ export function ForceMap({
       a picture you click through, and the buttons over it were chrome for an interaction
       nobody performs there. Node selection stays -- it is the picture, not chrome. */
   controls?: boolean
+  /** Controlled selection, by `ForceNode.id`. Only read when `onSelect` is supplied. */
+  selectedId?: string | null
+  /**
+   * Supplying this makes the map controlled: the selection lives in the caller (the graph page
+   * puts it in the URL), and the overlay detail card is not drawn, because the caller's inspector
+   * is then the one place a node's detail is read.
+   */
+  onSelect?: (node: ForceNode | null) => void
 }) {
   const { nodes, links } = useMemo(() => buildForceGraph(rows), [rows])
+  const gridId = useId()
   // One scale over the vendors present, so a vendor wears the same colour here as in every
   // chart, and the same colour on the next visit — the scale sorts its domain for exactly that.
   const vendorInk = useMemo(
@@ -187,7 +208,7 @@ export function ForceMap({
     [nodes]
   )
   const [settled, setSettled] = useState<{ nodes: ForceNode[]; links: ForceLink[] } | null>(null)
-  const [selected, setSelected] = useState<ForceNode | null>(null)
+  const [ownSelection, setOwnSelection] = useState<ForceNode | null>(null)
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
   const svgRef = useRef<SVGSVGElement>(null)
   // The behaviour itself, so a control reuses the one bound to the element rather than
@@ -311,6 +332,19 @@ export function ForceMap({
     select(element).call(behaviour.scaleBy, factor)
   }
 
+  // The settled node is looked up rather than held: a URL that survives a reload carries an id and
+  // nothing else, so the object behind it has to be resolved from the layout every render.
+  const controlled = onSelect !== undefined
+  const selected = controlled
+    ? (settled?.nodes.find((node) => node.id === selectedId) ?? null)
+    : ownSelection
+
+  function choose(node: ForceNode, isSelected: boolean) {
+    const next = isSelected ? null : node
+    if (onSelect !== undefined) onSelect(next)
+    else setOwnSelection(next)
+  }
+
   if (settled === null) {
     return (
       <div className={cn("flex items-center justify-center rounded-surface border border-line bg-background", fill ? "h-full" : "h-[44rem]", className)}>
@@ -342,6 +376,21 @@ export function ForceMap({
         preserveAspectRatio="xMidYMid meet"
         className={cn("block w-full cursor-grab touch-none select-none", fill ? "h-full" : "h-[44rem]")}
       >
+        {/* A graticule, not a reading: it carries no value and stands for nothing in the payload.
+            It is transformed with the map so that panning an empty region still moves something,
+            which is the only feedback a viewport over sparse marks can give. */}
+        <defs>
+          <pattern
+            id={gridId}
+            width={60}
+            height={60}
+            patternUnits="userSpaceOnUse"
+            patternTransform={transform.toString()}
+          >
+            <path d="M 60 0 L 0 0 0 60" fill="none" strokeWidth={1} className="stroke-line" />
+          </pattern>
+        </defs>
+        <rect x={0} y={0} width={WIDTH} height={HEIGHT} fill={`url(#${gridId})`} />
         <g transform={transform.toString()}>
           <g>
             {settled.links.map((link) => {
@@ -371,7 +420,22 @@ export function ForceMap({
                 <g
                   key={node.id}
                   transform={`translate(${node.x ?? 0} ${node.y ?? 0})`}
-                  onClick={() => setSelected(isSelected ? null : node)}
+                  onClick={() => choose(node, isSelected)}
+                  // The inspector is the only place a node's detail is read once the map is
+                  // controlled, so a mark that only a pointer can reach hides that detail from
+                  // anyone not using one.
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  aria-label={`${node.kind} ${node.label}, ${node.weight} call ${node.weight === 1 ? "site" : "sites"}`}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    choose(node, isSelected)
+                  }}
+                  // No `outline-none`: the browser's own focus ring on the group's bounding box is
+                  // the only visible focus this mark can carry -- Tailwind's `ring` utilities are
+                  // box-shadow, which SVG shapes do not render.
                   className="cursor-pointer"
                 >
                   {/* Kind is carried by shape, never by hue: a vendor is a square, an
@@ -432,38 +496,44 @@ export function ForceMap({
         </g>
       </svg>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-row p-row">
-        {controls && (
-        <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
-          <Button variant="outline" size="sm" onClick={() => scaleBy(1.5)}>
-            Zoom in
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => scaleBy(1 / 1.5)}>
-            Zoom out
-          </Button>
-          <Button variant="outline" size="sm" onClick={resetView}>
-            Fit
-          </Button>
-          <span className="px-field text-meta text-ink-muted tabular-nums">
-            {settled.nodes.length} nodes · {Math.round(transform.k * 100)}% · scroll to zoom,
-            drag to pan
-          </span>
-        </div>
-        )}
-
-        {selected !== null && (
-          <div className="pointer-events-auto flex max-w-sm flex-col gap-field rounded-surface border border-line bg-surface/95 p-section backdrop-blur">
-            <span className="furniture text-meta text-ink-muted">{selected.kind}</span>
-            <span className="min-w-0 break-all font-mono text-body text-ink">{selected.label}</span>
-            <span className="text-meta text-ink-muted">
-              {selected.weight} call {selected.weight === 1 ? "site" : "sites"}
-              {selected.vendorId !== undefined && ` · ${selected.vendorId}`}
-            </span>
-            {selected.rungs !== undefined && selected.rungs.length > 0 && (
+      {/* The cluster sits bottom-right, per the reference. The tier force biases files to x=0.2W,
+          so a top-left overlay sat squarely on the densest part of every map this draws. */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-row">
+        <div className="flex flex-wrap items-start justify-end gap-row">
+          {!controlled && selected !== null && (
+            <div className="pointer-events-auto flex max-w-sm flex-col gap-field rounded-surface border border-line bg-surface/95 p-section backdrop-blur">
+              <span className="furniture text-meta text-ink-muted">{selected.kind}</span>
+              <span className="min-w-0 break-all font-mono text-body text-ink">{selected.label}</span>
               <span className="text-meta text-ink-muted">
-                rung{selected.rungs.length === 1 ? "" : "s"}: {selected.rungs.join(", ")}
+                {selected.weight} call {selected.weight === 1 ? "site" : "sites"}
+                {selected.vendorId !== undefined && ` · ${selected.vendorId}`}
               </span>
-            )}
+              {selected.rungs !== undefined && selected.rungs.length > 0 && (
+                <span className="text-meta text-ink-muted">
+                  rung{selected.rungs.length === 1 ? "" : "s"}: {selected.rungs.join(", ")}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {controls && (
+          <div className="flex justify-end">
+            <div className="pointer-events-auto flex flex-wrap items-center gap-field rounded-surface border border-line bg-surface/90 p-field backdrop-blur">
+              <Button variant="outline" size="sm" onClick={() => scaleBy(1.5)}>
+                Zoom in
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => scaleBy(1 / 1.5)}>
+                Zoom out
+              </Button>
+              <Button variant="outline" size="sm" onClick={resetView}>
+                Fit
+              </Button>
+              <span className="px-field text-meta text-ink-muted tabular-nums">
+                {settled.nodes.length} nodes · {Math.round(transform.k * 100)}% · scroll to zoom,
+                drag to pan
+              </span>
+            </div>
           </div>
         )}
       </div>

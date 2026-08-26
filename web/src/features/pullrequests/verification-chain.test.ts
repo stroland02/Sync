@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { WorkflowNode } from "@/api/types"
-import { verificationChain } from "@/features/pullrequests/verification-chain"
+import { checkTone, verificationChain } from "@/features/pullrequests/verification-chain"
 
 function node(name: string, evidence: Record<string, unknown>, standing = "ran"): WorkflowNode {
   return {
@@ -71,6 +71,26 @@ describe("verificationChain", () => {
     for (const check of chain) {
       expect(check.detail.length).toBeGreaterThan(check.label.length)
       expect(check.detail.toLowerCase()).not.toEqual(check.label.toLowerCase())
+    }
+  })
+})
+
+/**
+ * The tone a check wears where it is rendered as a tag rather than as a chain row.
+ *
+ * The three neutrals are the whole assertion. A run parked on the customer's CI wearing a pass is
+ * the same defect `verificationChain` itself is written around, arriving one layer up as a colour.
+ */
+describe("checkTone", () => {
+  it("tones only the three states that are a verdict", () => {
+    expect(checkTone("passed")).toBe("good")
+    expect(checkTone("failed")).toBe("critical")
+    expect(checkTone("timed_out")).toBe("serious")
+  })
+
+  it("leaves waiting, not-reached and unknown neutral, because none of them is a verdict", () => {
+    for (const state of ["waiting", "not_reached", "unknown"] as const) {
+      expect(checkTone(state), `${state} wore a verdict's tone`).toBe("neutral")
     }
   })
 })

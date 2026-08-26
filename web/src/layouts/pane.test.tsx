@@ -49,6 +49,22 @@ describe("the pane mechanic", () => {
     expect(container.querySelectorAll(".overflow-auto")).toHaveLength(1)
   })
 
+  it("keeps the band label beside the scrolling body rather than inside it", () => {
+    // The invariant that makes the band stay put while the body scrolls, and the one the finding
+    // detail's split depends on: two panes whose names ride away with their own content leave a
+    // reader unable to tell which half they are in.
+    const { container } = render(
+      <PanelPane label="Evidence">
+        <p>rows</p>
+      </PanelPane>
+    )
+
+    const heading = container.querySelector("h2")!
+    const scroll = container.querySelector(".overflow-auto")!
+    expect(scroll.contains(heading)).toBe(false)
+    expect(heading.parentElement!.parentElement).toBe(scroll.parentElement)
+  })
+
   it("pins the panel's footer outside the scroll, so a count cannot scroll away from its rows", () => {
     const { container } = render(
       <PanelPane label="Call sites" footer="40 rows">

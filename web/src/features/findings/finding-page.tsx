@@ -1,290 +1,147 @@
 /**
- * One finding: the binding in full, and the vendor changes that name it.
+ * One finding, as a locked viewport split down the middle: the evidence on the left, the proposed
+ * remediation on the right, each pane scrolling its own body.
  *
- * Two rungs on one screen, and they answer different questions. `finding.binding_source` is
- * this finding's own column and always says something definite — it is what a false positive
- * here has to be attributable to. The envelope's rung describes the whole answer, which is
- * built from every finding naming this call site, and goes null when those disagree. Showing
- * only the envelope's would lose the definite value at the exact moment it matters. That
- * distinction used to live only here; the provenance panel's caption now says it on screen,
- * which is where a reader needs it.
+ * **Rebuilt 2026-08-26 against `docs/stitch_sync_developer_console/.../self_healing_incident_inspector/`.**
+ * The screen it replaces was a `DetailGrid` — one long scrolling column of metric panels with a
+ * 360px fact rail beside it — and the owner's ruling is the evidence/remediation split. `DetailGrid`
+ * survives for its two other callers; nothing here uses it.
  *
- * ## Ported onto the vendored substrate by M7-W178
+ * **The right pane is deliberately not gated on `useFinding`.** The checkpointer is a different
+ * database from the graph and outlives the re-derived `finding` row, so the run, the patch and the
+ * dismissal all still answer on a page whose left pane 404s — which is exactly the finding whose
+ * run is most worth reading.
  *
- * `docs/superpowers/briefs/2026-08-07-substrate-finding.md` is the mapping table this port was
- * gated on. Read that before porting a level, not this docstring.
+ * **Four of the seven facts a detail would want are not in this payload, and none is invented.**
+ * `sync.api.app.finding_detail` reads a risk row and forwards two of its fields, so this level holds
+ * no first-detection time — `indexed_at` is when the index last read the call site, which is why the
+ * identity band labels it *Indexed* and says so behind the ⓘ. B122 carries the payload change and
+ * why each substitute was refused.
  *
- * **This is the first detail-shaped level, and the fact rail is a left column rather than a band.**
- * Vendor, API Services and the Binding surface spell `lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]`
- * — content left, facts right, tables full width beneath — because each of them is a list and a
- * table wants the frame. A detail has one subject, so the grid inverts: a 360px rail carrying the
- * facts and the links down, and the content column beside it. Below `lg` it stacks, because a
- * definition list reads the same at either width.
+ * **The status band states that nothing here pages, and counts the one countable set.** A detail has
+ * one subject, so there is no record window to describe. The figure beside it is `known_changes`,
+ * and it is null only when the read has not answered: a finding no vendor change names is a counted
+ * zero and says `0`.
  *
- * **The header spans both columns, as of M7-W193.** It was inside the 360px rail, which is what made
- * the title wrap; it is now the grid's first row across rail and content, so the name has the page's
- * width. `lib/detail-title.tsx` carries what the title is now made of and why it is no longer the
- * identifier.
- *
- * **Four of the seven facts a rail would want are not in this payload, and none is invented.**
- * `sync.api.app.finding_detail` reads a risk row and forwards two of its fields, so this level
- * holds no severity of its own, no repository, and no call-site path or line — the severity on
- * screen belongs to a vendor change and says something different, and `indexed_at` is when the
- * index last read the call site rather than a first detection. B122 carries the payload change and
- * the brief's ruling 3 carries why each substitute was refused.
- *
- * **This level asks the checkpointer for the first time.** `useWorkflow` answers the Remediation
- * fact and gates the pull-request link, which would otherwise be a claim the console cannot support.
- * Two consequences: the page polls while a run is in flight, exactly as the Solution Workflow level
- * does, and the level below this one now opens against a warm cache because both read one query key.
- *
- * **The status band states that nothing here pages, and counts the one countable set.** A detail
- * has one subject, so there is no record window to describe; the alternative — a records segment
- * over `known_changes` — would put paging controls under a shallow list the payload delivers whole.
- * The figure beside it is that list's length, and it is null only when the read has not answered:
- * a finding no vendor change names is a counted zero and says `0`.
+ * What the reference asks for and this refuses is recorded on the pane that would have carried it —
+ * `remediation-pane.tsx` for the confidence bar, the spinning chip and the three write actions,
+ * `evidence-pane.tsx` for the trace waterfall. The one refusal that belongs to this file is the
+ * slide-over sheet: this is a spec-pinned routed level with its own address, and a modal cannot be
+ * linked, reloaded or opened from the command palette.
  */
 
 import type { ReactNode } from "react"
 import { Link, useParams } from "react-router"
+import { ScanSearch, Wrench } from "lucide-react"
 
 import { NotFoundError } from "@/api/errors"
-import { useDismissal, useFinding, useWorkflow } from "@/api/queries"
-import type { DismissalState, FindingDetail } from "@/api/types"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/data-table"
-import { ChangeKindTag, SeverityTag } from "@/components/tag"
-import { type Fact, FactList } from "@/components/fact-list"
-import { CodeSnippet, absentSnippetReason } from "@/components/code-snippet"
-import { MetricPanel } from "@/components/metric-panel"
-import { ProvenanceStrip, RungBadge } from "@/components/provenance"
+import { useFinding, useWorkflow } from "@/api/queries"
+import type { FindingDetail } from "@/api/types"
+import { InfoHint } from "@/components/info-hint"
+import { KpiStrip } from "@/components/kpi-strip"
+import { PanelPane } from "@/components/pane"
+import { Absent } from "@/components/status"
+import { SeverityTag } from "@/components/tag"
+import { EvidencePane } from "@/features/findings/evidence-pane"
 import { Pending } from "@/features/findings/pending"
-import { EmptyState, ErrorState, LoadingState, NotFoundState } from "@/components/states"
-import { Absent, Formatted } from "@/components/status"
-import {
-  describeRemediation,
-  reachedPullRequest,
-  type RemediationState,
-} from "@/features/findings/remediation"
-import { remediationFact } from "@/features/findings/remediation-fact"
-import { workspacePath } from "@/features/findings/workspace-path"
-import { orAbsent } from "@/lib/format"
-import { Button } from "@/components/ui/button"
-import { DetailGrid } from "@/layouts/detail-grid"
+import { describeRemediation } from "@/features/findings/remediation"
+import { RemediationBadge, RemediationPane } from "@/features/findings/remediation-pane"
+import { TicketAction } from "@/features/tickets/ticket-action"
 import { ScreenFrame } from "@/layouts/screen-frame"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
+import { findingTitle } from "@/lib/detail-title"
+import { formatTimestamp } from "@/lib/format"
+import { vendorHref } from "@/lib/hrefs"
+
+const QUESTION = "What this call site calls, and how the system knows it does."
 
 /**
- * A set of recorded strings from the customer's own source, one chip each.
+ * The subject line: the one row that is true in every state.
  *
- * A chip here is not a badge claiming a status: an argument key is evidence, so it takes the
- * console's chip anatomy — the weight, the hairline and the control radius `RungBadge` spells — and
- * never one of the four reserved status colours.
+ * The identifier comes from the URL, so it is on screen before any request is made and stays there
+ * when one fails. The four fields beside it come from the payload, so when there is no payload the
+ * band says which nothing it is **once** rather than four times: the same sentence repeated across
+ * a row is the "too much information" failure the brief names, and the sentence is about the read
+ * rather than about any one field.
+ *
+ * A band rather than a caption under the title. `ScreenFrame`'s `subtitle` renders inside a
+ * `max-w-prose` paragraph, which is right for a sentence and wrong for a row of chips, mono values
+ * and a link; the frame's own `identity` slot was specified for this and did not land with the
+ * chassis slice, and that file belongs to the frame's task rather than this screen's.
  */
-function FieldList({ label, values }: { label: string; values: string[] }) {
-  return (
-    <div className="flex flex-col gap-field">
-      <h3 className="furniture text-meta text-ink-muted">{label}</h3>
-      {values.length === 0 ? (
-        <p className="text-body">
-          <Absent>none recorded</Absent>
-        </p>
-      ) : (
-        <ul className="flex flex-wrap gap-row">
-          {values.map((value) => (
-            <li
-              key={value}
-              className="rounded-control border border-line px-field py-field font-mono text-meta"
-            >
-              {value}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+function IdentityBand({
+  repoId,
+  findingId,
+  data,
+  failure,
+}: {
+  repoId: string | undefined
+  findingId: string
+  data: FindingDetail | undefined
+  failure: ReactNode | null
+}) {
+  const identifier = (
+    <code className="font-mono text-meta break-all text-ink-muted select-all">{findingId}</code>
   )
-}
 
-/**
- * The finding's own facts, label left and value right, in the rail beside the content.
- *
- * Three states per fact and they are three different claims, the same three every ported level
- * spells: `<Pending>` writes the word where the value goes while the query is in flight,
- * `<Absent>` says it failed, and a value is a
- * value. Remediation is answered by a second query and carries its own four.
- *
- * `failure` is the caller's sentence rather than a boolean, because this level can fail two ways
- * and only one of them is silence. A 404 here is the API answering that the graph holds no open
- * finding, and rendering "the API did not answer" over that would be a false report of the failure
- * the reader is looking at.
- *
- * The identifier is the first row and wears neither of those three states: it comes from the URL, so
- * it is on screen before any request is made and stays there when one fails. It is a `<code>` at the
- * meta step rather than the page's title, because a 32-character hex string is a value a reader
- * copies rather than reads — `lib/detail-title.tsx` carries what it cost to have it at 46px instead.
- */
-function findingFacts(
-  repoId: string | undefined,
-  findingId: string,
-  data: FindingDetail | null,
-  failure: ReactNode | null,
-  remediation: RemediationState,
-  dismissal: DismissalState | null | "pending" | "failed",
-): Fact[] {
-  function fact(render: (found: FindingDetail) => ReactNode): ReactNode {
-    if (data !== null) return render(data)
-    if (failure !== null) return failure
-    return <Pending />
-  }
-
-  return [
-    {
-      label: "Identifier",
-      value: (
-        <code className="font-mono text-meta break-all select-all">{findingId}</code>
-      ),
-    },
-    {
-      label: "Severity",
-      value: fact((found) => (
-        <span className="font-mono">
-          <Formatted value={orAbsent(found.finding.severity)} />
-        </span>
-      )),
-    },
-    {
-      label: "Repository",
-      value: fact((found) =>
-        found.finding.repo_id === null ? (
-          <Absent>unknown</Absent>
-        ) : (
-          <Link
-            to={`/repositories/${encodeURIComponent(found.finding.repo_id)}`}
-            className="font-mono underline underline-offset-2 break-all"
-          >
-            {found.finding.repo_id}
-          </Link>
-        ),
-      ),
-    },
-    {
-      label: "Call site",
-      value: fact((found) => (
-        <code className="font-mono text-meta break-all">
-          {found.finding.file}:{found.finding.line}
-        </code>
-      )),
-    },
-    {
-      label: "Vendor",
-      value: fact((found) => (
-        <Link
-          to={`${workspacePath(repoId)}/vendors/${encodeURIComponent(found.vendor)}`}
-          className="font-mono underline underline-offset-2"
-        >
-          {found.vendor}
-        </Link>
-      )),
-    },
-    {
-      label: "Operation",
-      value: fact((found) => (
-        <span className="font-mono">
-          <Formatted value={orAbsent(found.operation)} />
-        </span>
-      )),
-    },
-    {
-      label: "Symbol",
-      value: fact((found) => (
-        <span className="font-mono">
-          <Formatted value={orAbsent(found.symbol)} />
-        </span>
-      )),
-    },
-    {
-      label: "SDK version",
-      value: fact((found) => (
-        <span className="font-mono">
-          <Formatted value={orAbsent(found.sdk_version)} />
-        </span>
-      )),
-    },
-    {
-      label: "This finding's rung",
-      value: fact((found) => <RungBadge rung={found.finding.binding_source} />),
-    },
-    { label: "Remediation", value: remediationFact(remediation) },
-    { label: "Standing", value: standingFact(dismissal) },
-  ]
-}
-
-/**
- * Whether a human has ruled on this finding, as the rail's last row.
- *
- * Read-only, on the owner's ruling of 2026-08-19: the route accepts a POST and this screen does
- * not send one. What it owes is the standing, because without it a finding somebody deliberately
- * set aside and a finding nobody has opened render as the same screen.
- *
- * **`history_count` is rendered whenever it is not one, in both branches.** The store's own
- * docstring is explicit that `dismissed: false` covers "never touched" and "dismissed, then
- * restored" alike, and those are different facts about how settled a judgement is. A count on the
- * dismissed branch and none on the restored branch would hide the flip in exactly the direction
- * that flatters the system.
- *
- * `<Absent>` on failure rather than silence: a rail row that disappears when a request fails
- * reads as "nobody has dismissed this", which is a claim this screen would not have earned.
- */
-function standingFact(dismissal: DismissalState | null | "pending" | "failed"): ReactNode {
-  if (dismissal === "pending") return <Pending />
-  if (dismissal === "failed") return <Absent>the API did not answer</Absent>
-  if (dismissal === null || !dismissal.dismissed) {
+  if (data === undefined) {
     return (
-      <div className="flex flex-col gap-field">
-        <span>Open — nobody has dismissed this</span>
-        {dismissal !== null && dismissal.history_count > 0 && (
-          <span className="text-meta text-ink-muted">
-            Dismissed and restored {dismissal.history_count === 1 ? "once" : `${dismissal.history_count} times`} before
-            now. The current standing is open; the changes of mind are the history behind it.
-          </span>
-        )}
-      </div>
+      <Band>
+        {identifier}
+        {failure ?? <Pending />}
+      </Band>
     )
   }
+
   return (
-    <div className="flex flex-col gap-field">
-      <span>
-        Dismissed as <span className="font-mono">{dismissal.reason}</span>
-      </span>
-      <span className="text-meta text-ink-muted">
-        Recorded by <span className="font-mono">{dismissal.actor ?? "an actor the row did not name"}</span>
-        {dismissal.history_count > 1 && (
-          <> — one of {dismissal.history_count} rulings on this finding, and the one standing now.</>
+    <Band>
+      {data.finding.severity === null ? (
+        <Absent>no severity recorded</Absent>
+      ) : (
+        <SeverityTag severity={data.finding.severity} />
+      )}
+      {identifier}
+      <Link
+        to={vendorHref(repoId ?? "", data.vendor)}
+        className="font-mono underline underline-offset-2"
+      >
+        {data.vendor}
+      </Link>
+      <code className="font-mono break-all">
+        {data.finding.file}:{data.finding.line}
+      </code>
+      <span className="flex items-center gap-field text-ink-muted">
+        Indexed{" "}
+        {data.indexed_at === null ? (
+          <Absent>not recorded</Absent>
+        ) : (
+          <time dateTime={data.indexed_at}>{formatTimestamp(data.indexed_at)}</time>
         )}
-        {dismissal.history_count <= 1 && <>. Dismissing is a command-line action; this console reads it.</>}
+        <InfoHint label="About the indexed time">
+          When the index pass last read this call site. It is not when the finding was detected —
+          this payload carries no detection time, and reading it as the finding's age would date the
+          finding to whenever the index last ran.
+        </InfoHint>
       </span>
-    </div>
+    </Band>
   )
 }
 
-export interface FindingPageProps {
-  readonly question?: string
+function Band({ children }: { children: ReactNode }) {
+  return (
+    <div
+      data-testid="finding-identity"
+      className="flex shrink-0 flex-wrap items-center gap-section rounded-surface border border-line bg-card px-section py-row text-meta"
+    >
+      {children}
+    </div>
+  )
 }
 
 export function FindingPage() {
-  // A URL is user input, so the identifier is checked here rather than assumed. The query
-  // lives one level down so that check happens before a request is made for it.
-  // `repoId` arrives because every route is workspace-scoped as of `M14-W386`. Links built
-  // without it resolved to the collapsed region's old addresses and rendered
-  // "No screen at this address." -- caught by opening the screen rather than by a type error,
-  // because a path is a string and every one of these compiled perfectly.
+  // A URL is user input, so the identifier is checked here rather than assumed. The query lives one
+  // level down so that check happens before a request is made for it.
   const { repoId, findingId } = useParams<{ repoId: string; findingId: string }>()
   if (findingId === undefined) return <UnknownRoute />
   return <FindingDetailPage repoId={repoId} findingId={findingId} />
@@ -299,22 +156,14 @@ function FindingDetailPage({
 }) {
   const query = useFinding(findingId)
   const run = useWorkflow(findingId)
-  // Not gated on `query`: `finding_dismissal` is durable and `finding` is re-derived, so a
-  // finding this page 404s on can still carry a standing somebody recorded.
-  const dismissalQuery = useDismissal(findingId)
-  const dismissal: DismissalState | null | "pending" | "failed" = dismissalQuery.isPending
-    ? "pending"
-    : dismissalQuery.isError
-      ? "failed"
-      : dismissalQuery.data
   const remediation = describeRemediation({
     data: run.data,
     missing: run.isError && run.error instanceof NotFoundError,
     failed: run.isError,
   })
 
-  // Short, because it renders once per fact and the panel beside the rail carries the same answer
-  // in full: five rows spelling out that panel's sentence would be one fact written six times.
+  // Short, because the left pane's own state panel carries the same answer in full: five rows
+  // spelling out that panel's sentence would be one fact written six times.
   const failure = query.isError ? (
     query.error instanceof NotFoundError ? (
       <Absent>this finding is not open</Absent>
@@ -323,8 +172,11 @@ function FindingDetailPage({
     )
   ) : null
 
+  const title =
+    query.data === undefined ? null : findingTitle(query.data.vendor, query.data.operation)
+
   // Gated on `query` alone because `query` alone is what it reads: the shallow list is on the
-  // finding payload, so the run and the dismissal being in flight cannot make this number wrong.
+  // finding payload, so the run being in flight cannot make this number wrong.
   const knownChanges = query.isSuccess ? query.data.known_changes.length : null
   // Which absence, in words. Null here means nothing answered, never a count that came back zero,
   // so the scope may not assert the measurement happened until it has.
@@ -347,166 +199,109 @@ function FindingDetailPage({
   ]
 
   return (
-    <ScreenFrame status={status}>
-    <DetailGrid
-      /* Content left, rail right, which is what `screens/06-finding.png` draws. This screen
-         shipped inverted on `M7-W178`'s argument that a detail has one subject so the facts
-         come first, and the settled authority order resolves the disagreement rather than my
-         taste: the mock is authority 3 for layout, a port's own reasoning is 4, and no
-         decision covers which side a rail sits on. One prop, so it reverses in one line. */
-      railSide="end"
-      /* No header, which makes this the twelfth of twelve and closes the exception. Answer 7
-         removed page headers; this page was held back because it passed an action the other
-         eleven did not. Nothing needed rehousing in the end. The action was "Review proposed
-         patch", pointing at the same route, under the same `reachedPullRequest` condition, as
-         the "Pull request" control already standing in the rail below — a duplicate rather than
-         a second destination. The title was `findingTitle(vendor, operation)`, and the rail's
-         fact list already labels Vendor and Operation separately. `vendor-page.tsx` is the
-         converted detail page this now matches: no header, subject carried by the rail. */
-      rail={
-        <div className="flex min-w-0 flex-col gap-section">
-          <FactList
-            facts={findingFacts(repoId, findingId, query.isSuccess ? query.data : null, failure, remediation, dismissal)}
-          />
-          <p className="text-body text-ink-muted">
-            What this call site calls, and how the system knows it does.
-          </p>
-
-          {/* Outside the success branch on purpose. A finding that has been patched or
-              abandoned is no longer open, so this page 404s for it — and that is exactly the
-              finding whose run is most worth reading. The workflow lives in the checkpointer,
-              which does not care whether the graph still holds the finding, so both links below
-              can be live on a page whose finding is gone. */}
-          {/* The mock draws these two destinations as stacked, full-width controls rather than
-              as sentences with a link inside them, and that is the arrangement ported here: a
-              reader scanning a rail for somewhere to go finds a control at a glance and has to
-              read a paragraph to find a link.
-
-              **Every sentence stays.** The ruling is that where the drawn layout has no room for
-              a sentence the layout gets the room, not the sentence gets cut — so each caption
-              keeps its full wording underneath its control instead of being folded into a label
-              or moved into a tooltip. */}
-          <div className="flex flex-col gap-field">
-            <div className="flex flex-col gap-field">
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow`}>
-                  Open the solution workflow
-                </Link>
-              </Button>
-              <p className="text-body text-ink-muted">
-                What Sync did about this finding, node by node.
-              </p>
-            </div>
-            {reachedPullRequest(remediation) && (
-              <div className="flex flex-col gap-field">
-                <Button asChild variant="outline" className="w-full justify-start">
-                  <Link to={`${workspacePath(repoId)}/findings/${encodeURIComponent(findingId)}/workflow/pull-request`}>
-                    Pull request
-                  </Link>
-                </Button>
-                <p className="text-body text-ink-muted">
-                  The evidence bundle behind the patch this run opened.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      }
+    <ScreenFrame
+      layout="locked"
+      status={status}
+      title={title?.name ?? undefined}
+      subtitle={title?.absent ?? QUESTION}
     >
-      <div className="flex min-w-0 flex-col gap-8">
-        {query.isPending && <LoadingState what={`finding ${findingId}`} />}
+      {/* Portals into the chassis stats bar, so it draws nothing in place and costs the locked
+          column no height. `Known changes` is deliberately not a tile: it is already the status
+          band's figure, and a tile restating its own footer at tile weight is what
+          `kpi-strip.tsx` forbids. */}
+      <KpiStrip
+        items={[
+          {
+            label: "Argument keys",
+            value: countTile(query, (found) => found.args_keys.length),
+            note: "recorded at this call site by the index pass",
+          },
+          {
+            label: "Response fields read",
+            value: countTile(query, (found) => found.response_fields_read.length),
+            note: "recorded at this call site by the index pass",
+          },
+          {
+            label: "Runs on this finding",
+            value: run.isPending ? (
+              <Pending />
+            ) : run.data !== undefined ? (
+              run.data.generation_count.toLocaleString()
+            ) : run.error instanceof NotFoundError ? (
+              <Absent>no run recorded</Absent>
+            ) : (
+              <Absent>not answered</Absent>
+            ),
+            note: "generations the checkpointer holds — this page reads the newest",
+          },
+        ]}
+      />
 
-        {query.isError &&
-          (query.error instanceof NotFoundError ? (
-            <NotFoundState
-              headline="That finding is not open."
-              detail="The API answered, and the graph holds no open finding with this identifier. It may have been patched, abandoned, or it may never have existed. This is an answer about the finding, not a failure of the console."
-              identifier={query.error.identifier}
+      {/* One column rather than two children of the content band, which puts `section` between the
+          subject line and the panes it names instead of the band's 32px. Measured at 1366×768: the
+          split has 321px to spend and the 16px is a fifth of a section heading. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-section">
+        <IdentityBand repoId={repoId} findingId={findingId} data={query.data} failure={failure} />
+
+        {/* `min-h-0` on the row and on each pane is what makes the panes scroll instead of the page
+            growing; below `xl` it stacks into two half-height panes, which still scroll their own
+            bodies rather than handing the scroll back to a locked chassis. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-section xl:flex-row">
+          <PanelPane
+            label="Evidence"
+            icon={ScanSearch}
+            bodyClassName="flex min-w-0 flex-col gap-section p-section"
+          >
+            <EvidencePane
+              findingId={findingId}
+              data={query.data}
+              isPending={query.isPending}
+              error={query.isError ? query.error : null}
+              onRetry={() => void query.refetch()}
             />
-          ) : (
-            <ErrorState error={query.error} what={`finding ${findingId}`} onRetry={() => void query.refetch()} />
-          ))}
+          </PanelPane>
 
-        {query.isSuccess && (
-          <>
-            {/* The call, in place — owner ruling 2026-08-19. The captured window and the
-                recorded shape side by side is the comparison a reviewer makes to judge the
-                finding: what the code does against what the contract asks. Absence names its
-                cause, policy or pre-capture, never a bare dash. */}
-            <MetricPanel
-              label="The call, in place"
-              caption="The window the index pass captured around this finding's call site, beside the surface the call actually uses."
-            >
-              {query.data.call_site_source !== null ? (
-                <CodeSnippet
-                  code={query.data.call_site_source.snippet}
-                  startLine={query.data.call_site_source.snippet_start_line}
-                  markLine={query.data.call_site_source.line}
-                  label={`Call site, ${query.data.finding.file ?? "unknown file"}:${query.data.finding.line ?? "?"}`}
-                />
+          <PanelPane
+            label="Remediation"
+            icon={Wrench}
+            actions={<RemediationBadge remediation={remediation} />}
+            bodyClassName="flex min-w-0 flex-col gap-section p-section"
+            footerClassName="h-auto items-stretch px-section py-row text-body"
+            footer={
+              repoId === undefined ? (
+                <span className="text-ink-muted">
+                  This address carries no workspace, so the ticket control cannot be offered here.
+                </span>
               ) : (
-                <p className="max-w-prose text-meta text-ink-muted">
-                  <Absent>{absentSnippetReason(query.data.source_served)}</Absent>
-                </p>
-              )}
-            </MetricPanel>
-
-            <MetricPanel
-              label="Known changes"
-              caption="Vendor changes naming this call site, shallow. The full record is fetched by identifier."
-            >
-              {query.data.known_changes.length === 0 ? (
-                <EmptyState
-                  headline="No vendor change names this call site."
-                  detail="The finding was raised by something other than a spec diff."
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Change</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Severity</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.known_changes.map((change) => (
-                      <TableRow key={change.change_id}>
-                        <TableCell className="font-mono">{change.change_id}</TableCell>
-                        <TableCell>
-                          <ChangeKindTag kind={change.kind} />
-                        </TableCell>
-                        <TableCell>
-                          <SeverityTag severity={change.severity} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </MetricPanel>
-
-            <MetricPanel
-              label="What the call site touches"
-              caption="The argument keys sent and the response fields read — the surface a change has to break for this finding to matter."
-            >
-              <FieldList label="Argument keys" values={query.data.args_keys} />
-              <FieldList label="Response fields read" values={query.data.response_fields_read} />
-            </MetricPanel>
-
-            <MetricPanel
-              label="Provenance"
-              caption="Where this answer came from. The rung in the facts beside this is the column on this one finding and always says something definite; the rung below describes the whole answer, which is built from every finding naming this call site."
-            >
-              <ProvenanceStrip
-                provenance={query.data}
-                bindingNullLabel="mixed: more than one detector names this call site and they disagree on the rung — this finding's own rung is in the facts beside this panel"
-              />
-            </MetricPanel>
-          </>
-        )}
+                <TicketAction repoId={repoId} findingId={findingId} />
+              )
+            }
+          >
+            <RemediationPane
+              repoId={repoId}
+              findingId={findingId}
+              nodes={run.data?.nodes}
+              remediation={remediation}
+            />
+          </PanelPane>
+        </div>
       </div>
-    </DetailGrid>
     </ScreenFrame>
   )
+}
+
+/** A counted set from the finding payload, or which nothing stands in its place. */
+function countTile(
+  query: ReturnType<typeof useFinding>,
+  count: (found: FindingDetail) => number,
+): ReactNode {
+  if (query.data !== undefined) return count(query.data).toLocaleString()
+  if (query.isError) {
+    return query.error instanceof NotFoundError ? (
+      <Absent>not open</Absent>
+    ) : (
+      <Absent>not answered</Absent>
+    )
+  }
+  return <Pending />
 }

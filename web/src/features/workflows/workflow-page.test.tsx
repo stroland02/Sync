@@ -1,28 +1,35 @@
 /**
- * The Solution Workflow's shape: a persistent fact rail beside two tabs over one run.
+ * The Solution Workflow's shape: two panes over one run, both visible at once, no tabs.
  *
- * The owner's sentence redefined what this screen is for — it is where a human intervenes in work
- * that is still in progress, not a record of what an agent did. So the structure under test is that
- * split: the run's identity holds still in the rail while the main pane carries `Activity` (the
- * turn-by-turn transcript, ending in the reply box) and `Findings` (the settled output).
+ * **This file used to test a different screen.** Three of its cases described a tab strip and a
+ * fourth a narrow fact rail; the screen is now a locked evidence/remediation split, and the
+ * question it answers — *does the evidence support the change?* — needs both halves on screen
+ * together rather than one behind a control. The concerns those cases carried did not go with
+ * them: the rail's facts are held by `run-identity-header.test.tsx`, the settled output's
+ * confidence refusal by `remediation-pane.test.tsx`, and the tab strip's absence is now asserted
+ * directly, because a controls band on a screen with nothing to narrow is the regression.
  *
- * Structure and derivation only — heading order, which pane a region lands in, which tab is
- * selected. Never class names, never a snapshot: this console is being actively restyled and a
+ * Structure and derivation only — which pane a region lands in, in what order, and what the status
+ * band says. Never class names, never a snapshot: this console is being actively restyled and a
  * snapshot here would go red on every correct change.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { cleanup, render, screen, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import * as queries from "@/api/queries"
-import type { WorkflowState } from "@/api/types"
+import type { PatchResponse, WorkflowState } from "@/api/types"
 import { WorkflowPage } from "@/features/workflows/workflow-page"
 
+// Both panes render at once now, so both of their queries fire on every mount. Before the rebuild
+// only `useWorkflow` needed a stub because the remediation half was behind a tab.
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
   useWorkflow: vi.fn(),
+  usePatch: vi.fn(),
+  useRunActivity: vi.fn(),
 }))
 
 afterEach(cleanup)
@@ -70,9 +77,35 @@ const mockState: WorkflowState = {
   generations: [],
 }
 
-function mockWorkflow() {
+const mockPatch: PatchResponse = {
+  diff: null,
+  strategy: null,
+  rationale: null,
+  stat: null,
+  target: { repo_id: "org/svc", branch: null, pr_url: null, pr_number: null },
+  absent_because: "This run has not written a patch yet.",
+}
+
+function mockPanes() {
+  vi.mocked(queries.usePatch).mockReturnValue({
+    data: mockPatch,
+    isPending: false,
+    isError: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  } as never)
+  vi.mocked(queries.useRunActivity).mockReturnValue({
+    data: { events: [] },
+    isPending: false,
+    isError: false,
+  } as never)
+}
+
+function mockWorkflow(over: Partial<WorkflowState> = {}) {
+  mockPanes()
   vi.mocked(queries.useWorkflow).mockReturnValue({
-    data: mockState,
+    data: { ...mockState, ...over },
     isPending: false,
     isError: false,
     error: null,
@@ -80,67 +113,63 @@ function mockWorkflow() {
     dataUpdatedAt: Date.now(),
     isFetching: false,
     refetch: vi.fn(),
-  } as any)
+  } as never)
 }
 
-/** Radix activates a tab on pointer-down, so a click alone leaves the selection where it was. */
-function selectTab(name: string) {
-  fireEvent.mouseDown(screen.getByRole("tab", { name }))
+function headingsIn(name: string): string[] {
+  return within(screen.getByRole("region", { name }))
+    .getAllByRole("heading")
+    .map((el) => el.textContent ?? "")
 }
 
-describe("the persistent fact rail", () => {
-  it("carries the run's identity as a label/value list, ahead of the transcript", () => {
+function orderIn(name: string, expected: string[]): void {
+  const headings = headingsIn(name)
+  const positions = expected.map((text) => headings.findIndex((h) => h.includes(text)))
+  expect(positions.every((index) => index >= 0)).toBe(true)
+  expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+}
+
+describe("two panes over one run", () => {
+  it("renders evidence and remediation at once, each addressable as a region", () => {
     mockWorkflow()
 
-    const { container } = renderScreen("finding-123")
+    renderScreen()
 
-    const labels = Array.from(container.querySelectorAll("dt")).map((el) => el.textContent ?? "")
-    expect(labels.length).toBeGreaterThan(0)
-    for (const expected of ["Finding", "Repository", "Tier", "Strategy", "Waiting on"]) {
-      expect(labels).toContain(expected)
-    }
-  })
-})
-
-describe("two tabs over one run", () => {
-  it("offers Activity and Findings, with Activity selected on arrival", () => {
-    mockWorkflow()
-
-    renderScreen("finding-123")
-
-    const tabs = screen.getAllByRole("tab")
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Activity", "Findings"])
-    expect(screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected")).toBe("true")
+    expect(screen.getByRole("region", { name: "Evidence" })).not.toBeNull()
+    expect(screen.getByRole("region", { name: "Remediation" })).not.toBeNull()
   })
 
-  it("reads transcript, then checkpoint timeline, then the reply box at the bottom of Activity", () => {
+  it("reads node by node, then the checkpoint timeline, then agent activity on the left", () => {
     mockWorkflow()
 
-    renderScreen("finding-123")
+    renderScreen()
 
-    const panel = screen.getByRole("tabpanel")
-    const headings = within(panel)
-      .getAllByRole("heading")
-      .map((el) => el.textContent ?? "")
-
-    expect(headings.length).toBeGreaterThan(0)
-    const sequence = headings.findIndex((text) => text.includes("Node by node"))
-    const timeline = headings.findIndex((text) => text.includes("Checkpoint timeline"))
-    const reply = headings.findIndex((text) => text.includes("Reply to this run"))
-
-    expect(sequence).toBeGreaterThanOrEqual(0)
-    expect(timeline).toBeGreaterThan(sequence)
-    expect(reply).toBeGreaterThan(timeline)
+    orderIn("Evidence", ["Node by node", "Checkpoint timeline", "Agent activity"])
   })
 
-  it("swaps the transcript for the settled output when Findings is selected", () => {
+  it("reads the change, then what checked it, then where it went, then the reviewer's turn", () => {
     mockWorkflow()
 
-    renderScreen("finding-123")
-    selectTab("Findings")
+    renderScreen()
 
-    expect(screen.getByRole("heading", { name: "Settled output" })).not.toBeNull()
-    expect(screen.queryByRole("heading", { name: "Reply to this run" })).toBeNull()
+    orderIn("Remediation", [
+      "The change this run wrote",
+      "What checked it",
+      "Where it went",
+      "A reviewer's turn",
+    ])
+  })
+
+  it("puts the reply box in the remediation pane, reachable without pressing anything", () => {
+    // It used to sit at the bottom of an Activity tab, so reading the patch and replying to the run
+    // were two different views of one screen.
+    mockWorkflow()
+
+    renderScreen()
+
+    const remediation = screen.getByRole("region", { name: "Remediation" })
+    expect(within(remediation).getByRole("heading", { name: "Reply to this run" })).not.toBeNull()
+    expect(screen.queryAllByRole("tab")).toHaveLength(0)
   })
 })
 
@@ -149,22 +178,21 @@ describe("the screen's bands", () => {
     return container.querySelector(`[data-band="${name}"]`)
   }
 
-  it("puts the tab toggle in the controls band, where the screen's narrowing lives", () => {
+  it("reserves no controls band on a loaded run, because nothing here narrows anything", () => {
+    // The tab strip was the band's only occupant. `ScreenFrame` omits the element entirely rather
+    // than drawing an empty bar, and a bar rendered to say "there is nothing here" is chrome
+    // asserting an absence nobody asked about.
     mockWorkflow()
 
-    const { container } = renderScreen("finding-123")
+    const { container } = renderScreen()
 
-    const controls = band(container, "controls")
-    expect(controls).not.toBeNull()
-    expect(within(controls as HTMLElement).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(
-      ["Activity", "Findings"],
-    )
+    expect(band(container, "controls")).toBeNull()
   })
 
   it("counts the graph's nodes and the timeline's entries, and says what the timeline omits", () => {
     mockWorkflow()
 
-    const { container } = renderScreen("finding-123")
+    const { container } = renderScreen()
 
     // One node in `mockState` stamped a checkpoint and the run has no outcome, so the timeline
     // holds one entry against eight nodes. The seven without a stamp are a stated absence rather
@@ -177,7 +205,21 @@ describe("the screen's bands", () => {
     )
   })
 
+  it("carries the run's own disposition as a segment, where the reference draws a severity chip", () => {
+    // The finding's change kind is not on this payload and fetching it would put the header's
+    // focal point behind a route that 404s for every patched or abandoned finding. The outcome is
+    // a value from a closed vocabulary, legible without colour, and permanently visible.
+    mockWorkflow({ outcome: "opened" })
+
+    const { container } = renderScreen()
+
+    const text = band(container, "status")?.textContent ?? ""
+    expect(text).toMatch(/Outcome\s*opened/)
+    expect(text).toContain("the checkpointer's last word")
+  })
+
   it("says which nothing it is while the run has not answered, rather than a blank strip", () => {
+    mockPanes()
     vi.mocked(queries.useWorkflow).mockReturnValue({
       data: undefined,
       isPending: true,
@@ -187,14 +229,13 @@ describe("the screen's bands", () => {
       dataUpdatedAt: 0,
       isFetching: true,
       refetch: vi.fn(),
-    } as any)
+    } as never)
 
-    const { container } = renderScreen("finding-123")
+    const { container } = renderScreen()
 
     expect(band(container, "status")?.textContent ?? "").toContain(
       "asking the checkpointer for this run",
     )
-    // Nothing to narrow before there is a run, so the band is omitted rather than reserved empty.
     expect(band(container, "controls")).toBeNull()
   })
 })
@@ -203,7 +244,7 @@ describe("the sentences this screen may not lose", () => {
   it("keeps the Node-by-node intro describing what a standing does and does not say", () => {
     mockWorkflow()
 
-    renderScreen("finding-123")
+    renderScreen()
 
     expect(
       screen.getByText(
@@ -215,7 +256,7 @@ describe("the sentences this screen may not lose", () => {
   it("keeps the timeline's own account of where its rows come from", () => {
     mockWorkflow()
 
-    renderScreen("finding-123")
+    renderScreen()
 
     expect(
       screen.getByText(

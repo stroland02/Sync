@@ -5,7 +5,14 @@ import type { GenerationSummary } from "@/api/types"
 import { SupersededGenerations } from "@/features/workflows/superseded-generations"
 
 describe("SupersededGenerations", () => {
-  it("renders nothing when no superseded generations exist", () => {
+  /**
+   * Retitled rather than deleted, and the assertion is inverted on purpose. This used to expect
+   * `container.firstChild` to be null. The top bar states a `Generations` figure on every run, so
+   * a `1` followed by nothing left a reader unable to tell *there is only one* from *the rest are
+   * somewhere this screen does not show*. The coverage it carried — that the current run is never
+   * listed as superseding itself — is still here.
+   */
+  it("accounts for the only generation in a sentence, rather than rendering nothing", () => {
     const generations: GenerationSummary[] = [
       {
         thread_id: "f1:sha:0",
@@ -16,10 +23,12 @@ describe("SupersededGenerations", () => {
       },
     ]
 
-    const { container } = render(
-      <SupersededGenerations generations={generations} currentThreadId="f1:sha:0" />,
-    )
-    expect(container.firstChild).toBeNull()
+    render(<SupersededGenerations generations={generations} currentThreadId="f1:sha:0" />)
+
+    expect(
+      screen.getByText("This is the only generation the checkpointer holds for this finding."),
+    ).toBeTruthy()
+    expect(screen.queryByText("Run 1")).toBeNull()
   })
 
   it("renders superseded generations with run number, thread_id, outcome, and abandon_reason", () => {

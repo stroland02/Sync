@@ -11,11 +11,14 @@
  * The caller says which nothing it has; this renders whichever it is handed.
  */
 
+import { cn } from "@/lib/utils"
+
 export function CodeSnippet({
   code,
   startLine,
   markLine,
   label,
+  className,
 }: {
   /** The captured window, exactly as the index recorded it. */
   code: string
@@ -25,13 +28,15 @@ export function CodeSnippet({
   markLine?: number | null
   /** What this window is, for the accessible name — "Call site, src/billing.ts". */
   label: string
+  /** Which plane the window sits on. A card-step snippet inside a card-step pane reads flat. */
+  className?: string
 }) {
   const lines = code.split("\n")
   return (
     <div
       role="figure"
       aria-label={label}
-      className="overflow-x-auto rounded-control border border-line bg-surface"
+      className={cn("overflow-x-auto rounded-control border border-line bg-surface", className)}
     >
       <table className="w-full border-collapse font-mono text-meta leading-relaxed">
         <tbody>

@@ -128,7 +128,9 @@ export function ScreenFrame({
       {controls ? (
         <div
           data-band="controls"
-          className="sticky top-12 z-10 flex flex-wrap items-center gap-section border-b border-line bg-background py-field"
+          // `shrink-0` for the identity header's reason: under a locked layout the content band
+          // claims `flex-1`, and a filled child squeezes whichever siblings can be squeezed.
+          className="sticky top-12 z-10 flex shrink-0 flex-wrap items-center gap-section border-b border-line bg-background py-field"
         >
           {controls}
         </div>

@@ -15,6 +15,7 @@
  */
 
 import type { WorkflowState } from "@/api/types"
+import { OUTCOME_TONE, type TagTone } from "@/components/tag"
 
 /**
  * How the newest run stands, in one word the rail can render.
@@ -100,4 +101,24 @@ export function describeRemediation({
  */
 export function reachedPullRequest(state: RemediationState): boolean {
   return state.kind === "run" && state.standing === "opened"
+}
+
+/**
+ * The same four kinds as a badge, for a pane header that has one line and no room for a sentence.
+ *
+ * Eight distinct labels, because the three nothings are three different facts and a badge that
+ * folded any two of them would say *no run recorded* for a console that could not ask. Tone comes
+ * from `OUTCOME_TONE` rather than a second table here — a fact written twice will disagree with
+ * itself — and everything outside the three recorded outcomes stays neutral: a run in flight and a
+ * run this console has not caught up with are not judgements.
+ */
+export function remediationBadge(state: RemediationState): { label: string; tone: TagTone } {
+  if (state.kind === "pending") return { label: "asking the checkpointer", tone: "neutral" }
+  if (state.kind === "none") return { label: "no run recorded", tone: "neutral" }
+  if (state.kind === "unavailable") return { label: "the API did not answer", tone: "neutral" }
+
+  const tone = OUTCOME_TONE[state.standing] ?? "neutral"
+  if (state.standing === "in-flight") return { label: "in flight", tone }
+  if (state.standing === "unrecognised") return { label: String(state.outcome), tone }
+  return { label: state.standing, tone }
 }

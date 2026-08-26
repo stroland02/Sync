@@ -23,7 +23,11 @@
 import { describe, expect, it } from "vitest"
 
 import type { WorkflowNode, WorkflowState } from "@/api/types"
-import { describeRemediation, reachedPullRequest } from "@/features/findings/remediation"
+import {
+  describeRemediation,
+  reachedPullRequest,
+  remediationBadge,
+} from "@/features/findings/remediation"
 
 function openPrNode(): WorkflowNode {
   return {
@@ -167,5 +171,65 @@ describe("reachedPullRequest", () => {
         describeRemediation({ data: undefined, missing: false, failed: true }),
       ),
     ).toBe(false)
+  })
+})
+
+/**
+ * The same four kinds worn as a badge in the remediation pane's header, where there is one line
+ * and no room for a sentence.
+ *
+ * The distinctness assertion is the one that matters: three of the eight branches are the three
+ * nothings, and a badge that folded any two of them would say *no run recorded* for a console that
+ * could not ask.
+ */
+describe("remediationBadge", () => {
+  const badges = {
+    pending: remediationBadge(describeRemediation({ data: undefined, missing: false, failed: false })),
+    none: remediationBadge(describeRemediation({ data: undefined, missing: true, failed: true })),
+    unavailable: remediationBadge(
+      describeRemediation({ data: undefined, missing: false, failed: true }),
+    ),
+    inFlight: remediationBadge(
+      describeRemediation({ data: state({ outcome: null }), missing: false, failed: false }),
+    ),
+    opened: remediationBadge(
+      describeRemediation({ data: state({ outcome: "opened" }), missing: false, failed: false }),
+    ),
+    abandoned: remediationBadge(
+      describeRemediation({ data: state({ outcome: "abandoned" }), missing: false, failed: false }),
+    ),
+    reported: remediationBadge(
+      describeRemediation({ data: state({ outcome: "reported" }), missing: false, failed: false }),
+    ),
+    unrecognised: remediationBadge(
+      describeRemediation({
+        data: state({ outcome: "quarantined" as WorkflowState["outcome"] }),
+        missing: false,
+        failed: false,
+      }),
+    ),
+  }
+
+  it("gives all eight branches their own label", () => {
+    const labels = Object.values(badges).map((badge) => badge.label)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it("keeps the three nothings apart", () => {
+    expect(badges.pending.label).toBe("asking the checkpointer")
+    expect(badges.none.label).toBe("no run recorded")
+    expect(badges.unavailable.label).toBe("the API did not answer")
+  })
+
+  it("tones only the three recorded outcomes, and quotes one it has not caught up with", () => {
+    // A run in flight, a run nobody could ask about, and an outcome this console has not caught up
+    // with are not judgements, so none of them may wear a judgement's colour.
+    expect(badges.opened.tone).toBe("good")
+    expect(badges.abandoned.tone).toBe("serious")
+    expect(badges.reported.tone).toBe("warning")
+    for (const neutral of [badges.pending, badges.none, badges.unavailable, badges.inFlight, badges.unrecognised]) {
+      expect(neutral.tone).toBe("neutral")
+    }
+    expect(badges.unrecognised.label).toBe("quarantined")
   })
 })

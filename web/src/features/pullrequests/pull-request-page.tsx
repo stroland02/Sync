@@ -70,7 +70,8 @@ import {
   noPullRequestPhrase,
 } from "@/features/pullrequests/bundle-facts"
 import { BUNDLE_STAGES, EvidenceBundle } from "@/features/pullrequests/evidence-bundle"
-import { PatchPanel, VISIBLE_DIFF_LINES } from "@/features/pullrequests/patch-panel"
+import { PatchPanel } from "@/features/pullrequests/patch-panel"
+import { VISIBLE_DIFF_LINES } from "@/features/pullrequests/patch-parts"
 import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
 import { DetailGrid } from "@/layouts/detail-grid"
 import { ScreenFrame } from "@/layouts/screen-frame"

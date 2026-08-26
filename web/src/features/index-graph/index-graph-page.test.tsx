@@ -18,11 +18,19 @@ import type { RepositoryGraphResponse } from "@/api/types"
 import { FORCE_MAP_LABEL } from "@/features/index-graph/force-map"
 import { IndexGraphPage } from "@/features/index-graph/index-graph-page"
 
-const { graph, fetchTopology } = vi.hoisted(() => ({ graph: vi.fn(), fetchTopology: vi.fn() }))
+const { graph, fetchTopology, bindingSurface } = vi.hoisted(() => ({
+  graph: vi.fn(),
+  fetchTopology: vi.fn(),
+  bindingSurface: vi.fn(),
+}))
 
+// `useBindingSurface` arrived with the inspector's operation branch. Held unresolved by default:
+// without this every drawn-state test that opens an operation would fetch over the network from
+// inside jsdom.
 vi.mock("@/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/queries")>()),
   useRepositoryGraph: () => graph(),
+  useBindingSurface: () => bindingSurface(),
 }))
 
 // The KPI strip and the coupling chord both read the topology through this one function. Held
@@ -56,6 +64,7 @@ beforeEach(() => {
   FakeEventSource.last = null
   vi.stubGlobal("EventSource", FakeEventSource)
   fetchTopology.mockReturnValue(new Promise(() => {}))
+  bindingSurface.mockReturnValue(pending())
 })
 
 // `globals` is unset in vitest.config.ts, so nothing tears the tree down between tests on its
@@ -66,6 +75,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   graph.mockReset()
+  bindingSurface.mockReset()
 })
 
 const BINDING = {
@@ -131,11 +141,11 @@ function settled(data: RepositoryGraphResponse) {
   return { isPending: false, isError: false, isSuccess: true, data, refetch: vi.fn() }
 }
 
-function renderScreen() {
+function renderScreen(search = "") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/repositories/org%2Fone/graph"]}>
+      <MemoryRouter initialEntries={[`/repositories/org%2Fone/graph${search}`]}>
         <Routes>
           <Route path="/repositories/:repoId/graph" element={<IndexGraphPage />} />
         </Routes>
@@ -322,15 +332,74 @@ describe("the three states are mutually exclusive and each keeps its prose", () 
   })
 })
 
+describe("the canvas dock and the inspector beside it", () => {
+  const NOT_DRAWN: [string, ReturnType<typeof settled> | ReturnType<typeof pending>][] = [
+    ["pending", pending()],
+    ["failed", failed()],
+    ["never recorded", settled(neverRecorded())],
+    ["indexed and empty", settled(indexedEmpty())],
+  ]
+
+  it.each(NOT_DRAWN)("renders no inspector in the %s state", (_state, result) => {
+    graph.mockReturnValue(result)
+    renderScreen()
+
+    // The dock exists only where there is a map to inspect. A panel beside four empty states
+    // would be chrome asserting a selection the screen cannot have.
+    expect(screen.queryByLabelText("Node inspector")).toBeNull()
+  })
+
+  it("docks the inspector beside the map once there is something to draw", () => {
+    graph.mockReturnValue(settled(drawnGraph()))
+    renderScreen()
+
+    expect(screen.getByLabelText("Node inspector")).toBeTruthy()
+    expect(screen.getByLabelText(FORCE_MAP_LABEL)).toBeTruthy()
+  })
+
+  it("says which nothing an unselected inspector is", () => {
+    graph.mockReturnValue(settled(drawnGraph()))
+    renderScreen()
+
+    const inspector = screen.getByLabelText("Node inspector").textContent ?? ""
+    expect(inspector).toContain("Nothing selected")
+    // The panel having nothing to show is not the map having nothing in it, and the node count
+    // is what tells them apart.
+    expect(inspector).toContain("nodes are drawn")
+  })
+
+  it("opens the node the URL names, with no click", () => {
+    graph.mockReturnValue(settled(drawnGraph()))
+    renderScreen("?node=file%3Asrc%2Fpay.ts")
+
+    const inspector = screen.getByLabelText("Node inspector").textContent ?? ""
+    // Addressed by the recorded path rather than the basename the map labels it with.
+    expect(inspector).toContain("src/pay.ts")
+    expect(inspector).not.toContain("Nothing selected")
+  })
+
+  it("keeps the status vocabulary at four segments when a node is selected", () => {
+    graph.mockReturnValue(settled(drawnGraph()))
+    renderScreen("?node=file%3Asrc%2Fpay.ts")
+
+    // A selection is not a measurement over a set, so it earns no segment of its own.
+    expect(segmentKinds()).toEqual(["records", "figure", "figure", "figure"])
+  })
+})
+
 describe("the stream's own count, on its own clock", () => {
-  it("counts a stream that has said nothing as nought and names the window", () => {
+  // Retitled with the locked rebuild: the band is no longer empty while the stream is live,
+  // because the API topology pair moved into a drawer opened from it. The coverage this case
+  // carried is unchanged — the settled-graph control appears on a drop and at no other time.
+  it("counts a stream that has said nothing as nought, and offers no re-read while it is live", () => {
     graph.mockReturnValue(settled(drawnGraph()))
     renderScreen()
 
     expect(figure("Indexed since you opened this")).toContain("0")
     expect(figure("Indexed since you opened this")).toContain("not the run's total")
-    // Nothing to offer while the connection is live, so no band and no reserved height.
-    expect(document.querySelector('[data-band="controls"]')).toBeNull()
+    const controls = document.querySelector('[data-band="controls"]')
+    expect(controls?.textContent).toContain("API topology")
+    expect(controls?.textContent).not.toContain("Load the settled graph")
   })
 
   it("names the count frozen and offers the settled read when the stream drops", () => {

@@ -374,6 +374,9 @@ describe("which screens the reading cap applies to", () => {
     ["/repositories/demo/detectors", "Detectors"],
     ["/repositories/demo/call-sites", "Call sites"],
     ["/repositories/demo/findings", "Findings"],
+    // The map is a canvas plus a fixed 400px dock: the cap takes its width straight out of the
+    // canvas on any monitor wider than 1440, and nothing else pinned this route to false.
+    ["/repositories/demo/graph", "Dependency graph"],
   ])("gives %s (%s) the full width", (pathname) => {
     expect(isWideRoute(pathname)).toBe(true)
   })

@@ -1,49 +1,43 @@
 /**
- * The Solution Workflow: what Sync actually did about one finding, node by node.
+ * The Solution Workflow: what Sync did about one finding, and what checked it — both at once.
+ *
+ * **A locked, two-pane screen with no tabs.** It was a narrow fact rail beside a tabbed single
+ * column, which meant a reviewer could read the transcript or the output but never both, and the
+ * one question this screen exists to answer — *does the evidence support the change?* — needed the
+ * two halves side by side. Evidence left, remediation right, each pane scrolling its own body under
+ * a header that holds still. The tabs are gone entirely: nothing here narrows anything, so the
+ * controls band is omitted rather than reserved empty.
  *
  * Read from the LangGraph checkpointer, a different database from the API Dependency Graph, so this
- * route carries no provenance envelope — no `indexed_at`, no binding rung, and nothing invented to
- * fill the gap. No per-node elapsed time exists in any checkpoint it reads (B123) and a superseded
- * generation is not reachable from it (B124): `GET /api/workflows/{finding_id}` answers with the
- * newest thread only.
+ * route carries no provenance envelope — no `indexed_at`, no binding rung, no vendor, and nothing
+ * invented to fill the gap. No per-node elapsed time exists in any checkpoint it reads (B123) and a
+ * superseded generation is not reachable from it (B124): `GET /api/workflows/{finding_id}` answers
+ * with the newest thread only.
  *
- * The title is "Run N" and not the finding's own name — a ruling, recorded in `lib/detail-title.tsx`:
- * the name is not on this payload, and fetching it would put the page's only focal point behind a
- * query that 404s for every patched or abandoned finding. Mapping table for the port:
- * `docs/superpowers/briefs/2026-08-07-substrate-workflow.md`.
+ * The heading is the registry's "Solution workflow" rather than the finding's own name — a ruling
+ * recorded in `lib/detail-title.tsx`: the name is not on this payload, and fetching it would put
+ * the page's focal point behind a query that 404s for every patched or abandoned finding.
  */
 
-import { FetchedAt } from "@/components/fetched-at"
-import { Link, useParams } from "react-router"
+import { useParams } from "react-router"
 
 import { NotFoundError } from "@/api/errors"
 import { WORKFLOW_POLL_MS, isRunTerminal, useWorkflow } from "@/api/queries"
 import type { WorkflowState } from "@/api/types"
-import { MetricPanel } from "@/components/metric-panel"
+import { FetchedAt } from "@/components/fetched-at"
 import { ErrorState, LoadingState, NotFoundState } from "@/components/states"
-import { Absent, Formatted } from "@/components/status"
+import { Formatted } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { activityEntries, omittedCount } from "@/features/workflows/activity"
-import { ActivityTimeline } from "@/features/workflows/activity-timeline"
-import { AgentActivityPanel } from "@/features/workflows/agent-activity-panel"
-import { NodeSequence } from "@/features/workflows/node-sequence"
-import { ReplyBox } from "@/features/workflows/reply-box"
-import { RunFactRail } from "@/features/workflows/run-fact-rail"
-import { runIdentity } from "@/features/workflows/run-identity"
-import { RunOutcome, type BelowThisPanel } from "@/features/workflows/run-outcome"
-import { SettledOutput } from "@/features/workflows/settled-output"
-import { SupersededGenerations } from "@/features/workflows/superseded-generations"
-import { DetailGrid } from "@/layouts/detail-grid"
+import { EvidencePane } from "@/features/workflows/evidence-pane"
+import { RemediationPane } from "@/features/workflows/remediation-pane"
+import { RunIdentityHeader } from "@/features/workflows/run-identity-header"
+import { WorkflowKpis } from "@/features/workflows/workflow-kpis"
 import { ScreenFrame } from "@/layouts/screen-frame"
+import { SplitPanes } from "@/layouts/split-panes"
 import type { StatusSegment } from "@/layouts/status-band"
 import { UnknownRoute } from "@/layouts/unknown-route"
 import { formatTimestamp } from "@/lib/format"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/vendor/supabase/ui/tabs"
-
-
-import { findingHref } from "@/lib/hrefs"
-const NODE_BY_NODE_INTRO =
-  "Eight nodes, in the order the graph wires them. A standing is the checkpoint's own answer — nothing here says a node is executing."
 
 export interface WorkflowPageProps {
   readonly question?: string
@@ -101,53 +95,6 @@ function StaleBanner({
 }
 
 /**
- * What `RunOutcome` may say about this screen, which renders all eight nodes as a narrative and
- * places the outcome inside the sequence rather than above it. The panel does not know that; this
- * page does, so the sentences that depend on position live here.
- */
-const BELOW: BelowThisPanel = {
-  inFlight: `Every entry here is the last state the checkpointer recorded, re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`,
-  abandoned:
-    "The attempt is still here in full: the entries above this one are what ran, with everything each node produced, and any entry after it is a node the run never reached.",
-  opened: (
-    <>
-      The pull request is under <code>open_pr</code>.
-    </>
-  ),
-  unrecognised: "The entries here are still what the run produced.",
-}
-
-/**
- * The narrative's opening entry: what arrived, and what this screen can and cannot see about it.
- */
-function Arrival({ repoId, findingId }: { repoId: string; findingId: string }) {
-  return (
-    <>
-      <h3 className="text-emphasis">What arrived</h3>
-      <div className="mt-row flex max-w-prose flex-col gap-row text-body text-muted-foreground">
-        <p>A finding arrived from the API Dependency Graph, and this run is what Sync did about it.</p>
-        <p>
-          Read from the checkpointer, which is a different database from the API Dependency
-          Graph — this screen carries no indexing timestamp and no binding rung for that reason.{" "}
-          <Link
-            to={findingHref(repoId, findingId)}
-            className="underline underline-offset-2"
-          >
-            The finding itself
-          </Link>{" "}
-          carries both.
-        </p>
-        <p>
-          The entries below are the remediation graph's own order, with the evidence each node
-          produced. A node marked due after it has already run is a retry the graph owes another
-          visit, not a finished step — the loop is real and this view does not hide it.
-        </p>
-      </div>
-    </>
-  )
-}
-
-/**
  * A failed refetch does not stop the poll on a live run and does not start one on a finished run,
  * so the band states both axes rather than collapsing them into "stale".
  */
@@ -157,13 +104,13 @@ function pollNote(terminal: boolean, refreshFailed: boolean): string | null {
       ? "Could not refresh, and the run reached a terminal outcome, so nothing is polling in the background — these are the last figures the console read."
       : `Could not refresh — these are the last figures the console read, and polling continues every ${WORKFLOW_POLL_MS / 1000} seconds.`
   }
-  // `FetchedAt`'s `idleReason` already states the terminal case in the content column, so the band
+  // `FetchedAt`'s `idleReason` already states the terminal case in the header row, so the band
   // carries only what that does not — one of the two, never both.
   return terminal ? null : `Re-read every ${WORKFLOW_POLL_MS / 1000} seconds until the run finishes.`
 }
 
 /**
- * The two things this route can count, both read off the one payload that answers for either.
+ * What this route can count, plus the run's own last word.
  *
  * A run whose node list is genuinely empty counts `0`; a run nothing has answered for is absent and
  * the caller renders `none` instead.
@@ -199,6 +146,17 @@ function runStatus(
         .filter(Boolean)
         .join(", "),
     },
+    {
+      // The reference puts a "Breaking Change Detected" severity chip beside the incident id. The
+      // finding's change kind is not on this payload and fetching it would put the header's focal
+      // point behind a route that 404s for every patched or abandoned finding. The run's own
+      // recorded disposition is the honest figure in that position: a value from a closed
+      // vocabulary, legible without colour, permanently visible under a locked viewport.
+      kind: "figure",
+      label: "Outcome",
+      value: state.outcome ?? null,
+      scope: "the checkpointer's last word; the reason sits in the sequence where the run stopped",
+    },
     ...(pollNote(terminal, refreshFailed) === null
       ? []
       : [{ kind: "note" as const, text: pollNote(terminal, refreshFailed)! }]),
@@ -209,15 +167,6 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
   const query = useWorkflow(findingId)
   const data = query.data
   const terminal = isRunTerminal(data)
-
-  // Short: the content column states the same case in full. Each still says which nothing it is.
-  const failure = query.isError ? (
-    query.error instanceof NotFoundError ? (
-      <Absent>no run for this finding</Absent>
-    ) : (
-      <Absent>the API did not answer</Absent>
-    )
-  ) : null
 
   // Built for every state the query can be in: a band that appears on success alone renders
   // "nothing has been asked yet" and "asked, and this run holds nothing" as the same blank strip.
@@ -236,52 +185,50 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
       : runStatus(data, terminal, query.isError)
 
   return (
-    /* The tab list publishes into the controls band, outside the pane it switches: Radix carries
-       selection through context rather than nesting, so the root may wrap the whole frame. */
-    <Tabs defaultValue="activity" className="flex min-w-0 flex-col gap-8">
-      <ScreenFrame
-        status={status}
-        controls={
-          data === undefined ? undefined : (
-            <TabsList className="gap-section">
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-              <TabsTrigger value="findings">Findings</TabsTrigger>
-            </TabsList>
-          )
-        }
-      >
-        <DetailGrid
-          railSide="narrow"
-          rail={<RunFactRail repoId={repoId} findingId={findingId} data={data} failure={failure} />}
-        >
-          <div className="flex min-w-0 flex-col gap-8">
-            {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
+    <ScreenFrame
+      status={status}
+      layout="locked"
+      subtitle="What Sync's remediation graph did about this finding, and what checked the patch it wrote."
+    >
+      <WorkflowKpis data={data} />
 
-            {data === undefined &&
-              query.isError &&
-              (query.error instanceof NotFoundError ? (
-                <div className="flex flex-col items-start gap-section">
-                  <NotFoundState
-                    headline="No remediation run for this finding."
-                    detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
-                    identifier={query.error.identifier}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={query.isFetching}
-                    onClick={() => void query.refetch()}
-                  >
-                    {query.isFetching ? "Asking…" : "Check again"}
-                  </Button>
-                </div>
-              ) : (
-                <ErrorState error={query.error} what={`the run for finding ${findingId}`} onRetry={() => void query.refetch()} />
-              ))}
+      {query.isPending && <LoadingState what={`the run for finding ${findingId}`} />}
 
-            {data !== undefined && (
-              <>
-                {query.isError ? (
+      {data === undefined &&
+        query.isError &&
+        (query.error instanceof NotFoundError ? (
+          <div className="flex flex-col items-start gap-section">
+            <NotFoundState
+              headline="No remediation run for this finding."
+              detail="The API answered, and the checkpointer holds no run under this identifier. Either remediation has not been started for this finding, or it has never been started for any finding on this database. This is an answer about the run, not a failure of the console — a finding can be perfectly real and have no attempt against it yet."
+              identifier={query.error.identifier}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {query.isFetching ? "Asking…" : "Check again"}
+            </Button>
+          </div>
+        ) : (
+          <ErrorState
+            error={query.error}
+            what={`the run for finding ${findingId}`}
+            onRetry={() => void query.refetch()}
+          />
+        ))}
+
+      {data !== undefined && (
+        <SplitPanes
+          header={
+            <RunIdentityHeader
+              repoId={repoId}
+              findingId={findingId}
+              data={data}
+              trailing={
+                query.isError ? (
                   <StaleBanner
                     fetchedAt={query.dataUpdatedAt}
                     live={!terminal}
@@ -294,46 +241,14 @@ function Workflow({ repoId, findingId }: { repoId: string; findingId: string }) 
                     polling={!terminal}
                     idleReason="This run has reached a terminal outcome, so nothing is being polled."
                   />
-                )}
-
-                <AgentActivityPanel repoId={repoId} findingId={findingId} run={data} />
-
-                <TabsContent value="activity" className="flex min-w-0 flex-col gap-8">
-                  <MetricPanel label="Node by node" caption={NODE_BY_NODE_INTRO}>
-                    <NodeSequence
-                      nodes={data.nodes}
-                      outcome={data.outcome}
-                      opening={<Arrival repoId={repoId} findingId={findingId} />}
-                      closing={
-                        <RunOutcome
-                          outcome={data.outcome}
-                          abandonReason={data.abandon_reason}
-                          reportReason={data.report_reason}
-                          below={BELOW}
-                          frame="entry"
-                        />
-                      }
-                    />
-                  </MetricPanel>
-
-                  <ActivityTimeline state={data} />
-
-                  <ReplyBox waitingOn={data === undefined ? null : runIdentity(data).waitingOn} />
-                </TabsContent>
-
-                <TabsContent value="findings" className="flex min-w-0 flex-col gap-8">
-                  <SettledOutput repoId={repoId} findingId={findingId} state={data} />
-
-                  <SupersededGenerations
-                    generations={data.generations}
-                    currentThreadId={data.thread_id}
-                  />
-                </TabsContent>
-              </>
-            )}
-          </div>
-        </DetailGrid>
-      </ScreenFrame>
-    </Tabs>
+                )
+              }
+            />
+          }
+          left={<EvidencePane repoId={repoId} findingId={findingId} data={data} />}
+          right={<RemediationPane repoId={repoId} findingId={findingId} data={data} />}
+        />
+      )}
+    </ScreenFrame>
   )
 }

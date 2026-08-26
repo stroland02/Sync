@@ -505,27 +505,30 @@
    chassis qualifications behind `display: none` at the short step, and one of them is the
    multi-tenancy claim -- that nothing is filtered per viewer -- which `console-surface.md`
    forbids collapsing behind any disclosure, a media query included. Only spacing scales. */
-@layer components {
-  /* Laptop and below: the frame gutter halves. */
-  @media (max-height: 1000px) {
-    [data-scrollport] > div {
-      padding-top: var(--spacing-section);
-      padding-bottom: var(--spacing-section);
-      gap: var(--spacing-section);
-    }
-    [data-chassis-qualifications] {
-      padding-top: var(--spacing-row);
-      padding-bottom: var(--spacing-row);
-    }
+/* Deliberately UNLAYERED, and moving it into `@layer components` is what broke it before.
+   Cascade layers outrank specificity: `p-frame` and `py-section` live in Tailwind's `utilities`
+   layer, so a `components`-layer rule loses to them however specific its selector. Measured
+   2026-08-26 at 1366x768 with every step inert -- the gutter rendered 40px where this says 8px and
+   the gap 32px where this says 16px, which is the whole 64px this block exists to reclaim.
+   Unlayered declarations beat every layered one, which is the only thing that makes these win. */
+@media (max-height: 1000px) {
+  [data-scrollport] > div {
+    padding-top: var(--spacing-section);
+    padding-bottom: var(--spacing-section);
+    gap: var(--spacing-section);
   }
+  [data-chassis-qualifications] {
+    padding-top: var(--spacing-row);
+    padding-bottom: var(--spacing-row);
+  }
+}
 
-  /* Short: the gutter tightens again. The title keeps its step -- shrinking a heading is how a
-     hierarchy flattens, and `why-the-console-came-out-flat` measured what that costs. */
-  @media (max-height: 850px) {
-    [data-scrollport] > div {
-      padding-top: var(--spacing-row);
-      padding-bottom: var(--spacing-row);
-    }
+/* Short: the gutter tightens again. The title keeps its step -- shrinking a heading is how a
+   hierarchy flattens, and `why-the-console-came-out-flat` measured what that costs. */
+@media (max-height: 850px) {
+  [data-scrollport] > div {
+    padding-top: var(--spacing-row);
+    padding-bottom: var(--spacing-row);
   }
 }
 

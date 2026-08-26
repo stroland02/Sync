@@ -105,6 +105,27 @@ export function useSelectionKeys(
   }, [ids, selected, onSelect])
 }
 
+/**
+ * The control that closes a detail, wherever that detail is docked.
+ *
+ * Extracted at its second use: the graph's canvas dock cannot compose `DetailLayout` itself, whose
+ * aside caps its height against a scrolling chassis a locked screen does not have. What it does
+ * need is the same affordance under the same accessible name, so a reader who learned it on the
+ * call-sites table finds it unchanged on the map.
+ */
+export function DetailClose({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Close detail"
+      className="shrink-0 rounded-control p-field text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
+    >
+      <X aria-hidden="true" className="size-4" />
+    </button>
+  )
+}
+
 export function DetailLayout({
   list,
   detail,
@@ -175,14 +196,7 @@ export function DetailLayout({
           >
             <div className="flex items-start justify-between gap-row border-b border-line pb-row">
               <h2 className="min-w-0 break-all text-section">{title}</h2>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close detail"
-                className="shrink-0 rounded-control p-field text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <X aria-hidden="true" className="size-4" />
-              </button>
+              <DetailClose onClose={onClose} />
             </div>
             {detail}
           </aside>

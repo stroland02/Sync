@@ -22,6 +22,7 @@
  */
 
 import type { WorkflowNode } from "@/api/types"
+import type { TagTone } from "@/components/tag"
 
 /**
  * What a check currently says.
@@ -118,4 +119,20 @@ function customerCi(node: WorkflowNode | undefined): Check {
  */
 export function verificationChain(nodes: WorkflowNode[]): Check[] {
   return [compiled(find(nodes, "static_verify")), customerCi(find(nodes, "await_ci"))]
+}
+
+/**
+ * A check's tone, where a check is rendered as a tag rather than as a chain row.
+ *
+ * **Three neutrals, and they are the point.** A run parked on the customer's CI must not wear the
+ * tone of one that passed it, and must not wear a failure's either — `waiting`, `not_reached` and
+ * `unknown` are three absences, none of them a verdict. Explicit returns with a neutral default
+ * rather than a lookup, so a seventh `CheckState` lands on neutral rather than on whichever branch
+ * fell through last.
+ */
+export function checkTone(state: CheckState): TagTone {
+  if (state === "passed") return "good"
+  if (state === "failed") return "critical"
+  if (state === "timed_out") return "serious"
+  return "neutral"
 }

@@ -39,6 +39,7 @@ export function PanelPane({
   footer,
   className,
   bodyClassName,
+  footerClassName,
   scroll = true,
   children,
 }: {
@@ -53,6 +54,11 @@ export function PanelPane({
   footer?: ReactNode
   className?: string
   bodyClassName?: string
+  /**
+   * For a foot that holds a control rather than a count. The default row is one `row-lg` line;
+   * the finding detail pins an action there, which is two lines and would overflow it.
+   */
+  footerClassName?: string
   /**
    * Whether the pane owns its body's scroll. `false` hands it to the child — the one caller is a
    * table, whose sticky head needs the scroll on the table container itself.
@@ -86,7 +92,12 @@ export function PanelPane({
       )}
 
       {footer !== undefined && (
-        <footer className="flex h-[var(--row-lg)] shrink-0 items-center gap-row border-t border-line px-row text-meta text-ink-muted">
+        <footer
+          className={cn(
+            "flex h-[var(--row-lg)] shrink-0 items-center gap-row border-t border-line px-row text-meta text-ink-muted",
+            footerClassName,
+          )}
+        >
           {footer}
         </footer>
       )}
