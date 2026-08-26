@@ -94,7 +94,7 @@ bar, one chip per prerequisite, the first unmet one expanded with a single CTA.
 
 ## 7. Still to build
 
-- **The five remaining screen rebuilds** (Findings, Overview, Runs, Finding detail, Workflow,
+- **The six remaining screen rebuilds** (Findings, Overview, Runs, Finding detail, Workflow,
   Graph) — specs written, three builders lost to a session limit.
 - **Vendor logos** — bundled local SVGs committed to the repo, monogram as fallback. Ruled; not
   started. No CDN fetch: it leaked which integrations each customer watches.

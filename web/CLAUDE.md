@@ -2,21 +2,32 @@
 
 Loads when you are editing the console. The root `CLAUDE.md` still applies.
 
-## Before you change a screen, open the mock
+## Before you change a screen, open the reference — and it is not `console-mock`
 
-`docs/console-mock/screens/` holds the owner's own twelve screens. **The screen you are about to
-touch has a still in there.** Open it first.
+**`docs/stitch_sync_developer_console/` is the visual authority.** Twenty-four screens, each with a
+rendered `screen.png` and the `code.html` behind it. The screen you are about to touch has a still
+in there. Open it first.
 
-Measured 2026-08-24: a full day of console work landed nineteen commits, of which four changed
-anything a person could see, because the mock was never opened. The owner's words were *"everything
-looks exactly the same"*. Structural conformance is not the deliverable; the mock is.
+**`docs/console-mock/` is the retired mock and is no longer the target.** It sits beside the Stitch
+set on disk and this paragraph used to point at it, which is how it kept being obeyed after it was
+demoted on 2026-08-25. If you are reading a twelve-screen mock, you have the wrong drawing.
 
-The mock is still the *lowest* authority in the room -- where it disagrees with the hierarchy spec,
-`DESIGN.md` or `console-surface.md`, the mock loses and the disagreement is recorded. But it
-outranks your own reading of what a screen should look like.
+**Read `docs/superpowers/plans/2026-08-26-ui-rebuild-master-brief.md` before your first edit.** It
+is the entry point: the objective, the authority order, the per-screen rulings, what is already
+landed, and what is still owed. The executable half is
+`docs/superpowers/specs/2026-08-25-stitch-rebuild-specs.md`, which carries per-file KEEP / REBUILD /
+DELETE lists and the build order.
 
-Route: `docs/superpowers/plans/2026-08-17-console-mock-parity.md`, whose checkboxes are false
-(`CI-W607`). Enabled tooling and what binds it:
+**Most screens are mandated as a rebuild, not a reskin, and the difference is the whole point.**
+Measured 2026-08-26: eighteen of twenty-one screens still render `ScreenFrame` at its default
+`flow` layout — one long scrolling column — while the brief rules six of them full rebuilds into
+locked, multi-pane compositions. A token swap reskins every screen without editing one, which is
+exactly how a console can change palette and still be the old console. The owner's words, twice:
+*"everything looks exactly the same."* **Structural conformance is not the deliverable.**
+
+Where the reference disagrees with the hierarchy spec, `DESIGN.md` or `console-surface.md`, the
+reference loses and the disagreement is recorded. It still outranks your own reading of what a
+screen should look like. Enabled tooling and what binds it:
 `docs/superpowers/references/notes/2026-08-24-frontend-resources-audit.md`.
 
 ## What the console is for
