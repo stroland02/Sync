@@ -85,7 +85,15 @@ export function PatchStat({ stat }: { stat: PatchResponse["stat"] }) {
   )
 }
 
-/** Where the change went. Rendered even when it went nowhere, because that is the fact. */
+/**
+ * Where the change went. Rendered even when it went nowhere, because that is the fact.
+ *
+ * The pull-request row is the spec item that did not land when this module was extracted: two lanes
+ * factored the same renderer out of `patch-panel.tsx` at once, the coordinator kept this one as the
+ * survivor, and the one ADDITION the spec attached to the move went with the copy that was dropped.
+ * `pr_url` was on the payload the whole time and rendered nowhere on this screen or the pull-request
+ * screen -- an opened pull request read exactly like a patch that never opened one.
+ */
 export function PatchTargetList({ target }: { target: PatchResponse["target"] }) {
   return (
     <dl className="flex min-w-0 flex-col gap-field">
@@ -99,6 +107,25 @@ export function PatchTargetList({ target }: { target: PatchResponse["target"] })
         <dt className="shrink-0 text-meta text-ink-muted">Branch</dt>
         <dd className="min-w-0 font-mono text-meta break-words">
           {target.branch ?? <Absent>this patch was never pushed</Absent>}
+        </dd>
+      </div>
+      {/* The number when the record holds one and the bare URL when it does not -- a pull request
+          with no number is still a pull request, and printing "#null" would invent one. */}
+      <div className="flex min-w-0 items-baseline gap-row">
+        <dt className="shrink-0 text-meta text-ink-muted">Pull request</dt>
+        <dd className="min-w-0 font-mono text-meta break-words">
+          {target.pr_url === null ? (
+            <Absent>this patch opened no pull request</Absent>
+          ) : (
+            <a
+              href={target.pr_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline underline-offset-2"
+            >
+              {target.pr_number === null ? target.pr_url : `#${target.pr_number}`}
+            </a>
+          )}
         </dd>
       </div>
     </dl>
